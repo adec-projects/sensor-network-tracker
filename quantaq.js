@@ -113,7 +113,7 @@ async function diagnoseQuantAQSensor(sn) {
 
 async function runQuantAQCheck() {
     if (quantaqPaused) {
-        updateQuantAQStatus('QuantAQ scans are paused at QuantAQ\u2019s request. No API requests are being sent.');
+        updateQuantAQStatus('QuantAQ scans are disabled. No API requests are being sent.');
         return;
     }
     if (quantaqChecking) return;
@@ -219,8 +219,8 @@ function renderCheckButtons() {
     if (dashBtn) {
         if (quantaqPaused) {
             dashBtn.disabled = true;
-            dashBtn.textContent = 'Paused';
-            dashBtn.title = 'QuantAQ scans are paused at QuantAQ\u2019s request. No API requests are being sent.';
+            dashBtn.textContent = 'Disabled';
+            dashBtn.title = 'QuantAQ scans are disabled. No API requests are being sent.';
         } else {
             dashBtn.disabled = quantaqChecking;
             dashBtn.textContent = quantaqChecking ? 'Checking...' : 'Run Check Now';
@@ -265,7 +265,7 @@ function renderDashboardAlerts() {
     // first thing the eye lands on when the dashboard loads.
     if (quantaqPaused) {
         html += `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:13px;line-height:1.5">
-            <strong>QuantAQ API scans are paused.</strong> The cron job and "Run Check Now" button are disabled at QuantAQ's request — no API requests are being sent. Existing alerts and history are still visible. To resume scans later, an admin can clear the <code>quantaq_paused</code> flag in <code>app_settings</code> and re-schedule the cron.
+            <strong>QuantAQ API scans are disabled.</strong> The cron job and "Run Check Now" button are turned off — no API requests are being sent. Existing alerts and history are still visible. To resume scans later, an admin can clear the <code>quantaq_paused</code> flag in <code>app_settings</code> and re-schedule the cron.
         </div>`;
     }
 
