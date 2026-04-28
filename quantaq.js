@@ -9,6 +9,7 @@ let quantaqLastCheck = null;
 let quantaqChecking = false;
 let quantaqFilter = ''; // '' = all, or 'Lost Connection', 'PM Sensor Issue', etc.
 let quantaqTab = 'active'; // 'active' or 'dismissed'
+let quantaqPaused = false; // mirrored from app_settings.quantaq_paused; flips the UI to safe mode
 
 // ===== LOAD ALERTS FROM DATABASE =====
 
@@ -56,10 +57,21 @@ async function loadQuantAQLastCheck() {
     }
 }
 
+async function loadQuantAQPausedFlag() {
+    try {
+        const value = await db.getAppSetting('quantaq_paused');
+        quantaqPaused = value === 'true';
+    } catch (err) {
+        console.error('[QuantAQ] Failed to load paused flag:', err);
+        quantaqPaused = false;
+    }
+}
+
 async function initQuantAQ() {
     await Promise.all([
         loadQuantAQAlerts(),
         loadQuantAQLastCheck(),
+        loadQuantAQPausedFlag(),
         typeof loadQuantAQCronInfo === 'function' ? loadQuantAQCronInfo() : Promise.resolve(),
     ]);
     // Don't call renderDashboard() here — the boot sequence in app.js
@@ -100,6 +112,10 @@ async function diagnoseQuantAQSensor(sn) {
 }
 
 async function runQuantAQCheck() {
+    if (quantaqPaused) {
+        updateQuantAQStatus('QuantAQ scans are paused at QuantAQ\u2019s request. No API requests are being sent.');
+        return;
+    }
     if (quantaqChecking) return;
     quantaqChecking = true;
     const checkStartTime = Date.now();
@@ -201,8 +217,15 @@ function formatAlertDetail(detail) {
 function renderCheckButtons() {
     const dashBtn = document.getElementById('dashboard-check-btn');
     if (dashBtn) {
-        dashBtn.disabled = quantaqChecking;
-        dashBtn.textContent = quantaqChecking ? 'Checking...' : 'Run Check Now';
+        if (quantaqPaused) {
+            dashBtn.disabled = true;
+            dashBtn.textContent = 'Paused';
+            dashBtn.title = 'QuantAQ scans are paused at QuantAQ\u2019s request. No API requests are being sent.';
+        } else {
+            dashBtn.disabled = quantaqChecking;
+            dashBtn.textContent = quantaqChecking ? 'Checking...' : 'Run Check Now';
+            dashBtn.title = '';
+        }
     }
 }
 
@@ -237,6 +260,14 @@ function renderDashboardAlerts() {
     }
 
     let html = '';
+
+    // Hard banner whenever scans are paused. Sits above the tabs so it's the
+    // first thing the eye lands on when the dashboard loads.
+    if (quantaqPaused) {
+        html += `<div style="background:#fef3c7;border:1px solid #f59e0b;color:#78350f;padding:12px 16px;border-radius:8px;margin-bottom:12px;font-size:13px;line-height:1.5">
+            <strong>QuantAQ API scans are paused.</strong> The cron job and "Run Check Now" button are disabled at QuantAQ's request — no API requests are being sent. Existing alerts and history are still visible. To resume scans later, an admin can clear the <code>quantaq_paused</code> flag in <code>app_settings</code> and re-schedule the cron.
+        </div>`;
+    }
 
     // Tabs
     html += `<div class="quantaq-tabs">

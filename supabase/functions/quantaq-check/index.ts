@@ -181,6 +181,25 @@ async function runScan(): Promise<Response> {
     auth: { persistSession: false },
   });
 
+  // Kill-switch — QuantAQ asked us to pause API traffic. Set the
+  // app_settings.quantaq_paused row to 'false' (or delete it) when QuantAQ
+  // gives the OK to resume. Returns BEFORE any HTTP request to QuantAQ.
+  const pausedRes = await supa
+    .from("app_settings")
+    .select("value")
+    .eq("key", "quantaq_paused")
+    .maybeSingle();
+  if (pausedRes.data?.value === "true") {
+    return new Response(
+      JSON.stringify({
+        ok: true,
+        paused: true,
+        message: "QuantAQ scans are paused — no API requests sent.",
+      }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
+
   const scanStart = Date.now();
   const now = new Date().toISOString();
 
@@ -686,6 +705,20 @@ async function runDiagnose(sn: string): Promise<Response> {
   const serviceRoleKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
   if (!supabaseUrl || !serviceRoleKey) throw new Error("Missing Supabase env");
   const supa = createClient(supabaseUrl, serviceRoleKey);
+
+  // Kill-switch also gates diagnose mode so the DevTools helper can't
+  // accidentally send an API request while QuantAQ has us paused.
+  const pausedRes = await supa
+    .from("app_settings")
+    .select("value")
+    .eq("key", "quantaq_paused")
+    .maybeSingle();
+  if (pausedRes.data?.value === "true") {
+    return new Response(
+      JSON.stringify({ ok: true, paused: true, message: "QuantAQ scans are paused — diagnose returned without contacting QuantAQ." }),
+      { status: 200, headers: { ...corsHeaders, "Content-Type": "application/json" } },
+    );
+  }
 
   // Pull the full paginated device list (same shape as the real scan) and
   // match by SN client-side. QuantAQ's /devices/?sn=X doesn't actually
