@@ -292,10 +292,8 @@ CREATE TABLE audits (
     community_pod_id text NOT NULL,
     community_id text REFERENCES communities(id),
     status text DEFAULT 'Scheduled',
-    scheduled_start text,
-    scheduled_end text,
-    actual_start text,
-    actual_end text,
+    start_date text,
+    end_date text,
     conducted_by text DEFAULT '',
     notes text DEFAULT '',
     analysis_results jsonb DEFAULT '{}',
@@ -310,6 +308,7 @@ CREATE TABLE audits (
 
 CREATE INDEX idx_audits_community ON audits(community_id);
 CREATE INDEX idx_audits_status ON audits(status);
+CREATE INDEX idx_audits_start_date ON audits(start_date);
 
 ALTER TABLE audits ENABLE ROW LEVEL SECURITY;
 

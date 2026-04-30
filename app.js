@@ -5736,7 +5736,7 @@ async function renderTrashBin(filter) {
         } else if (kind === 'service_ticket') {
             preview = `${row.sensor_id || ''} — ${(row.issue_description || '').slice(0, 120)}`;
         } else if (kind === 'audit') {
-            preview = `${row.community_name || row.sensor_sn || ''} ${row.scheduled_start || ''}`;
+            preview = `${row.community_name || row.sensor_sn || ''} ${row.start_date || ''}`;
         } else if (kind === 'collocation') {
             preview = `${row.location_id || ''} ${row.start_date || ''}`;
         } else if (kind === 'sensor') {
@@ -8004,7 +8004,7 @@ function renderAuditsView() {
 
 function renderAuditCard(audit) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
-    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} - ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '—';
+    const dateRange = audit.startDate ? `${new Date(audit.startDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} - ${new Date(audit.endDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '—';
     const progress = AUDIT_STATUSES.map((st, i) => {
         const idx = AUDIT_STATUSES.indexOf(audit.status);
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
@@ -8056,33 +8056,33 @@ async function saveNewAudit(event) {
     const auditPodId = document.getElementById('audit-pod-input').value;
     const communityId = document.getElementById('audit-community-input').value;
     const communityPodId = document.getElementById('audit-community-pod-input').value;
-    const scheduledStart = document.getElementById('audit-start-input').value;
-    const scheduledEnd = document.getElementById('audit-end-input').value;
+    const startDate = document.getElementById('audit-start-input').value;
+    const endDate = document.getElementById('audit-end-input').value;
     const installTeam = document.getElementById('audit-install-team-input').value.trim();
     const takedownTeam = document.getElementById('audit-takedown-team-input').value.trim();
     const auditNotes = document.getElementById('audit-notes-input').value.trim();
-    if (!auditPodId || !communityId || !communityPodId || !scheduledStart || !scheduledEnd) return;
-    if (new Date(scheduledEnd) < new Date(scheduledStart)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
+    if (!auditPodId || !communityId || !communityPodId || !startDate || !endDate) return;
+    if (new Date(endDate) < new Date(startDate)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
 
     // Check for sensor overlap with existing audits
     const conflicts = audits.filter(a => {
         if (a.status === 'Complete') return false;
         const hasSensorOverlap = a.auditPodId === auditPodId || a.auditPodId === communityPodId || a.communityPodId === auditPodId || a.communityPodId === communityPodId;
         if (!hasSensorOverlap) return false;
-        const hasDateOverlap = a.scheduledStart <= scheduledEnd && a.scheduledEnd >= scheduledStart;
+        const hasDateOverlap = a.startDate <= endDate && a.endDate >= startDate;
         return hasDateOverlap;
     });
 
     const doSaveAudit = async () => {
         const conductedBy = [installTeam, takedownTeam].filter(Boolean).join(' / ');
-        const audit = { auditPodId, communityPodId, communityId, status: 'Scheduled', scheduledStart, scheduledEnd,
-            actualStart: null, actualEnd: null, conductedBy, progressNotes: auditNotes ? [{ text: auditNotes, by: getCurrentUserName(), at: nowDatetime() }] : [], analysisResults: {},
+        const audit = { auditPodId, communityPodId, communityId, status: 'Scheduled', startDate, endDate,
+            conductedBy, progressNotes: auditNotes ? [{ text: auditNotes, by: getCurrentUserName(), at: nowDatetime() }] : [], analysisResults: {},
             createdBy: getCurrentUserName(), createdById: currentUserId };
         try { const saved = await db.insertAudit(audit); audits.unshift(saved); }
         catch (err) { handleSaveError(err); audit.id = generateId('aud'); audits.unshift(audit); }
 
         const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
-        createNote('Audit', `Audit scheduled: ${auditPodId} auditing ${communityPodId} at ${communityName} (${scheduledStart} to ${scheduledEnd}).`, {
+        createNote('Audit', `Audit scheduled: ${auditPodId} auditing ${communityPodId} at ${communityName} (${startDate} to ${endDate}).`, {
             sensors: [auditPodId, communityPodId], communities: [communityId] });
         closeModal('modal-new-audit'); showSuccessToast('Audit scheduled');
         updateSidebarAuditCount();
@@ -8092,7 +8092,7 @@ async function saveNewAudit(event) {
     if (conflicts.length > 0) {
         const msgs = conflicts.map(c => {
             const cName = COMMUNITIES.find(x => x.id === c.communityId)?.name || c.communityId;
-            return `&bull; ${c.auditPodId} &harr; ${c.communityPodId} at ${cName} (${c.scheduledStart} to ${c.scheduledEnd})`;
+            return `&bull; ${c.auditPodId} &harr; ${c.communityPodId} at ${cName} (${c.startDate} to ${c.endDate})`;
         });
         showConfirm('Scheduling Conflict', `Warning: One or more sensors are already assigned to overlapping audits:<br><br>${msgs.join('<br>')}<br><br>Schedule anyway?`, doSaveAudit);
     } else {
@@ -8139,10 +8139,8 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Status</label><p><span class="audit-status-badge ${AUDIT_STATUS_CSS[audit.status]}">${audit.status}</span></p></div>
             <div class="ticket-field"><label>Audit Pod</label><p style="font-family:var(--font-mono);font-size:13px"><a href="#" onclick="closeModal('modal-audit-detail'); showSensorDetail('${audit.auditPodId}'); return false;" style="color:var(--navy-500)">${audit.auditPodId}</a></p></div>
             <div class="ticket-field"><label>Community Pod</label><p style="font-family:var(--font-mono);font-size:13px"><a href="#" onclick="closeModal('modal-audit-detail'); showSensorDetail('${audit.communityPodId}'); return false;" style="color:var(--navy-500)">${audit.communityPodId}</a></p></div>
-            <div class="ticket-field"><label>Scheduled Start</label><input type="date" class="ticket-edit-input" value="${audit.scheduledStart || ''}" onblur="saveAuditField('${audit.id}','scheduledStart',this.value)"></div>
-            <div class="ticket-field"><label>Scheduled End</label><input type="date" class="ticket-edit-input" value="${audit.scheduledEnd || ''}" onblur="saveAuditField('${audit.id}','scheduledEnd',this.value)"></div>
-            <div class="ticket-field"><label>Actual Start</label><input type="date" class="ticket-edit-input" value="${audit.actualStart || ''}" onblur="saveAuditField('${audit.id}','actualStart',this.value)"></div>
-            <div class="ticket-field"><label>Actual End</label><input type="date" class="ticket-edit-input" value="${audit.actualEnd || ''}" onblur="saveAuditField('${audit.id}','actualEnd',this.value)"></div>
+            <div class="ticket-field"><label>Start Date</label><input type="date" class="ticket-edit-input" value="${audit.startDate || ''}" onblur="saveAuditField('${audit.id}','startDate',this.value)"></div>
+            <div class="ticket-field"><label>End Date</label><input type="date" class="ticket-edit-input" value="${audit.endDate || ''}" onblur="saveAuditField('${audit.id}','endDate',this.value)"></div>
             <div class="ticket-field"><label>Install Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)"></div>
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
             ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote', 'audit')}
@@ -8163,6 +8161,28 @@ function saveAuditField(auditId, field, value) {
     if (!audit || audit[field] === value) return;
     audit[field] = value;
     persistAuditUpdate(auditId, { [field]: value });
+    if (field === 'startDate' || field === 'endDate') {
+        syncAuditScheduledNote(audit);
+        if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
+    }
+}
+
+// Rewrite the auto-generated "Audit scheduled: ..." history note so the
+// dates inside it stay in sync with the audit's current start/end. The
+// note is identified by its prefix + the audit's two pod IDs, which is
+// unique per audit. If no matching note exists (e.g. the user deleted
+// it), this is a no-op.
+function syncAuditScheduledNote(audit) {
+    if (!audit) return;
+    const prefix = `Audit scheduled: ${audit.auditPodId} auditing ${audit.communityPodId}`;
+    const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
+    const newText = `${prefix} at ${communityName} (${audit.startDate || '?'} to ${audit.endDate || '?'}).`;
+    const matches = notes.filter(n => n.type === 'Audit' && typeof n.text === 'string' && n.text.startsWith(prefix));
+    matches.forEach(n => {
+        if (n.text === newText) return;
+        n.text = newText;
+        db.updateNote(n.id, { text: newText }).catch(handleSaveError);
+    });
 }
 
 function saveAuditConductors(auditId, installVal, takedownVal) {
@@ -8197,9 +8217,6 @@ function advanceAuditStatus(auditId) {
             : (podStatusOverride ? [podStatusOverride] : []);
         audit.status = newStatus;
         const updates = { status: newStatus };
-
-        if (newStatus === 'In Progress' && !audit.actualStart) { audit.actualStart = localDate(); updates.actualStart = audit.actualStart; }
-        if (newStatus === 'Finished, Analysis Pending' && !audit.actualEnd) { audit.actualEnd = localDate(); updates.actualEnd = audit.actualEnd; }
         persistAuditUpdate(auditId, updates);
 
         const auditStatusPrefix = 'Audit: ';
@@ -8739,7 +8756,7 @@ async function deleteAudit(auditId) {
     if (!audit) return;
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
 
-    showConfirm('Delete Audit', `Delete this audit permanently?<br><br><strong>Community:</strong> ${communityName}<br><strong>Pods:</strong> ${audit.auditPodId} &harr; ${audit.communityPodId}<br><strong>Dates:</strong> ${audit.scheduledStart || '?'} to ${audit.scheduledEnd || '?'}<br><br>This will delete all audit data, analysis results, and associated notes. This cannot be undone.`, async () => {
+    showConfirm('Delete Audit', `Delete this audit permanently?<br><br><strong>Community:</strong> ${communityName}<br><strong>Pods:</strong> ${audit.auditPodId} &harr; ${audit.communityPodId}<br><strong>Dates:</strong> ${audit.startDate || '?'} to ${audit.endDate || '?'}<br><br>This will delete all audit data, analysis results, and associated notes. This cannot be undone.`, async () => {
         // Remove from in-memory array
         const idx = audits.indexOf(audit);
         if (idx >= 0) audits.splice(idx, 1);
@@ -8871,7 +8888,7 @@ function beginAnalysis(auditId) {
     }
 
     // Show upload flow
-    const defaultName = `Audit ${audit.auditPodId} \u2014 ${communityName} ${audit.communityPodId}, ${audit.scheduledStart || ''} to ${audit.scheduledEnd || ''}`;
+    const defaultName = `Audit ${audit.auditPodId} \u2014 ${communityName} ${audit.communityPodId}, ${audit.startDate || ''} to ${audit.endDate || ''}`;
     document.getElementById('analysis-modal-title').textContent = 'New Audit Analysis';
 
     // Body was already cleared by purgeAnalysisPlots; use requestAnimationFrame
@@ -9734,7 +9751,7 @@ function renderDQOSection(results, overallPass) {
 function renderScatterSection(auditId, parsed, results) {
     const el = document.getElementById('analysis-section-scatter');
     const audit = audits.find(a => a.id === auditId);
-    const auditDateRange = audit?.scheduledStart ? `${formatDate(audit.scheduledStart)} \u2013 ${formatDate(audit.scheduledEnd)}` : '';
+    const auditDateRange = audit?.startDate ? `${formatDate(audit.startDate)} \u2013 ${formatDate(audit.endDate)}` : '';
     el.innerHTML = `
         <h3 class="analysis-section-heading">Regression Plots</h3>
         <div class="analysis-chart-grid">
@@ -9843,7 +9860,7 @@ function renderTimeSeriesSection(auditId, parsed) {
     const el = document.getElementById('analysis-section-timeseries');
     const pmParams = AUDIT_PARAMETERS.filter(p => p.hasTimeSeries);
     const audit = audits.find(a => a.id === auditId);
-    const auditDateRange = audit?.scheduledStart ? `${formatDate(audit.scheduledStart)} \u2013 ${formatDate(audit.scheduledEnd)}` : '';
+    const auditDateRange = audit?.startDate ? `${formatDate(audit.startDate)} \u2013 ${formatDate(audit.endDate)}` : '';
     el.innerHTML = `
         <h3 class="analysis-section-heading">PM Timeseries</h3>
         <div class="analysis-chart-grid" style="grid-template-columns:1fr">
@@ -10095,7 +10112,7 @@ function renderCommunityOverview(communityId) {
         : '<p class="ov-empty">No contacts yet</p>';
 
     // Most recent audit
-    const communityAudits = audits.filter(a => allCommunityIds.includes(a.communityId)).sort((a, b) => (b.scheduledEnd || '').localeCompare(a.scheduledEnd || ''));
+    const communityAudits = audits.filter(a => allCommunityIds.includes(a.communityId)).sort((a, b) => (b.endDate || '').localeCompare(a.endDate || ''));
     const recentAudit = communityAudits[0];
     const auditHtml = recentAudit
         ? `<div class="ov-audit-card" onclick="openAuditDetail('${recentAudit.id}')">
@@ -10103,7 +10120,7 @@ function renderCommunityOverview(communityId) {
                 <span style="font-family:var(--font-mono);font-size:12px">${recentAudit.auditPodId} \u2194 ${recentAudit.communityPodId}</span>
                 <span class="audit-status-badge ${AUDIT_STATUS_CSS[recentAudit.status]}">${recentAudit.status}</span>
             </div>
-            <div style="font-size:12px;color:var(--slate-400);margin-top:4px">${recentAudit.scheduledStart ? formatDate(recentAudit.scheduledStart) + ' \u2013 ' + formatDate(recentAudit.scheduledEnd) : '\u2014'}</div>
+            <div style="font-size:12px;color:var(--slate-400);margin-top:4px">${recentAudit.startDate ? formatDate(recentAudit.startDate) + ' \u2013 ' + formatDate(recentAudit.endDate) : '\u2014'}</div>
             ${Object.keys(recentAudit.analysisResults || {}).length > 0 ? `<div style="margin-top:6px;display:flex;gap:4px;flex-wrap:wrap">${AUDIT_PARAMETERS.map(p => { const r = recentAudit.analysisResults[p.key]; if (!r) return ''; return `<span class="audit-param-badge ${r.pass ? 'pass' : 'fail'}">${p.label} ${r.pass ? '\u2713' : '\u2717'}</span>`; }).join('')}</div>` : ''}
         </div>`
         : '<p class="ov-empty">No audits yet</p>';
@@ -10203,7 +10220,7 @@ function renderSensorAudits(sensorId) {
 
 function renderAuditListCard(audit, context, sensorRole) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
-    const dateRange = audit.scheduledStart ? `${new Date(audit.scheduledStart + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} \u2013 ${new Date(audit.scheduledEnd + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '\u2014';
+    const dateRange = audit.startDate ? `${new Date(audit.startDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} \u2013 ${new Date(audit.endDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '\u2014';
     const hasResults = Object.keys(audit.analysisResults || {}).length > 0;
 
     let paramBadges = '';
@@ -10246,14 +10263,10 @@ function generateAuditReport(auditId) {
     const shortA = `${auditPodSensor?.type || 'Audit Pod'} ${shortSensorId(audit.auditPodId)}`;
     const shortB = `${communityName} Pod ${shortSensorId(audit.communityPodId)}`;
 
-    // Report the actual period the audit ran, not what was scheduled.
-    // Scheduled dates routinely drift from the real pickup/takedown
-    // because weather / logistics push field work around; using them
-    // in the report makes the DQO analysis look like it came from the
-    // wrong window. Fall back to scheduled dates only if actuals
-    // weren't recorded.
-    const reportStart = audit.actualStart || audit.scheduledStart;
-    const reportEnd = audit.actualEnd || audit.scheduledEnd;
+    // The audit's start/end dates are the single source of truth — edit
+    // them on the audit and the report picks up the change automatically.
+    const reportStart = audit.startDate;
+    const reportEnd = audit.endDate;
     const dateRange = reportStart
         ? `${new Date(reportStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })} \u2013 ${new Date(reportEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}`
         : '\u2014';
@@ -10696,12 +10709,12 @@ async function deleteAuditPhoto(communityId, fileId, storagePath, auditId) {
 }
 
 async function uploadAuditPhotos(auditId, communityId, files) {
-    // Build a display name from the audit's scheduled dates
+    // Build a display name from the audit's dates
     const audit = audits.find(a => a.id === auditId);
     let displayName = 'Audit Setup';
-    if (audit && audit.scheduledStart && audit.scheduledEnd) {
-        const startD = new Date(audit.scheduledStart + 'T00:00:00');
-        const endD = new Date(audit.scheduledEnd + 'T00:00:00');
+    if (audit && audit.startDate && audit.endDate) {
+        const startD = new Date(audit.startDate + 'T00:00:00');
+        const endD = new Date(audit.endDate + 'T00:00:00');
         const startStr = startD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', timeZone: AK_TZ });
         const endStr = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: AK_TZ });
         displayName = `Audit Setup ${startStr} - ${endStr}`;

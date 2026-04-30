@@ -520,14 +520,13 @@ const db = {
     async getAudits() {
         const { data, error } = await supa
             .from('audits').select('*, profiles:created_by(name)')
-            .order('scheduled_start', { ascending: false });
+            .order('start_date', { ascending: false });
         if (error) throw error;
         const live = (data || []).filter(r => !r.deleted_at);
         return live.map(a => ({
             id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
             communityId: a.community_id, status: a.status,
-            scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
-            actualStart: a.actual_start, actualEnd: a.actual_end,
+            startDate: a.start_date, endDate: a.end_date,
             conductedBy: a.conducted_by || '', progressNotes: parseNotesField(a.notes),
             analysisResults: a.analysis_results || {},
             analysisName: a.analysis_name || '',
@@ -543,8 +542,7 @@ const db = {
         const { data, error } = await supa.from('audits').insert({
             audit_pod_id: audit.auditPodId, community_pod_id: audit.communityPodId,
             community_id: audit.communityId, status: audit.status || 'Scheduled',
-            scheduled_start: audit.scheduledStart || null, scheduled_end: audit.scheduledEnd || null,
-            actual_start: audit.actualStart || null, actual_end: audit.actualEnd || null,
+            start_date: audit.startDate || null, end_date: audit.endDate || null,
             conducted_by: audit.conductedBy || '', notes: serializeNotesField(audit.progressNotes),
             analysis_results: audit.analysisResults || {},
             analysis_name: audit.analysisName || '', analysis_upload_date: audit.analysisUploadDate || null,
@@ -556,8 +554,7 @@ const db = {
         return {
             id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
             communityId: a.community_id, status: a.status,
-            scheduledStart: a.scheduled_start, scheduledEnd: a.scheduled_end,
-            actualStart: a.actual_start, actualEnd: a.actual_end,
+            startDate: a.start_date, endDate: a.end_date,
             conductedBy: a.conducted_by || '', progressNotes: parseNotesField(a.notes),
             analysisResults: a.analysis_results || {},
             analysisName: a.analysis_name || '',
@@ -571,8 +568,8 @@ const db = {
 
     async updateAudit(id, updates) {
         const row = { updated_at: new Date().toISOString() };
-        const map = { status: 'status', scheduledStart: 'scheduled_start', scheduledEnd: 'scheduled_end',
-            actualStart: 'actual_start', actualEnd: 'actual_end', conductedBy: 'conducted_by',
+        const map = { status: 'status', startDate: 'start_date', endDate: 'end_date',
+            conductedBy: 'conducted_by',
             analysisResults: 'analysis_results',
             analysisName: 'analysis_name', analysisUploadDate: 'analysis_upload_date',
             analysisUploadedBy: 'analysis_uploaded_by',
