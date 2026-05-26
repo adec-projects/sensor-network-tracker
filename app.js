@@ -1403,7 +1403,7 @@ function showView(viewName) {
     if (viewName === 'settings') renderSettings();
     if (viewName === 'service') renderServiceView();
     if (viewName === 'audits') renderAuditsView();
-    if (viewName === 'audit-dqo-overview') renderAuditDqoOverview();
+    if (viewName === 'audit-dqi-overview') renderAuditDqiOverview();
     if (viewName === 'collocations') renderCollocationsView();
     if (viewName === 'user-guide') renderUserGuide();
 
@@ -8118,8 +8118,8 @@ function openAuditDetail(auditId) {
     }).join('');
 
     const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
-        ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQO Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; return `<tr><td>${p.label} (${p.unit})</td><td>${r.r2 ?? '—'}</td><td>${r.slope ?? '—'}</td><td>${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td></tr>`; }).join('')}
+        ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; return `<tr><td>${p.label} (${p.unit})</td><td>${r.r2 ?? '—'}</td><td>${r.slope ?? '—'}</td><td>${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
@@ -8336,7 +8336,7 @@ function advanceAuditStatus(auditId) {
 
     // Warn if skipping analysis
     if (newStatus === 'Complete' && Object.keys(audit.analysisResults || {}).length === 0) {
-        showConfirm('No Analysis Data', 'No analysis data has been uploaded for this audit. Are you sure you want to mark it as complete without DQO analysis?', () => doAdvance());
+        showConfirm('No Analysis Data', 'No analysis data has been uploaded for this audit. Are you sure you want to mark it as complete without DQI analysis?', () => doAdvance());
     } else {
         doAdvance();
     }
@@ -8451,7 +8451,7 @@ function revertAuditStatus(auditId) {
 let analysisChartInstances = [];
 let analysisDataCache = {}; // keyed by auditId — raw parsed data, not persisted
 
-const DQO_THRESHOLDS = {
+const DQI_THRESHOLDS = {
     r2: { min: 0.70 },
     slope: { min: 0.65, max: 1.35 },
     intercept: { min: -5, max: 5 },
@@ -8459,10 +8459,10 @@ const DQO_THRESHOLDS = {
     rmse: { max: 7 },
 };
 
-// Acceptable-range strings used in the DQO table header row. Shown once
+// Acceptable-range strings used in the DQI table header row. Shown once
 // under each metric column name instead of repeated under every value,
 // so the table scans cleanly.
-const DQO_RANGE_LABELS = {
+const DQI_RANGE_LABELS = {
     r2: '\u2265 0.70',
     slope: '0.65 \u2013 1.35',
     intercept: '\u00B15',
@@ -8471,18 +8471,18 @@ const DQO_RANGE_LABELS = {
 };
 
 // Render the best-fit equation with each metric (slope, intercept, R²)
-// colored independently based on its own DQO pass/fail. Gives reviewers
+// colored independently based on its own DQI pass/fail. Gives reviewers
 // an at-a-glance view of which specific metric is failing on each chart.
 function renderEquationLine(r) {
     if (!r) return '';
     const d = r.dqo || {};
-    const css = (pass) => pass ? 'color:var(--dqo-pass);font-weight:600' : 'color:var(--dqo-fail);font-weight:700';
+    const css = (pass) => pass ? 'color:var(--dqi-pass);font-weight:600' : 'color:var(--dqi-fail);font-weight:700';
     const sign = r.intercept >= 0 ? '+' : '\u2212';
     return `y = <span style="${css(d.slope)}">${r.slope}</span>x ${sign} <span style="${css(d.intercept)}">${Math.abs(r.intercept)}</span>,&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = <span style="${css(d.r2)}">${r.r2}</span>`;
 }
 
-function dqoTableHeader() {
-    const sub = (label, metric) => `<th scope="col"><div>${label}</div><div style="font-weight:400;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQO_RANGE_LABELS[metric]})</div></th>`;
+function dqiTableHeader() {
+    const sub = (label, metric) => `<th scope="col"><div>${label}</div><div style="font-weight:400;font-size:10px;color:var(--slate-400);text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQI_RANGE_LABELS[metric]})</div></th>`;
     return `<thead><tr>
         <th scope="col">Parameter</th>
         ${sub('R\u00B2', 'r2')}
@@ -8650,9 +8650,9 @@ function runFailsafeValidation(parsed, results, type) {
         }
     });
 
-    // Check 8 — Near-boundary DQO
+    // Check 8 — Near-boundary DQI
     _forEachResult((paramLabel, key, result) => {
-        const T = DQO_THRESHOLDS;
+        const T = DQI_THRESHOLDS;
         // R2 near boundary: 0.70-0.73
         if (result.r2 >= T.r2.min && result.r2 < T.r2.min + 0.03) {
             const margin = ((result.r2 - T.r2.min) * 100).toFixed(1);
@@ -8856,7 +8856,7 @@ function deleteAuditDataset(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
     showConfirm('Delete Audit Dataset',
-        `Clear the analysis dataset for this audit?<br><br>This removes the uploaded data, chart data, and DQO results. The audit record, progress notes, and photos stay intact. You can upload a new dataset later by clicking Begin Analysis.<br><br><strong>This can't be undone.</strong>`,
+        `Clear the analysis dataset for this audit?<br><br>This removes the uploaded data, chart data, and DQI results. The audit record, progress notes, and photos stay intact. You can upload a new dataset later by clicking Begin Analysis.<br><br><strong>This can't be undone.</strong>`,
         () => {
             delete analysisDataCache[auditId];
             audit.analysisResults = {};
@@ -9274,7 +9274,7 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
     const validationWarnings = runFailsafeValidation(parsed, results, 'audit');
     analysisDataCache[auditId].validationWarnings = validationWarnings;
 
-    // Advance status based on DQO results
+    // Advance status based on DQI results
     const allPass = AUDIT_PARAMETERS.filter(p => audit.analysisResults[p.key]).every(p => audit.analysisResults[p.key]?.pass) && AUDIT_PARAMETERS.some(p => audit.analysisResults[p.key]);
     if (audit.status === 'Finished, Analysis Pending') {
         const oldStatus = audit.status;
@@ -9301,10 +9301,10 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
         }
 
         const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
-        const dqoNote = allPass
-            ? `Audit analysis complete: all parameters pass DQO. "${oldStatus}" \u2192 "Audit Complete" for ${communityName}.`
-            : `Audit analysis uploaded for ${communityName}: one or more parameters fail DQO. Review required.`;
-        createNote('Audit', dqoNote, {
+        const dqiNote = allPass
+            ? `Audit analysis complete: all parameters pass DQI. "${oldStatus}" \u2192 "Audit Complete" for ${communityName}.`
+            : `Audit analysis uploaded for ${communityName}: one or more parameters fail DQI. Review required.`;
+        createNote('Audit', dqiNote, {
             sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
         updateSidebarAuditCount();
     }
@@ -9511,9 +9511,9 @@ function runLinearRegression(xArr, yArr) {
     };
 }
 
-function checkDQO(result) {
+function checkDQI(result) {
     if (!result) return { r2: false, slope: false, intercept: false, sd: false, rmse: false, pass: false };
-    const T = DQO_THRESHOLDS;
+    const T = DQI_THRESHOLDS;
     const dqo = {
         r2: result.r2 >= T.r2.min,
         slope: result.slope >= T.slope.min && result.slope <= T.slope.max,
@@ -9543,7 +9543,7 @@ function rebuildCacheFromSaved(audit) {
         trimmedRows: allRows.slice(trimIndex),
     };
 
-    // Rebuild regression results — reconstruct pairs from row data if missing, re-evaluate DQO
+    // Rebuild regression results — reconstruct pairs from row data if missing, re-evaluate DQI
     const savedResults = audit.analysisResults || {};
     AUDIT_PARAMETERS.forEach(p => {
         const r = savedResults[p.key];
@@ -9559,9 +9559,9 @@ function rebuildCacheFromSaved(audit) {
             }
             r.pairs = pairs;
         }
-        // Re-evaluate DQO
+        // Re-evaluate DQI
         if (r) {
-            r.dqo = checkDQO(r);
+            r.dqo = checkDQI(r);
             r.pass = r.dqo.pass;
         }
     });
@@ -9586,7 +9586,7 @@ function runAllAnalyses(parsed) {
                     tIdx++;
                 }
             }
-            const dqo = checkDQO(reg);
+            const dqo = checkDQI(reg);
             results[param.key] = { ...reg, dqo, pass: dqo.pass };
         }
     }
@@ -9626,7 +9626,7 @@ function renderAnalysisResults(auditId, parsed) {
     const body = document.getElementById('audit-analysis-body');
     body.innerHTML = `
         <div style="margin-top:16px">
-            <span class="analysis-trim-note">First 24 hours excluded from DQO analysis (${trimCount} of ${totalCount} rows trimmed) \u2014 regression and DQO calculated on ${analysisCount} rows</span>
+            <span class="analysis-trim-note">First 24 hours excluded from DQI analysis (${trimCount} of ${totalCount} rows trimmed) \u2014 regression and DQI calculated on ${analysisCount} rows</span>
             ${audit.analysisUploadDate ? `<span style="float:right;font-size:11px;color:var(--slate-400)">Uploaded ${formatDate(audit.analysisUploadDate)} by ${escapeHtml(audit.analysisUploadedBy || '')}</span>` : ''}
         </div>
         ${audit.analysisNotes ? `<div style="margin-top:8px;font-size:12px;color:var(--slate-500);background:var(--slate-50);padding:8px 12px;border-radius:6px;border-left:3px solid var(--gold)"><strong>Analysis Note:</strong> ${escapeHtml(audit.analysisNotes)}</div>` : ''}
@@ -9636,7 +9636,7 @@ function renderAnalysisResults(auditId, parsed) {
         </div>
         <div id="analysis-panel-analysis" class="analysis-tab-panel active">
             <div id="analysis-section-warnings">${warningsHtml}${validationHtml}</div>
-            <div id="analysis-section-dqo"></div>
+            <div id="analysis-section-dqi"></div>
             <div id="analysis-section-timeseries" style="margin-top:28px"></div>
             <div id="analysis-section-scatter" style="margin-top:28px"></div>
         </div>
@@ -9647,10 +9647,10 @@ function renderAnalysisResults(auditId, parsed) {
         </div>
     `;
 
-    // DQO Summary — inline at top
-    renderDQOSection(results, overallPass);
+    // DQI Summary — inline at top
+    renderDQISection(results, overallPass);
 
-    // Timeseries — below DQO
+    // Timeseries — below DQI
     renderTimeSeriesSection(auditId, parsed);
 
     // Scatter/Regression Plots — below time series (use cached full results with pairs data for charts)
@@ -9713,14 +9713,14 @@ function renderSavedAnalysisView(auditId) {
             ${audit.analysisNotes ? `<div style="margin-top:8px;font-size:12px;color:var(--slate-500);background:var(--slate-50);padding:8px 12px;border-radius:6px;border-left:3px solid var(--gold)"><strong>Analysis Note:</strong> ${escapeHtml(audit.analysisNotes)}</div>` : ''}
         </div>
         <div style="overflow-x:auto;margin-top:16px">
-        <table class="dqo-summary-table">
-            ${dqoTableHeader()}
+        <table class="dqi-summary-table">
+            ${dqiTableHeader()}
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
                     if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
-                    const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
+                    const cls = (pass) => pass ? 'dqi-cell-pass' : 'dqi-cell-fail';
                     return `<tr>
                         <td>${p.labelHtml} (${p.unit})</td>
                         <td class="${cls(d.r2)}">${r.r2}</td>
@@ -9729,7 +9729,7 @@ function renderSavedAnalysisView(auditId) {
                         <td class="${cls(d.sd)}">${r.sd}</td>
                         <td class="${cls(d.rmse)}">${r.rmse}</td>
                         <td style="text-align:center">${r.n || '\u2014'}</td>
-                        <td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td>
+                        <td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td>
                     </tr>`;
                 }).join('')}
             </tbody>
@@ -9743,19 +9743,19 @@ function renderSavedAnalysisView(auditId) {
     `;
 }
 
-function renderDQOSection(results, overallPass) {
-    const el = document.getElementById('analysis-section-dqo');
+function renderDQISection(results, overallPass) {
+    const el = document.getElementById('analysis-section-dqi');
 
     el.innerHTML = `
         <div style="overflow-x:auto">
-        <table class="dqo-summary-table">
-            ${dqoTableHeader()}
+        <table class="dqi-summary-table">
+            ${dqiTableHeader()}
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
                     if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
-                    const cls = (pass) => pass ? 'dqo-cell-pass' : 'dqo-cell-fail';
+                    const cls = (pass) => pass ? 'dqi-cell-pass' : 'dqi-cell-fail';
                     return `<tr>
                         <td>${p.labelHtml} (${p.unit})</td>
                         <td class="${cls(d.r2)}">${r.r2}</td>
@@ -9764,13 +9764,13 @@ function renderDQOSection(results, overallPass) {
                         <td class="${cls(d.sd)}">${r.sd}</td>
                         <td class="${cls(d.rmse)}">${r.rmse}</td>
                         <td style="text-align:center">${r.n || '\u2014'}</td>
-                        <td>${r.pass ? '<span class="dqo-pass">PASS</span>' : '<span class="dqo-fail">FAIL</span>'}</td>
+                        <td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td>
                     </tr>`;
                 }).join('')}
             </tbody>
         </table>
         </div>
-        <div class="analysis-dqo-thresholds"><span style="font-size:10px">PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
+        <div class="analysis-dqi-thresholds"><span style="font-size:10px">PM<sub>10</sub> values &gt; 1000 \u00B5g/m\u00B3 invalidated before analysis.</span></div>
     `;
 }
 
@@ -9787,7 +9787,7 @@ function renderScatterSection(auditId, parsed, results) {
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short}: <strong>${p.labelHtml}</strong></div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
             <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
-            <div class="chart-canvas-wrap"><canvas id="scatter-${auditId}-${p.key}"></canvas></div>
+            <div class="chart-canvas-wrap chart-canvas-wrap-square"><canvas id="scatter-${auditId}-${p.key}"></canvas></div>
             <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998;</span></div>
             <div class="chart-equation">${renderEquationLine(r)}</div>
         </div>`; }).join('')}
@@ -9813,7 +9813,7 @@ function createScatterChart(canvasId, regression, param, parsed) {
 
     // y=x reference line — shows perfect 1:1 agreement between the two
     // sensors. Regression slope/intercept/R² are still surfaced in the
-    // equation text above each chart and in the DQO table.
+    // equation text above each chart and in the DQI table.
     const lineColor = '#0a1628';
 
     const chart = new Chart(canvas, {
@@ -9876,8 +9876,11 @@ function createScatterChart(canvasId, regression, param, parsed) {
             hover: { mode: 'nearest', intersect: false, axis: 'xy' },
             interaction: { mode: 'nearest', intersect: false, axis: 'xy' },
             scales: {
-                x: { grid: { display: false }, ticks: { font: { size: 12 } } },
-                y: { grid: { display: false }, ticks: { font: { size: 12 } } },
+                // Shared range on both axes so the y=x reference line sits
+                // at true 45° and deviations from 1:1 agreement are easy
+                // to read. Add a small pad so points aren't clipped.
+                x: { type: 'linear', min: lineLo - (lineHi - lineLo) * 0.05, max: lineHi + (lineHi - lineLo) * 0.05, grid: { display: false }, ticks: { font: { size: 12 } } },
+                y: { type: 'linear', min: lineLo - (lineHi - lineLo) * 0.05, max: lineHi + (lineHi - lineLo) * 0.05, grid: { display: false }, ticks: { font: { size: 12 } } },
             },
         },
     });
@@ -10299,18 +10302,18 @@ function generateAuditReport(auditId) {
         ? `${new Date(reportStart + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })} \u2013 ${new Date(reportEnd + 'T00:00').toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ })}`
         : '\u2014';
 
-    // DQO table rows — using labelHtml for subscripts. Ranges live in the
+    // DQI table rows — using labelHtml for subscripts. Ranges live in the
     // header row (reportDqoHeader below), not repeated under every value.
     // Colorblind-safe Okabe-Ito palette — matches the in-app badges.
-    const DQO_PASS_FG = '#009E73';
-    const DQO_PASS_BG = '#e0f5ed';
-    const DQO_FAIL_FG = '#D55E00';
-    const DQO_FAIL_BG = '#fcecdd';
-    const dqoRows = AUDIT_PARAMETERS.map(p => {
+    const DQI_PASS_FG = '#009E73';
+    const DQI_PASS_BG = '#e0f5ed';
+    const DQI_FAIL_FG = '#D55E00';
+    const DQI_FAIL_BG = '#fcecdd';
+    const dqiRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
         if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
-        const cls = (pass) => pass ? `color:${DQO_PASS_FG}` : `color:${DQO_FAIL_FG};font-weight:700`;
+        const cls = (pass) => pass ? `color:${DQI_PASS_FG}` : `color:${DQI_FAIL_FG};font-weight:700`;
         return `<tr>
             <td style="font-family:'DM Sans',sans-serif;font-weight:600">${p.labelHtml} (${p.unit})</td>
             <td style="${cls(d.r2)}">${r.r2}</td>
@@ -10320,13 +10323,13 @@ function generateAuditReport(auditId) {
             <td style="${cls(d.rmse)}">${r.rmse}</td>
             <td style="text-align:center">${r.n || '\u2014'}</td>
             <td style="text-align:center">${r.pass
-                ? `<span style="background:${DQO_PASS_BG};color:${DQO_PASS_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>`
-                : `<span style="background:${DQO_FAIL_BG};color:${DQO_FAIL_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>`}</td>
+                ? `<span style="background:${DQI_PASS_BG};color:${DQI_PASS_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>`
+                : `<span style="background:${DQI_FAIL_BG};color:${DQI_FAIL_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>`}</td>
         </tr>`;
     }).join('');
 
     const reportDqoHeaderCell = (label, metric) =>
-        `<th><div>${label}</div><div style="font-weight:400;font-size:10px;color:#64748b;text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQO_RANGE_LABELS[metric]})</div></th>`;
+        `<th><div>${label}</div><div style="font-weight:400;font-size:10px;color:#64748b;text-transform:none;letter-spacing:0.2px;margin-top:1px">(${DQI_RANGE_LABELS[metric]})</div></th>`;
     const reportDqoHeader = `<thead><tr>
         <th>Parameter</th>
         ${reportDqoHeaderCell('R\u00B2', 'r2')}
@@ -10389,9 +10392,10 @@ function generateAuditReport(auditId) {
         tempContainer.style.cssText = 'position:absolute;left:-9999px;top:0;width:440px';
         document.body.appendChild(tempContainer);
 
-        const renderChartToImage = (config) => {
+        const renderChartToImage = (config, size) => {
             const canvas = document.createElement('canvas');
-            canvas.width = 1200; canvas.height = 600;
+            canvas.width = (size && size.w) || 1200;
+            canvas.height = (size && size.h) || 600;
             tempContainer.appendChild(canvas);
             const chart = new Chart(canvas, config);
             const img = canvas.toDataURL('image/png');
@@ -10434,6 +10438,9 @@ function generateAuditReport(auditId) {
             const lineHi = Math.max(...xVals, ...yVals);
             const eqSign = r.intercept >= 0 ? '+' : '\u2212';
             const eqLabel = `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)}`;
+            const pad = (lineHi - lineLo) * 0.05 || 1;
+            const axMin = lineLo - pad;
+            const axMax = lineHi + pad;
             chartImages['scatter-' + p.key] = renderChartToImage({
                 type: 'scatter',
                 data: { datasets: [
@@ -10444,11 +10451,13 @@ function generateAuditReport(auditId) {
                     responsive: false, animation: false,
                     plugins: { legend: { display: false } },
                     scales: {
-                        x: { title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
-                        y: { title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
+                        // Shared range + square canvas (1000x1000) so the y=x
+                        // reference line renders at a true 45° in the printed PDF.
+                        x: { type: 'linear', min: axMin, max: axMax, title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
+                        y: { type: 'linear', min: axMin, max: axMax, title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
                     },
                 },
-            });
+            }, { w: 1000, h: 1000 });
         });
 
         document.body.removeChild(tempContainer);
@@ -10465,9 +10474,9 @@ function generateAuditReport(auditId) {
         </div>` : '').join('');
     const scatterCards = AUDIT_PARAMETERS.map(p => {
         const r = (cached?.regressionResults || results)[p.key];
-        // Color each metric in the equation by its own DQO pass/fail —
+        // Color each metric in the equation by its own DQI pass/fail —
         // same as the in-app view so the printed report stays consistent.
-        const eqCss = (pass) => pass ? `color:${DQO_PASS_FG}` : `color:${DQO_FAIL_FG};font-weight:700`;
+        const eqCss = (pass) => pass ? `color:${DQI_PASS_FG}` : `color:${DQI_FAIL_FG};font-weight:700`;
         const d = (r && r.dqo) || {};
         const sign = r && r.intercept >= 0 ? '+' : '\u2212';
         const eqText = r
@@ -10520,17 +10529,17 @@ function generateAuditReport(auditId) {
     .report-meta dd:last-child, .report-meta dd:nth-last-child(2) { border-bottom: none; }
     .report-meta dd .mono { font-family: 'JetBrains Mono', monospace; font-size: 12px; }
 
-    /* DQO table */
+    /* DQI table */
     .trim-note { display: inline-block; background: #fff8e8; color: #8a6d20; padding: 4px 12px; border-radius: 8px; font-size: 12px; font-weight: 600; margin-bottom: 12px; }
-    .dqo-thresh { display: block; font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #475569; margin-top: 2px; }
-    table.dqo { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 8px; }
-    table.dqo th { text-align: right; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
-    table.dqo th:first-child { text-align: left; }
-    table.dqo th:last-child { text-align: center; }
-    table.dqo td { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
-    table.dqo td:first-child { text-align: left; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 14px; }
-    table.dqo td:last-child { text-align: center; }
-    table.dqo tbody tr:nth-child(even) { background: #fafbfc; }
+    .dqi-thresh { display: block; font-size: 12px; font-weight: 500; text-transform: none; letter-spacing: 0; color: #475569; margin-top: 2px; }
+    table.dqi { width: 100%; border-collapse: collapse; font-size: 14px; margin-bottom: 8px; }
+    table.dqi th { text-align: right; padding: 12px 16px; font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px; color: #475569; border-bottom: 2px solid #e2e8f0; white-space: nowrap; }
+    table.dqi th:first-child { text-align: left; }
+    table.dqi th:last-child { text-align: center; }
+    table.dqi td { padding: 12px 16px; border-bottom: 1px solid #e2e8f0; font-family: 'JetBrains Mono', monospace; font-size: 13px; text-align: right; font-variant-numeric: tabular-nums; }
+    table.dqi td:first-child { text-align: left; font-family: 'DM Sans', sans-serif; font-weight: 600; font-size: 14px; }
+    table.dqi td:last-child { text-align: center; }
+    table.dqi tbody tr:nth-child(even) { background: #fafbfc; }
     .thresholds { font-size: 14px; color: #334155; margin-top: 12px; margin-bottom: 0; line-height: 1.7; }
 
     /* Chart cards and grid */
@@ -10594,9 +10603,9 @@ function generateAuditReport(auditId) {
         .chart-card { break-inside: avoid; page-break-inside: avoid; }
         .chart-grid { break-before: avoid; page-break-before: avoid; }
         .report-meta { break-inside: avoid; page-break-inside: avoid; }
-        table.dqo { break-inside: avoid; page-break-inside: avoid; }
+        table.dqi { break-inside: avoid; page-break-inside: avoid; }
         .thresholds { break-before: avoid; page-break-before: avoid; }
-        table.dqo tbody tr:nth-child(even), .chart-legend, .chart-eq, .chart-sub, .trim-note { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        table.dqi tbody tr:nth-child(even), .chart-legend, .chart-eq, .chart-sub, .trim-note { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
 </style>
 </head><body>
@@ -10635,11 +10644,11 @@ function generateAuditReport(auditId) {
     </section>
 
     <section class="report-section">
-    <h2>Data Quality Objectives (DQO) Summary</h2>
+    <h2>Data Quality Indicators (DQI) Summary</h2>
     <span class="trim-note">${trimInfo}</span>
-    <table class="dqo">
+    <table class="dqi">
         ${reportDqoHeader}
-        <tbody>${dqoRows}</tbody>
+        <tbody>${dqiRows}</tbody>
     </table>
     ${audit.analysisNotes ? '<div class="thresholds" style="margin-bottom:8px"><strong>Analysis Note:</strong> ' + escapeHtml(audit.analysisNotes) + '</div>' : ''}
     <div class="thresholds">PM<sub>10</sub> values exceeding 1000 \u00B5g/m\u00B3 were invalidated prior to analysis.</div>
@@ -10711,9 +10720,9 @@ function renderAuditPhotos(auditId, communityId) {
     </div>`).join('');
 }
 
-// ===== AUDIT DQO OVERVIEW =====
+// ===== AUDIT DQI OVERVIEW =====
 // Cross-audit pass/fail matrix. Grouped by community, ordered by start
-// date. Pulls DQO results from each audit's stored analysisResults so
+// date. Pulls DQI results from each audit's stored analysisResults so
 // re-running the regression isn't needed.
 
 function _getAuditPhotoFiles(auditId, communityId) {
@@ -10727,9 +10736,9 @@ function _audDqoCellColor(pass, inactive) {
     return pass ? 'color:#0f7a4a;font-weight:600' : 'color:#b03a2e;font-weight:700';
 }
 
-// Renders the DQO row for one audit's analysisResults. `audit` is the
+// Renders the DQI row for one audit's analysisResults. `audit` is the
 // in-memory record. Returns HTML for one table.
-function _renderAuditDqoTable(audit) {
+function _renderAuditDqiTable(audit) {
     const results = audit.analysisResults || {};
     if (!Object.keys(results).length) {
         return '<div style="font-size:12px;color:#64748b;font-style:italic">No analysis data uploaded.</div>';
@@ -10755,14 +10764,14 @@ function _renderAuditDqoTable(audit) {
             ${passCell}
         </tr>`;
     }).join('');
-    return `<table class="dqo-overview-table">
+    return `<table class="dqi-overview-table">
         <thead><tr>
             <th>Parameter</th>
-            <th>R<sup>2</sup><div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.r2}</div></th>
-            <th>Slope<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.slope}</div></th>
-            <th>Intercept<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.intercept}</div></th>
-            <th>SD<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.sd}</div></th>
-            <th>RMSE<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.rmse}</div></th>
+            <th>R<sup>2</sup><div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.r2}</div></th>
+            <th>Slope<div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.slope}</div></th>
+            <th>Intercept<div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.intercept}</div></th>
+            <th>SD<div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.sd}</div></th>
+            <th>RMSE<div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.rmse}</div></th>
             <th>n</th>
             <th>Result</th>
         </tr></thead>
@@ -10770,17 +10779,17 @@ function _renderAuditDqoTable(audit) {
     </table>`;
 }
 
-// Build the in-app DQO overview. Renders synchronously then loads photo
+// Build the in-app DQI overview. Renders synchronously then loads photo
 // signed URLs in the background — same pattern as renderAuditPhotos.
-function renderAuditDqoOverview() {
-    const body = document.getElementById('audit-dqo-overview-body');
+function renderAuditDqiOverview() {
+    const body = document.getElementById('audit-dqi-overview-body');
     if (!body) return;
 
     // Only audits that have analysis results uploaded — every other audit
-    // is in flight and has no DQO data to plot.
+    // is in flight and has no DQI data to plot.
     const withResults = audits.filter(a => a.analysisResults && Object.keys(a.analysisResults).length > 0);
     if (withResults.length === 0) {
-        body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--slate-400);background:white;border:1px solid var(--slate-200);border-radius:8px">No audits with analysis results yet. Upload audit data from an audit to see DQO results here.</div>';
+        body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--slate-400);background:white;border:1px solid var(--slate-200);border-radius:8px">No audits with analysis results yet. Upload audit data from an audit to see DQI results here.</div>';
         return;
     }
 
@@ -10805,8 +10814,8 @@ function renderAuditDqoOverview() {
     for (const communityId of sortedCommunityIds) {
         const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
         const list = byCommunity.get(communityId);
-        html += `<section class="dqo-overview-community">
-            <h2>${escapeHtml(communityName)} <span class="dqo-overview-count">${list.length} audit${list.length > 1 ? 's' : ''}</span></h2>`;
+        html += `<section class="dqi-overview-community">
+            <h2>${escapeHtml(communityName)} <span class="dqi-overview-count">${list.length} audit${list.length > 1 ? 's' : ''}</span></h2>`;
         for (const audit of list) {
             const dateRange = audit.startDate
                 ? `${new Date(audit.startDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} – ${new Date((audit.endDate || audit.startDate) + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}`
@@ -10814,19 +10823,19 @@ function renderAuditDqoOverview() {
             const photos = _getAuditPhotoFiles(audit.id, communityId);
             photoFilesByAudit[audit.id] = photos;
             const photoHtml = photos.length === 0
-                ? '<div class="dqo-overview-no-photo">No photo</div>'
-                : `<img id="dqo-overview-photo-${audit.id}" src="" alt="Audit photo" style="background:var(--slate-100)" onclick="openStorageFile('${escapeHtml(photos[0].storagePath)}')">`;
-            html += `<div class="dqo-overview-audit" onclick="openAuditDetail('${audit.id}')">
-                <div class="dqo-overview-audit-head">
+                ? '<div class="dqi-overview-no-photo">No photo</div>'
+                : `<img id="dqi-overview-photo-${audit.id}" src="" alt="Audit photo" style="background:var(--slate-100)" onclick="openStorageFile('${escapeHtml(photos[0].storagePath)}')">`;
+            html += `<div class="dqi-overview-audit" onclick="openAuditDetail('${audit.id}')">
+                <div class="dqi-overview-audit-head">
                     <div>
-                        <div class="dqo-overview-date">${dateRange}</div>
-                        <div class="dqo-overview-pods"><span class="mono">${escapeHtml(audit.auditPodId)}</span> &harr; <span class="mono">${escapeHtml(audit.communityPodId)}</span></div>
+                        <div class="dqi-overview-date">${dateRange}</div>
+                        <div class="dqi-overview-pods"><span class="mono">${escapeHtml(audit.auditPodId)}</span> &harr; <span class="mono">${escapeHtml(audit.communityPodId)}</span></div>
                     </div>
                     <span class="audit-status-badge ${AUDIT_STATUS_CSS[audit.status] || ''}">${escapeHtml(audit.status || '')}</span>
                 </div>
-                <div class="dqo-overview-audit-body">
-                    <div class="dqo-overview-photo" onclick="event.stopPropagation()">${photoHtml}</div>
-                    <div class="dqo-overview-table-wrap">${_renderAuditDqoTable(audit)}</div>
+                <div class="dqi-overview-audit-body">
+                    <div class="dqi-overview-photo" onclick="event.stopPropagation()">${photoHtml}</div>
+                    <div class="dqi-overview-table-wrap">${_renderAuditDqiTable(audit)}</div>
                 </div>
             </div>`;
         }
@@ -10840,7 +10849,7 @@ function renderAuditDqoOverview() {
         (async () => {
             try {
                 const url = await db.getSignedUrl(files[0].storagePath);
-                const img = document.getElementById('dqo-overview-photo-' + auditId);
+                const img = document.getElementById('dqi-overview-photo-' + auditId);
                 if (img) img.src = url;
             } catch (e) { /* photo missing — leave blank */ }
         })();
@@ -10866,15 +10875,17 @@ async function _fetchImageAsDataUrl(url) {
     }
 }
 
-async function exportAuditDqoOverviewHtml() {
+async function exportAuditDqiOverviewHtml() {
     const withResults = audits.filter(a => a.analysisResults && Object.keys(a.analysisResults).length > 0);
     if (withResults.length === 0) {
         showAlert('No Data', 'There are no audits with analysis results to export yet.');
         return;
     }
 
-    showLoadingToast?.('Building printable report...');
-    const btns = document.querySelectorAll('#view-audit-dqo-overview .view-header button');
+    const btns = document.querySelectorAll('#view-audit-dqi-overview .view-header button');
+    const exportBtn = Array.from(btns).find(b => /Save/.test(b.textContent || ''));
+    const originalLabel = exportBtn ? exportBtn.textContent : '';
+    if (exportBtn) exportBtn.textContent = 'Building...';
     btns.forEach(b => b.disabled = true);
 
     try {
@@ -10922,14 +10933,14 @@ async function exportAuditDqoOverviewHtml() {
                     <td>${r.n ?? '—'}</td>${passCell}
                 </tr>`;
             }).join('');
-            return `<table class="dqo-table">
+            return `<table class="dqi-table">
                 <thead><tr>
                     <th>Parameter</th>
-                    <th>R<sup>2</sup><div class="thsub">${DQO_RANGE_LABELS.r2}</div></th>
-                    <th>Slope<div class="thsub">${DQO_RANGE_LABELS.slope}</div></th>
-                    <th>Intercept<div class="thsub">${DQO_RANGE_LABELS.intercept}</div></th>
-                    <th>SD<div class="thsub">${DQO_RANGE_LABELS.sd}</div></th>
-                    <th>RMSE<div class="thsub">${DQO_RANGE_LABELS.rmse}</div></th>
+                    <th>R<sup>2</sup><div class="thsub">${DQI_RANGE_LABELS.r2}</div></th>
+                    <th>Slope<div class="thsub">${DQI_RANGE_LABELS.slope}</div></th>
+                    <th>Intercept<div class="thsub">${DQI_RANGE_LABELS.intercept}</div></th>
+                    <th>SD<div class="thsub">${DQI_RANGE_LABELS.sd}</div></th>
+                    <th>RMSE<div class="thsub">${DQI_RANGE_LABELS.rmse}</div></th>
                     <th>n</th><th>Result</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
@@ -10977,7 +10988,7 @@ async function exportAuditDqoOverviewHtml() {
         const reportHtml = `<!DOCTYPE html>
 <html lang="en"><head>
 <meta charset="UTF-8">
-<title>ADEC Audit DQO Overview — ${today}</title>
+<title>ADEC Audit DQI Overview — ${today}</title>
 <style>
     * { box-sizing: border-box; margin: 0; padding: 0; }
     body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1e293b; max-width: 1100px; margin: 0 auto; padding: 32px 40px; line-height: 1.5; background: #fff; }
@@ -11001,14 +11012,14 @@ async function exportAuditDqoOverviewHtml() {
     .audit-photo-wrap { width: 120px; height: 120px; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; background: #f1f5f9; display: flex; align-items: center; justify-content: center; }
     .audit-photo { width: 100%; height: 100%; object-fit: cover; }
     .no-photo { font-size: 11px; color: #94a3b8; text-align: center; padding: 8px; }
-    table.dqo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
-    table.dqo-table th { padding: 8px 6px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #475569; border-bottom: 2px solid #e2e8f0; text-align: right; vertical-align: bottom; }
-    table.dqo-table th:first-child { text-align: left; }
-    table.dqo-table th:last-child { text-align: center; }
-    table.dqo-table th .thsub { font-size: 9.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #94a3b8; margin-top: 1px; }
-    table.dqo-table td { padding: 6px; border-bottom: 1px solid #f1f5f9; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
-    table.dqo-table td:first-child { text-align: left; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 600; }
-    table.dqo-table td:last-child { text-align: center; }
+    table.dqi-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.dqi-table th { padding: 8px 6px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #475569; border-bottom: 2px solid #e2e8f0; text-align: right; vertical-align: bottom; }
+    table.dqi-table th:first-child { text-align: left; }
+    table.dqi-table th:last-child { text-align: center; }
+    table.dqi-table th .thsub { font-size: 9.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #94a3b8; margin-top: 1px; }
+    table.dqi-table td { padding: 6px; border-bottom: 1px solid #f1f5f9; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+    table.dqi-table td:first-child { text-align: left; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 600; }
+    table.dqi-table td:last-child { text-align: center; }
     .community-section { break-inside: auto; }
     .print-controls { position: fixed; bottom: 18px; right: 18px; background: white; padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; }
     .print-controls button { padding: 8px 18px; font-size: 13px; font-weight: 600; background: #1B2A4A; color: white; border: none; border-radius: 6px; cursor: pointer; }
@@ -11016,11 +11027,11 @@ async function exportAuditDqoOverviewHtml() {
         @page { margin: 0.6in; }
         body { max-width: none; padding: 0; }
         .no-print { display: none !important; }
-        .audit-card, .summary-card, table.dqo-table { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+        .audit-card, .summary-card, table.dqi-table { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     }
 </style>
 </head><body>
-    <h1>ADEC Sensor Audit — DQO Overview</h1>
+    <h1>ADEC Sensor Audit — DQI Overview</h1>
     <div class="report-meta">Generated ${today}</div>
     <div class="summary">
         <div class="summary-card"><div class="label">Audits</div><div class="value">${totals.audits}</div></div>
@@ -11038,17 +11049,18 @@ async function exportAuditDqoOverviewHtml() {
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `Audit_DQO_Overview_${new Date().toISOString().slice(0, 10)}.html`;
+        a.download = `Audit_DQI_Overview_${new Date().toISOString().slice(0, 10)}.html`;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
         URL.revokeObjectURL(url);
-        showSuccessToast?.('DQO overview downloaded');
+        showSuccessToast('DQI overview downloaded');
     } catch (err) {
-        console.error('DQO overview export failed:', err);
-        showAlert?.('Export Failed', err.message || 'Could not build the printable report.');
+        console.error('DQI overview export failed:', err);
+        showAlert('Export Failed', err.message || 'Could not build the printable report.');
     } finally {
         btns.forEach(b => b.disabled = false);
+        if (exportBtn) exportBtn.textContent = originalLabel;
     }
 }
 
@@ -11749,7 +11761,7 @@ function runCollocationAnalysis(parsed) {
             const y = trimmed.map(r => Number(r.pods?.[podId]?.[key] ?? NaN));
             const reg = runLinearRegression(x, y);
             if (reg) {
-                const dqo = checkDQO(reg);
+                const dqo = checkDQI(reg);
                 results.bamVsPods[podId][key] = { ...reg, dqo, pass: dqo.pass };
             }
         }
@@ -11763,7 +11775,7 @@ function runCollocationAnalysis(parsed) {
             const y = trimmed.map(r => Number(r.perma?.[key] ?? NaN));
             const reg = runLinearRegression(x, y);
             if (reg) {
-                const dqo = checkDQO(reg);
+                const dqo = checkDQI(reg);
                 results.bamVsPerma[key] = { ...reg, dqo, pass: dqo.pass };
             }
         }
@@ -11779,7 +11791,7 @@ function runCollocationAnalysis(parsed) {
                 const y = trimmed.map(r => Number(r.pods?.[podId]?.[key] ?? NaN));
                 const reg = runLinearRegression(x, y);
                 if (reg) {
-                    const dqo = checkDQO(reg);
+                    const dqo = checkDQI(reg);
                     results.permaVsPods[podId][key] = { ...reg, dqo, pass: dqo.pass };
                 }
             }
@@ -12228,13 +12240,20 @@ function _renderCollocRegChart(parsed, results, tabName) {
             const suffix = idx === 0 ? '' : '' + (idx + 1);
             const x0 = idx * (colW + xGap), x1 = x0 + colW;
 
-            const xLo = Math.min(...xArr), xHi = Math.max(...xArr);
+            const xLoRaw = Math.min(...xArr), xHiRaw = Math.max(...xArr);
+            const yLoRaw = Math.min(...yArr), yHiRaw = Math.max(...yArr);
+            // Square the axes: same data range on x and y so the y=x
+            // reference line renders at true 45° and trend deviations
+            // from 1:1 agreement are easy to read.
+            const xLo = Math.min(xLoRaw, yLoRaw);
+            const xHi = Math.max(xHiRaw, yHiRaw);
+            const yLo = xLo, yHi = xHi;
             const xDt = _collocNiceDtick(xLo, xHi);
-            const yLo = Math.min(...yArr), yHi = Math.max(...yArr);
-            const yDt = _collocNiceDtick(yLo, yHi);
+            const yDt = xDt;
+            const axRange = [Math.floor(xLo / xDt) * xDt, Math.ceil(xHi / xDt) * xDt];
 
-            const xDef = { domain: [x0, x1], title: refLabel, gridcolor: '#eee', zeroline: false, range: [Math.floor(xLo / xDt) * xDt, Math.ceil(xHi / xDt) * xDt], dtick: xDt, tickfont: { size: 10 } };
-            const yDef = { domain: [0, 1], title: idx === 0 ? paramLabel : '', gridcolor: '#eee', zeroline: false, range: [Math.floor(yLo / yDt) * yDt, Math.ceil(yHi / yDt) * yDt], dtick: yDt, tickfont: { size: 10 } };
+            const xDef = { domain: [x0, x1], title: refLabel, gridcolor: '#eee', zeroline: false, range: axRange.slice(), dtick: xDt, tickfont: { size: 10 } };
+            const yDef = { domain: [0, 1], title: idx === 0 ? paramLabel : '', gridcolor: '#eee', zeroline: false, range: axRange.slice(), dtick: yDt, tickfont: { size: 10 }, scaleanchor: xax, scaleratio: 1 };
             if (idx > 0) { xDef.anchor = yax; yDef.anchor = xax; }
             layout['xaxis' + suffix] = xDef;
             layout['yaxis' + suffix] = yDef;
@@ -12242,10 +12261,10 @@ function _renderCollocRegChart(parsed, results, tabName) {
             // Scatter points
             traces.push({ x: xArr, y: yArr, type: 'scatter', mode: 'markers', marker: { color: _collocPodColor(parsed.podIds.indexOf(podId)), size: 4, opacity: 0.4 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'x+y' });
 
-            // Per-metric DQO checks — colors the equation text only, not
+            // Per-metric DQI checks — colors the equation text only, not
             // the regression line or points. Colorblind-safe Okabe-Ito
             // palette shared with audit scatter plots.
-            const T = DQO_THRESHOLDS;
+            const T = DQI_THRESHOLDS;
             const slopePass = reg.slope >= T.slope.min && reg.slope <= T.slope.max;
             const intPass = reg.intercept >= T.intercept.min && reg.intercept <= T.intercept.max;
             const r2Pass = reg.r2 >= T.r2.min;
@@ -12365,13 +12384,19 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
         const yax = idx === 0 ? 'y' : 'y' + (idx + 1);
         const suffix = idx === 0 ? '' : '' + (idx + 1);
         const x0 = idx * (colW + xGap), x1 = x0 + colW;
-        const xLo = Math.min(...xArr), xHi = Math.max(...xArr);
+        const xLoRaw = Math.min(...xArr), xHiRaw = Math.max(...xArr);
+        const yLoRaw = Math.min(...yArr), yHiRaw = Math.max(...yArr);
+        // Square the axes: same data range on x and y so the y=x line
+        // sits at true 45° and 1:1 deviations are visually obvious.
+        const xLo = Math.min(xLoRaw, yLoRaw);
+        const xHi = Math.max(xHiRaw, yHiRaw);
+        const yLo = xLo, yHi = xHi;
         const xDt = _collocNiceDtick(xLo, xHi);
-        const yLo = Math.min(...yArr), yHi = Math.max(...yArr);
-        const yDt = _collocNiceDtick(yLo, yHi);
+        const yDt = xDt;
+        const axRange = [Math.floor(xLo / xDt) * xDt, Math.ceil(xHi / xDt) * xDt];
 
-        const xDef = { domain: [x0, x1], title: `${shortSensorId(pair.ref)} ${paramLabel}`, gridcolor: '#eee', zeroline: false, range: [Math.floor(xLo / xDt) * xDt, Math.ceil(xHi / xDt) * xDt], dtick: xDt, tickfont: { size: 10 } };
-        const yDef = { domain: [0, 1], title: idx === 0 ? paramLabel : '', gridcolor: '#eee', zeroline: false, range: [Math.floor(yLo / yDt) * yDt, Math.ceil(yHi / yDt) * yDt], dtick: yDt, tickfont: { size: 10 } };
+        const xDef = { domain: [x0, x1], title: `${shortSensorId(pair.ref)} ${paramLabel}`, gridcolor: '#eee', zeroline: false, range: axRange.slice(), dtick: xDt, tickfont: { size: 10 } };
+        const yDef = { domain: [0, 1], title: idx === 0 ? paramLabel : '', gridcolor: '#eee', zeroline: false, range: axRange.slice(), dtick: yDt, tickfont: { size: 10 }, scaleanchor: xax, scaleratio: 1 };
         if (idx > 0) { xDef.anchor = yax; yDef.anchor = xax; }
         layout['xaxis' + suffix] = xDef;
         layout['yaxis' + suffix] = yDef;
@@ -12379,7 +12404,7 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
         const color = pairColors[idx % pairColors.length];
         traces.push({ x: xArr, y: yArr, type: 'scatter', mode: 'markers', marker: { color, size: 4, opacity: 0.4 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'x+y' });
 
-        const T = DQO_THRESHOLDS;
+        const T = DQI_THRESHOLDS;
         const slopePass = reg.slope >= T.slope.min && reg.slope <= T.slope.max;
         const intPass = reg.intercept >= T.intercept.min && reg.intercept <= T.intercept.max;
         const r2Pass = reg.r2 >= T.r2.min;

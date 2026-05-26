@@ -76,12 +76,12 @@ button:focus-visible, .btn:focus-visible {
        tritanopia). Pass is a blue-green (reads clearly green to most);
        fail is vermillion-orange (reads distinctly different from pass
        in every common colorblind simulation). Used across audit + colloc
-       DQO tables, scatter regression lines, equation text, and badges
+       DQI tables, scatter regression lines, equation text, and badges
        so the visual language is consistent. */
-    --dqo-pass: #009E73;
-    --dqo-pass-bg: #e0f5ed;
-    --dqo-fail: #D55E00;
-    --dqo-fail-bg: #fcecdd;
+    --dqi-pass: #009E73;
+    --dqi-pass-bg: #e0f5ed;
+    --dqi-fail: #D55E00;
+    --dqi-fail-bg: #fcecdd;
 
     --surface: #ffffff;
 
@@ -909,7 +909,7 @@ body.has-sandbox-banner #app { height: calc(100vh - 36px); }
     .table-container { overflow-x: auto; -webkit-overflow-scrolling: touch; }
     .tabs { overflow-x: auto; -webkit-overflow-scrolling: touch; flex-wrap: nowrap; }
     .analysis-chart-card { padding-left: 24px; }
-    .dqo-summary-table { min-width: 600px; }
+    .dqi-summary-table { min-width: 600px; }
 
     /* Sensor + contact tables → card layout at phone widths. Keeps data
        legible without a horizontal scroll, which field users can't do
@@ -2308,14 +2308,14 @@ tr:hover .contact-delete-btn {
     display: block;
 }
 
-/* DQO Summary Table */
-.dqo-summary-table {
+/* DQI Summary Table */
+.dqi-summary-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 13px;
 }
 
-.dqo-summary-table th {
+.dqi-summary-table th {
     text-align: right;
     padding: 10px 12px;
     font-size: 11px;
@@ -2327,10 +2327,10 @@ tr:hover .contact-delete-btn {
     white-space: nowrap;
 }
 
-.dqo-summary-table th:first-child { text-align: left; }
-.dqo-summary-table th:last-child { text-align: center; }
+.dqi-summary-table th:first-child { text-align: left; }
+.dqi-summary-table th:last-child { text-align: center; }
 
-.dqo-thresh {
+.dqi-thresh {
     display: block;
     font-size: 10px;
     font-weight: 500;
@@ -2340,14 +2340,14 @@ tr:hover .contact-delete-btn {
     margin-top: 2px;
 }
 
-.dqo-summary-table sub {
+.dqi-summary-table sub {
     font-size: 0.85em;
     vertical-align: baseline;
     position: relative;
     top: 0.3em;
 }
 
-.dqo-summary-table td {
+.dqi-summary-table td {
     padding: 12px 16px;
     border-bottom: 1px solid var(--slate-100);
     font-family: var(--font-mono);
@@ -2356,11 +2356,11 @@ tr:hover .contact-delete-btn {
     font-variant-numeric: tabular-nums;
 }
 
-.dqo-summary-table tbody tr:nth-child(even) {
+.dqi-summary-table tbody tr:nth-child(even) {
     background: var(--slate-25);
 }
 
-.dqo-summary-table td:first-child {
+.dqi-summary-table td:first-child {
     font-family: var(--font-sans);
     font-weight: 600;
     font-size: 13px;
@@ -2368,18 +2368,18 @@ tr:hover .contact-delete-btn {
     text-align: left;
 }
 
-.dqo-summary-table td:last-child {
+.dqi-summary-table td:last-child {
     text-align: center;
 }
 
-.dqo-summary-table tr:last-child td {
+.dqi-summary-table tr:last-child td {
     border-bottom: none;
 }
 
-.dqo-pass {
+.dqi-pass {
     display: inline-block;
-    background: var(--dqo-pass-bg);
-    color: var(--dqo-pass);
+    background: var(--dqi-pass-bg);
+    color: var(--dqi-pass);
     padding: 2px 10px;
     border-radius: 10px;
     font-size: 11px;
@@ -2388,10 +2388,10 @@ tr:hover .contact-delete-btn {
     letter-spacing: 0.3px;
 }
 
-.dqo-fail {
+.dqi-fail {
     display: inline-block;
-    background: var(--dqo-fail-bg);
-    color: var(--dqo-fail);
+    background: var(--dqi-fail-bg);
+    color: var(--dqi-fail);
     padding: 2px 10px;
     border-radius: 10px;
     font-size: 11px;
@@ -2400,16 +2400,16 @@ tr:hover .contact-delete-btn {
     letter-spacing: 0.3px;
 }
 
-.dqo-cell-pass {
-    color: var(--dqo-pass);
+.dqi-cell-pass {
+    color: var(--dqi-pass);
 }
 
-.dqo-cell-fail {
-    color: var(--dqo-fail);
+.dqi-cell-fail {
+    color: var(--dqi-fail);
     font-weight: 700;
 }
 
-.dqo-overall {
+.dqi-overall {
     margin-top: 16px;
     padding: 12px 16px;
     border-radius: var(--radius-lg);
@@ -2418,15 +2418,15 @@ tr:hover .contact-delete-btn {
     text-align: center;
 }
 
-.dqo-overall.pass {
-    background: var(--dqo-pass-bg);
-    color: var(--dqo-pass);
+.dqi-overall.pass {
+    background: var(--dqi-pass-bg);
+    color: var(--dqi-pass);
     border: 1px solid rgba(0, 158, 115, 0.35);
 }
 
-.dqo-overall.fail {
-    background: var(--dqo-fail-bg);
-    color: var(--dqo-fail);
+.dqi-overall.fail {
+    background: var(--dqi-fail-bg);
+    color: var(--dqi-fail);
     border: 1px solid rgba(213, 94, 0, 0.35);
 }
 
@@ -2628,6 +2628,17 @@ tr:hover .contact-delete-btn {
     position: relative;
     width: 100%;
     height: 260px;
+}
+
+/* Square wrap for the regression scatter plots so the y=x reference
+   line sits at a true 45° and 1:1 deviations are easy to spot. */
+.analysis-chart-card .chart-canvas-wrap-square {
+    position: relative;
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    height: auto;
+    max-height: 360px;
+    margin: 0 auto;
 }
 
 /* Scale edit — inline pencil buttons next to axis labels, never overlap canvas */
@@ -2931,13 +2942,13 @@ tr:hover .contact-delete-btn {
 }
 
 .audit-param-badge.pass {
-    background: var(--dqo-pass-bg);
-    color: var(--dqo-pass);
+    background: var(--dqi-pass-bg);
+    color: var(--dqi-pass);
 }
 
 .audit-param-badge.fail {
-    background: var(--dqo-fail-bg);
-    color: var(--dqo-fail);
+    background: var(--dqi-fail-bg);
+    color: var(--dqi-fail);
 }
 
 .audit-param-badge.pending {
@@ -3073,9 +3084,9 @@ tr:hover .contact-delete-btn {
     display: flex;
 }
 
-/* ===== DQO OVERVIEW ===== */
-.dqo-overview-community { margin-bottom: 32px; }
-.dqo-overview-community h2 {
+/* ===== DQI OVERVIEW ===== */
+.dqi-overview-community { margin-bottom: 32px; }
+.dqi-overview-community h2 {
     font-size: 17px;
     color: var(--navy-700, #1B2A4A);
     margin: 0 0 12px;
@@ -3085,14 +3096,14 @@ tr:hover .contact-delete-btn {
     align-items: baseline;
     gap: 10px;
 }
-.dqo-overview-count {
+.dqi-overview-count {
     font-size: 12px;
     color: var(--slate-400);
     font-weight: 400;
     text-transform: uppercase;
     letter-spacing: 0.5px;
 }
-.dqo-overview-audit {
+.dqi-overview-audit {
     background: white;
     border: 1px solid var(--slate-200);
     border-radius: var(--radius-sm);
@@ -3101,11 +3112,11 @@ tr:hover .contact-delete-btn {
     cursor: pointer;
     transition: box-shadow 0.12s, border-color 0.12s;
 }
-.dqo-overview-audit:hover {
+.dqi-overview-audit:hover {
     border-color: var(--navy-500, #1B2A4A);
     box-shadow: 0 2px 8px rgba(11,22,40,0.08);
 }
-.dqo-overview-audit-head {
+.dqi-overview-audit-head {
     display: flex;
     justify-content: space-between;
     align-items: flex-start;
@@ -3113,28 +3124,28 @@ tr:hover .contact-delete-btn {
     flex-wrap: wrap;
     gap: 12px;
 }
-.dqo-overview-date {
+.dqi-overview-date {
     font-weight: 700;
     font-size: 14px;
     color: var(--navy-700, #1B2A4A);
 }
-.dqo-overview-pods {
+.dqi-overview-pods {
     font-size: 12px;
     color: var(--slate-500);
     margin-top: 2px;
 }
-.dqo-overview-pods .mono {
+.dqi-overview-pods .mono {
     font-family: var(--font-mono);
     font-size: 11.5px;
     color: var(--navy-700, #1B2A4A);
 }
-.dqo-overview-audit-body {
+.dqi-overview-audit-body {
     display: grid;
     grid-template-columns: 110px 1fr;
     gap: 14px;
     align-items: start;
 }
-.dqo-overview-photo {
+.dqi-overview-photo {
     width: 110px;
     height: 110px;
     border-radius: var(--radius-sm);
@@ -3145,25 +3156,25 @@ tr:hover .contact-delete-btn {
     align-items: center;
     justify-content: center;
 }
-.dqo-overview-photo img {
+.dqi-overview-photo img {
     width: 100%;
     height: 100%;
     object-fit: cover;
     cursor: zoom-in;
 }
-.dqo-overview-no-photo {
+.dqi-overview-no-photo {
     font-size: 11px;
     color: var(--slate-400);
     text-align: center;
     padding: 0 8px;
 }
-.dqo-overview-table-wrap { overflow-x: auto; }
-table.dqo-overview-table {
+.dqi-overview-table-wrap { overflow-x: auto; }
+table.dqi-overview-table {
     width: 100%;
     border-collapse: collapse;
     font-size: 12px;
 }
-table.dqo-overview-table th {
+table.dqi-overview-table th {
     padding: 8px 6px;
     font-size: 10.5px;
     font-weight: 600;
@@ -3175,9 +3186,9 @@ table.dqo-overview-table th {
     vertical-align: bottom;
     white-space: nowrap;
 }
-table.dqo-overview-table th:first-child { text-align: left; }
-table.dqo-overview-table th:last-child { text-align: center; }
-.dqo-overview-th-sub {
+table.dqi-overview-table th:first-child { text-align: left; }
+table.dqi-overview-table th:last-child { text-align: center; }
+.dqi-overview-th-sub {
     font-size: 9.5px;
     font-weight: 400;
     text-transform: none;
@@ -3185,7 +3196,7 @@ table.dqo-overview-table th:last-child { text-align: center; }
     color: var(--slate-400);
     margin-top: 1px;
 }
-table.dqo-overview-table td {
+table.dqi-overview-table td {
     padding: 6px;
     border-bottom: 1px solid var(--slate-100);
     font-family: var(--font-mono);
@@ -3193,12 +3204,12 @@ table.dqo-overview-table td {
     text-align: right;
     font-variant-numeric: tabular-nums;
 }
-table.dqo-overview-table td:first-child {
+table.dqi-overview-table td:first-child {
     text-align: left;
     font-family: var(--font-sans);
     font-weight: 600;
 }
-table.dqo-overview-table td:last-child { text-align: center; }
+table.dqi-overview-table td:last-child { text-align: center; }
 
 .audit-photo-thumb.is-uploading img { opacity: 0.45; filter: blur(1px); }
 .audit-photo-thumb.is-failed { border-color: var(--aurora-rose, #c53030); }
@@ -3252,7 +3263,7 @@ table.dqo-overview-table td:last-child { text-align: center; }
     margin-bottom: 12px;
 }
 
-.analysis-dqo-thresholds {
+.analysis-dqi-thresholds {
     font-size: 12px;
     color: var(--slate-500);
     margin-top: 10px;
@@ -4725,12 +4736,12 @@ th:hover .field-reorder-btns {
     .modal:not(.open) { display: none !important; }
     .modal-content { max-width: 100% !important; box-shadow: none !important; border: none !important; max-height: none !important; overflow: visible !important; }
     .modal-close { display: none !important; }
-    .dqo-summary-table, .analysis-chart-card, .timeline-item { break-inside: avoid; page-break-inside: avoid; }
+    .dqi-summary-table, .analysis-chart-card, .timeline-item { break-inside: avoid; page-break-inside: avoid; }
     .report-section { break-inside: avoid; page-break-inside: avoid; }
     .analysis-section-heading { break-after: avoid; page-break-after: avoid; }
     .analysis-chart-grid { break-before: avoid; page-break-before: avoid; }
-    #analysis-section-dqo, #analysis-section-timeseries, #analysis-section-scatter { break-inside: avoid; page-break-inside: avoid; }
-    .dqo-overall, .dqo-pass, .dqo-fail, .audit-param-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    #analysis-section-dqi, #analysis-section-timeseries, #analysis-section-scatter { break-inside: avoid; page-break-inside: avoid; }
+    .dqi-overall, .dqi-pass, .dqi-fail, .audit-param-badge { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
     @page { margin: 0.5in; }
 }
 

@@ -549,7 +549,7 @@
   <li>Parses all sensor columns from the spreadsheet</li>
   <li>Excludes the first 24 hours from regression (the settling-in period)</li>
   <li>Runs linear regression for each parameter (PM<sub>2.5</sub>, PM<sub>10</sub>, CO, NO, NO<sub>2</sub>, O<sub>3</sub>)</li>
-  <li>Checks DQO thresholds (R² ≥ 0.70, slope 0.65-1.35, intercept ±5)</li>
+  <li>Checks DQI thresholds (R² ≥ 0.70, slope 0.65-1.35, intercept ±5)</li>
   <li>Generates time series charts and regression scatter plots</li>
   <li>Runs failsafe validation checks to verify the math is correct</li>
 </ul>
@@ -569,7 +569,7 @@
 
 <h3>How Audit Reports Read</h3>
 <ul>
-  <li><strong>DQO equation coloring</strong> — Slope, intercept, and R² are each colored independently in the equation line: green when the value passes its DQO threshold, orange when it fails. (Colorblind-safe palette.) Plot lines themselves stay neutral so the colors only signal what they need to.</li>
+  <li><strong>DQI equation coloring</strong> — Slope, intercept, and R² are each colored independently in the equation line: green when the value passes its DQI threshold, orange when it fails. (Colorblind-safe palette.) Plot lines themselves stay neutral so the colors only signal what they need to.</li>
   <li><strong>Audit dates</strong> — Reports use the <strong>Actual Start</strong> and <strong>Actual End</strong> fields from the audit, not the scheduled dates, so the header reflects what really happened.</li>
   <li><strong>Progress note timestamps</strong> — Each progress note in the report shows a small timestamp so you can see when it was logged.</li>
 </ul>
@@ -581,7 +581,7 @@
   <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, this is flagged in the validation dropdown on the analysis</li>
   <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
   <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
-  <li><strong>Borderline DQO</strong> — Alerts when a pass/fail result is very close to the threshold</li>
+  <li><strong>Borderline DQI</strong> — Alerts when a pass/fail result is very close to the threshold</li>
 </ul>
 
 <div class="callout tip">
