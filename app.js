@@ -1377,8 +1377,17 @@ function restoreLastView() {
 }
 
 function showView(viewName) {
+    // Guard against stale view names (e.g. localStorage holding an old
+    // view id after a rename) — fall back to the dashboard so the user
+    // isn't bounced to a "failed to load" screen on a missing element.
+    const target = document.getElementById('view-' + viewName);
+    if (!target) {
+        console.warn(`showView: unknown view "${viewName}", falling back to dashboard`);
+        if (viewName !== 'dashboard') return showView('dashboard');
+        return;
+    }
     document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById('view-' + viewName).classList.add('active');
+    target.classList.add('active');
     pushViewHistory();
 
     document.querySelectorAll('.menu-item').forEach(m => m.classList.remove('active'));
