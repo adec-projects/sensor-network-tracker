@@ -316,8 +316,65 @@ async function loadAllData() {
     mergeStatusChangeNotes();
     tagNotesWithStatusChange();
 
+    // Re-run regression on every audit/collocation with saved chart data
+    // so existing records use the current SD/RMSE formulas and axis
+    // convention without needing a DB migration. In-memory only —
+    // re-uploading the dataset is what persists new numbers back to
+    // Supabase. Idempotent.
+    recomputeStoredAnalysisResults();
+
     // Build O(1) lookup maps
     rebuildLookupMaps();
+}
+
+function recomputeStoredAnalysisResults() {
+    let auditsTouched = 0, collocsTouched = 0;
+    // --- Audits ---
+    for (const audit of audits) {
+        if (!audit?.analysisChartData?.rows?.length) continue;
+        if (!audit.analysisResults || !Object.keys(audit.analysisResults).length) continue;
+        try {
+            // rebuildCacheFromSaved overwrites audit.analysisResults in
+            // place with regressions recomputed from raw row data under
+            // the current formulas + axis convention.
+            rebuildCacheFromSaved(audit);
+            auditsTouched++;
+        } catch (e) {
+            console.warn('Failed to recompute audit', audit.id, e);
+        }
+    }
+    // --- Collocations ---
+    for (const colloc of collocations) {
+        if (!colloc?.analysisChartData?.rows?.length) continue;
+        if (!colloc.analysisResults || !Object.keys(colloc.analysisResults).length) continue;
+        try {
+            const parsed = rebuildCollocCacheFromSaved(colloc);
+            if (!parsed || !parsed.regressionResults) continue;
+            // Flatten regression results back into the persisted shape
+            // that the rest of the app reads (per-pod keys + an optional
+            // _bamVsPerma entry). This mirrors finalizeCollocationAnalysis.
+            const r = parsed.regressionResults;
+            const newResults = {};
+            for (const podId of (parsed.podIds || [])) {
+                const podResults = {};
+                for (const key of ['pm25', 'pm10']) {
+                    if (r.bamVsPods?.[podId]?.[key]) podResults[`bam_${key}`] = r.bamVsPods[podId][key];
+                }
+                if (r.permaVsPods?.[podId]) {
+                    for (const [key, val] of Object.entries(r.permaVsPods[podId])) podResults[`perma_${key}`] = val;
+                }
+                newResults[podId] = podResults;
+            }
+            if (r.bamVsPerma && Object.keys(r.bamVsPerma).length) newResults['_bamVsPerma'] = r.bamVsPerma;
+            colloc.analysisResults = newResults;
+            collocsTouched++;
+        } catch (e) {
+            console.warn('Failed to recompute collocation', colloc.id, e);
+        }
+    }
+    if (auditsTouched || collocsTouched) {
+        console.log(`Recomputed DQI on ${auditsTouched} audit(s) and ${collocsTouched} collocation(s)`);
+    }
 }
 
 function cleanupSensorServiceStatuses() {
