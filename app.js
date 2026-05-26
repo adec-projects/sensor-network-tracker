@@ -9552,38 +9552,52 @@ function rebuildCacheFromSaved(audit) {
         trimmedRows: allRows.slice(trimIndex),
     };
 
-    // Rebuild regression results — reconstruct pairs from row data if missing, re-evaluate DQI
-    const savedResults = audit.analysisResults || {};
+    // Rebuild regression results from the raw row data using the
+    // current axis convention (community/local pod on X, audit pod on
+    // Y). Always re-pair + re-run regression instead of trusting any
+    // previously persisted pairs / slope / intercept — older audits
+    // were analyzed under the old convention (audit on X), so blindly
+    // displaying their stored numbers next to the new axis labels
+    // would be misleading. The recomputed values overwrite the
+    // in-memory audit.analysisResults so the on-screen DQI table and
+    // the DQI Overview both stay consistent for the session; the
+    // persisted DB record is only rewritten when the audit is
+    // re-uploaded or re-analyzed.
+    const newResults = {};
     AUDIT_PARAMETERS.forEach(p => {
-        const r = savedResults[p.key];
-        if (r && !r.pairs) {
-            // Reconstruct pairs with timestamps from trimmed row data
-            const pairs = [];
-            for (const row of parsed.trimmedRows) {
-                const a = row.values[p.key]?.a;
-                const b = row.values[p.key]?.b;
-                if (!isNaN(a) && !isNaN(b) && isFinite(a) && isFinite(b)) {
-                    pairs.push({ x: a, y: b, t: row.timestamp?.getTime?.() || row.timestamp });
-                }
+        const xArr = parsed.trimmedRows.map(row => row.values[p.key]?.b);
+        const yArr = parsed.trimmedRows.map(row => row.values[p.key]?.a);
+        const tsArr = parsed.trimmedRows.map(row => row.timestamp);
+        const reg = runLinearRegression(xArr, yArr);
+        if (!reg) return;
+        let tIdx = 0;
+        for (let i = 0; i < xArr.length; i++) {
+            if (!isNaN(xArr[i]) && !isNaN(yArr[i]) && isFinite(xArr[i]) && isFinite(yArr[i])) {
+                if (reg.pairs[tIdx]) reg.pairs[tIdx].t = tsArr[i]?.getTime?.() || tsArr[i];
+                tIdx++;
             }
-            r.pairs = pairs;
         }
-        // Re-evaluate DQI
-        if (r) {
-            r.dqo = checkDQI(r);
-            r.pass = r.dqo.pass;
-        }
+        const dqo = checkDQI(reg);
+        newResults[p.key] = { ...reg, dqo, pass: dqo.pass };
     });
-    parsed.regressionResults = savedResults;
+    audit.analysisResults = newResults;
+    parsed.regressionResults = newResults;
 
     return parsed;
 }
 
 function runAllAnalyses(parsed) {
+    // Convention: community (local) pod on X, audit pod on Y. This
+    // matches how Ayla and the team read these plots — the local
+    // sensor being validated is the reference, the visiting audit pod
+    // is the response. Updating only this entry point + the
+    // rebuild-from-saved path is enough to flip every audit chart,
+    // including existing audits whose stored chartData rows still
+    // hold the raw a/b values (audit / community respectively).
     const results = {};
     for (const param of AUDIT_PARAMETERS) {
-        const xArr = parsed.trimmedRows.map(r => r.values[param.key]?.a);
-        const yArr = parsed.trimmedRows.map(r => r.values[param.key]?.b);
+        const xArr = parsed.trimmedRows.map(r => r.values[param.key]?.b);  // community (local)
+        const yArr = parsed.trimmedRows.map(r => r.values[param.key]?.a);  // audit pod
         const tsArr = parsed.trimmedRows.map(r => r.timestamp);
         const reg = runLinearRegression(xArr, yArr);
         if (reg) {
@@ -9795,9 +9809,9 @@ function renderScatterSection(auditId, parsed, results) {
             return `<div class="analysis-chart-card">
             <div class="chart-title-editable" onclick="editChartTitle(this)">${parsed.sensorB.short} and ${parsed.sensorA.short}: <strong>${p.labelHtml}</strong></div>
             <div class="chart-subtitle-editable" onclick="editChartTitle(this)">${auditDateRange}. Hourly data, first 24 hours removed</div>
-            <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
+            <div class="chart-axis-label chart-axis-y" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'y', this)">&#9998;</span></div>
             <div class="chart-canvas-wrap chart-canvas-wrap-square"><canvas id="scatter-${auditId}-${p.key}"></canvas></div>
-            <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorA.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998;</span></div>
+            <div class="chart-axis-label chart-axis-x" onclick="editChartTitle(this)">${parsed.sensorB.short} ${p.label} (${p.unit}) <span class="chart-scale-btn" onclick="event.stopPropagation(); editChartAxis('scatter-${auditId}-${p.key}', 'x', this)">&#9998;</span></div>
             <div class="chart-equation">${renderEquationLine(r)}</div>
         </div>`; }).join('')}
     </div>`;
@@ -10461,9 +10475,10 @@ function generateAuditReport(auditId) {
                     plugins: { legend: { display: false } },
                     scales: {
                         // Shared range + square canvas (1000x1000) so the y=x
-                        // reference line renders at a true 45° in the printed PDF.
-                        x: { type: 'linear', min: axMin, max: axMax, title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
-                        y: { type: 'linear', min: axMin, max: axMax, title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
+                        // reference line renders at a true 45° in the printed
+                        // PDF. Community (local) pod on X, audit pod on Y.
+                        x: { type: 'linear', min: axMin, max: axMax, title: { display: true, text: shortB + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
+                        y: { type: 'linear', min: axMin, max: axMax, title: { display: true, text: shortA + ' ' + p.label + ' (' + p.unit + ')', font: { size: 38, weight: '600' } }, grid: { display: false }, ticks: { font: { size: 40 } } },
                     },
                 },
             }, { w: 1000, h: 1000 });
