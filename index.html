@@ -234,6 +234,7 @@
             <div id="view-audits" class="view">
                 <div class="view-header">
                     <h1>Community Audits</h1>
+                    <button class="btn" onclick="showView('audit-dqo-overview')">DQO Overview</button>
                     <button class="btn btn-primary" onclick="openNewAuditModal()">+ Schedule Audit</button>
                 </div>
                 <div style="display:flex;gap:10px;align-items:center;margin-bottom:16px;flex-wrap:wrap">
@@ -247,6 +248,17 @@
                     </select>
                 </div>
                 <div id="audit-pipeline" class="audit-pipeline"></div>
+            </div>
+
+            <!-- Audit DQO Overview View -->
+            <div id="view-audit-dqo-overview" class="view">
+                <div class="view-header">
+                    <h1>DQO Overview</h1>
+                    <button class="btn" onclick="showView('audits')">&larr; Back to Audits</button>
+                    <button class="btn btn-primary" onclick="exportAuditDqoOverviewHtml()">Save Printable HTML</button>
+                </div>
+                <div style="font-size:13px;color:var(--slate-400);margin-bottom:16px">Pass / fail across every audit with uploaded analysis data, grouped by community and ordered by date.</div>
+                <div id="audit-dqo-overview-body"></div>
             </div>
 
             <!-- Collocations View -->

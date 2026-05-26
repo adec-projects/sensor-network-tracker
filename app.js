@@ -1403,6 +1403,7 @@ function showView(viewName) {
     if (viewName === 'settings') renderSettings();
     if (viewName === 'service') renderServiceView();
     if (viewName === 'audits') renderAuditsView();
+    if (viewName === 'audit-dqo-overview') renderAuditDqoOverview();
     if (viewName === 'collocations') renderCollocationsView();
     if (viewName === 'user-guide') renderUserGuide();
 
@@ -8741,6 +8742,31 @@ function renderValidationReport(warnings) {
     return html;
 }
 
+// Strict per-cell value parser used by the audit + collocation upload paths.
+// Two invariants matter here:
+//  1. A blank/invalid cell must become NaN — the regression and chart code
+//     filter NaN pairs but keep each row's timestamp paired with its own
+//     row's values, so a NaN never "shifts" later data up into a missing slot.
+//  2. AirVision marks missing data with sentinels (-9999, -999) and text
+//     codes ("ND", "M", "<MDL", etc.). Without explicit handling those leak
+//     into the regression as real numbers and skew the fit. We treat them
+//     as missing here.
+function parseSensorCellValue(raw) {
+    if (raw === '' || raw === null || raw === undefined) return NaN;
+    if (typeof raw === 'string') {
+        const t = raw.trim().toUpperCase();
+        if (!t) return NaN;
+        // Common missing-data text markers from AirVision / EPA exports
+        if (t === 'ND' || t === 'NA' || t === 'N/A' || t === 'M' || t === '--' || t === '-' || t === '#N/A') return NaN;
+        if (t.startsWith('<') || t.startsWith('BDL') || t.startsWith('MDL')) return NaN;
+    }
+    const v = parseFloat(raw);
+    if (!isFinite(v)) return NaN;
+    // Sentinel-value markers used by AirVision / EPA AQS for "no data"
+    if (v === -9999 || v === -999 || v === 9999 || v === 99999) return NaN;
+    return v;
+}
+
 // Column name mapping: match QuantAQ AirVision export columns to our parameter keys
 const PARAM_COLUMN_MAP = {
     co: [/\bCO_PPB\b/i, /\bco_ppb\b/i, /\bCO\b.*ppb/i],
@@ -9381,8 +9407,8 @@ function parseAuditData(rows, audit) {
 
         const entry = { timestamp: ts, tsRaw: numVal || tsRaw, values: {} };
         for (const paramKey of Object.keys(PARAM_COLUMN_MAP)) {
-            const vA = colsA[paramKey] !== undefined ? parseFloat(row[colsA[paramKey]]) : NaN;
-            const vB = colsB[paramKey] !== undefined ? parseFloat(row[colsB[paramKey]]) : NaN;
+            const vA = colsA[paramKey] !== undefined ? parseSensorCellValue(row[colsA[paramKey]]) : NaN;
+            const vB = colsB[paramKey] !== undefined ? parseSensorCellValue(row[colsB[paramKey]]) : NaN;
             entry.values[paramKey] = { a: vA, b: vB };
         }
         allRows.push(entry);
@@ -9781,12 +9807,13 @@ function createScatterChart(canvasId, regression, param, parsed) {
     if (!canvas) return;
 
     const xVals = regression.pairs.map(p => p.x);
-    const minX = Math.min(...xVals);
-    const maxX = Math.max(...xVals);
+    const yVals = regression.pairs.map(p => p.y);
+    const lineLo = Math.min(...xVals, ...yVals);
+    const lineHi = Math.max(...xVals, ...yVals);
 
-    // Regression line: neutral dark navy. Don't color the line by DQO —
-    // the equation text already carries the pass/fail coloring, and
-    // point/line palette stays consistent with the collocation plots.
+    // y=x reference line — shows perfect 1:1 agreement between the two
+    // sensors. Regression slope/intercept/R² are still surfaced in the
+    // equation text above each chart and in the DQO table.
     const lineColor = '#0a1628';
 
     const chart = new Chart(canvas, {
@@ -9803,12 +9830,13 @@ function createScatterChart(canvasId, regression, param, parsed) {
                 },
                 {
                     data: [
-                        { x: minX, y: regression.slope * minX + regression.intercept },
-                        { x: maxX, y: regression.slope * maxX + regression.intercept },
+                        { x: lineLo, y: lineLo },
+                        { x: lineHi, y: lineHi },
                     ],
                     type: 'line',
                     borderColor: lineColor,
                     borderWidth: 2,
+                    borderDash: [6, 4],
                     pointRadius: 0,
                     pointHitRadius: 0,
                     pointHoverRadius: 0,
@@ -10401,15 +10429,16 @@ function generateAuditReport(auditId) {
             const r = chartResults[p.key];
             if (!r || !r.pairs) return;
             const xVals = r.pairs.map(pt => pt.x);
-            const minX = Math.min(...xVals);
-            const maxX = Math.max(...xVals);
+            const yVals = r.pairs.map(pt => pt.y);
+            const lineLo = Math.min(...xVals, ...yVals);
+            const lineHi = Math.max(...xVals, ...yVals);
             const eqSign = r.intercept >= 0 ? '+' : '\u2212';
             const eqLabel = `y = ${r.slope}x ${eqSign} ${Math.abs(r.intercept)}`;
             chartImages['scatter-' + p.key] = renderChartToImage({
                 type: 'scatter',
                 data: { datasets: [
                     { data: r.pairs, backgroundColor: 'rgba(27,42,74,0.5)', borderColor: 'rgba(27,42,74,0.6)', pointRadius: 4 },
-                    { data: [{ x: minX, y: r.slope * minX + r.intercept }, { x: maxX, y: r.slope * maxX + r.intercept }], type: 'line', borderColor: '#C9A84C', borderWidth: 3, pointRadius: 0, fill: false },
+                    { data: [{ x: lineLo, y: lineLo }, { x: lineHi, y: lineHi }], type: 'line', borderColor: '#0a1628', borderWidth: 3, borderDash: [10, 6], pointRadius: 0, fill: false },
                 ]},
                 options: {
                     responsive: false, animation: false,
@@ -10682,6 +10711,347 @@ function renderAuditPhotos(auditId, communityId) {
     </div>`).join('');
 }
 
+// ===== AUDIT DQO OVERVIEW =====
+// Cross-audit pass/fail matrix. Grouped by community, ordered by start
+// date. Pulls DQO results from each audit's stored analysisResults so
+// re-running the regression isn't needed.
+
+function _getAuditPhotoFiles(auditId, communityId) {
+    return (communityFiles[communityId] || []).filter(f =>
+        f.storagePath && f.storagePath.startsWith(auditId + '/') && f.type && f.type.startsWith('image/')
+    );
+}
+
+function _audDqoCellColor(pass, inactive) {
+    if (inactive) return 'color:#94a3b8';
+    return pass ? 'color:#0f7a4a;font-weight:600' : 'color:#b03a2e;font-weight:700';
+}
+
+// Renders the DQO row for one audit's analysisResults. `audit` is the
+// in-memory record. Returns HTML for one table.
+function _renderAuditDqoTable(audit) {
+    const results = audit.analysisResults || {};
+    if (!Object.keys(results).length) {
+        return '<div style="font-size:12px;color:#64748b;font-style:italic">No analysis data uploaded.</div>';
+    }
+    const rows = AUDIT_PARAMETERS.map(p => {
+        const r = results[p.key];
+        if (!r) {
+            return `<tr><td>${p.label} (${p.unit})</td><td colspan="6" style="color:#94a3b8;text-align:center;font-style:italic">no data</td></tr>`;
+        }
+        const d = r.dqo || {};
+        const cell = (v, pass) => `<td style="${_audDqoCellColor(pass, v == null)}">${v == null || v === '' ? '—' : v}</td>`;
+        const passCell = r.pass
+            ? '<td style="color:#0f7a4a;font-weight:700">PASS</td>'
+            : '<td style="color:#b03a2e;font-weight:700">FAIL</td>';
+        return `<tr>
+            <td>${p.label} (${p.unit})</td>
+            ${cell(r.r2, d.r2)}
+            ${cell(r.slope, d.slope)}
+            ${cell(r.intercept, d.intercept)}
+            ${cell(r.sd, d.sd)}
+            ${cell(r.rmse, d.rmse)}
+            <td>${r.n ?? '—'}</td>
+            ${passCell}
+        </tr>`;
+    }).join('');
+    return `<table class="dqo-overview-table">
+        <thead><tr>
+            <th>Parameter</th>
+            <th>R<sup>2</sup><div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.r2}</div></th>
+            <th>Slope<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.slope}</div></th>
+            <th>Intercept<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.intercept}</div></th>
+            <th>SD<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.sd}</div></th>
+            <th>RMSE<div class="dqo-overview-th-sub">${DQO_RANGE_LABELS.rmse}</div></th>
+            <th>n</th>
+            <th>Result</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+    </table>`;
+}
+
+// Build the in-app DQO overview. Renders synchronously then loads photo
+// signed URLs in the background — same pattern as renderAuditPhotos.
+function renderAuditDqoOverview() {
+    const body = document.getElementById('audit-dqo-overview-body');
+    if (!body) return;
+
+    // Only audits that have analysis results uploaded — every other audit
+    // is in flight and has no DQO data to plot.
+    const withResults = audits.filter(a => a.analysisResults && Object.keys(a.analysisResults).length > 0);
+    if (withResults.length === 0) {
+        body.innerHTML = '<div style="padding:40px;text-align:center;color:var(--slate-400);background:white;border:1px solid var(--slate-200);border-radius:8px">No audits with analysis results yet. Upload audit data from an audit to see DQO results here.</div>';
+        return;
+    }
+
+    // Group by community, sort each group by start date ascending.
+    const byCommunity = new Map();
+    for (const a of withResults) {
+        if (!byCommunity.has(a.communityId)) byCommunity.set(a.communityId, []);
+        byCommunity.get(a.communityId).push(a);
+    }
+    for (const [, arr] of byCommunity) {
+        arr.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+    }
+    // Order communities by name alphabetically
+    const sortedCommunityIds = [...byCommunity.keys()].sort((a, b) => {
+        const an = COMMUNITIES.find(c => c.id === a)?.name || a;
+        const bn = COMMUNITIES.find(c => c.id === b)?.name || b;
+        return an.localeCompare(bn);
+    });
+
+    const photoFilesByAudit = {};
+    let html = '';
+    for (const communityId of sortedCommunityIds) {
+        const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
+        const list = byCommunity.get(communityId);
+        html += `<section class="dqo-overview-community">
+            <h2>${escapeHtml(communityName)} <span class="dqo-overview-count">${list.length} audit${list.length > 1 ? 's' : ''}</span></h2>`;
+        for (const audit of list) {
+            const dateRange = audit.startDate
+                ? `${new Date(audit.startDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} – ${new Date((audit.endDate || audit.startDate) + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}`
+                : 'Undated';
+            const photos = _getAuditPhotoFiles(audit.id, communityId);
+            photoFilesByAudit[audit.id] = photos;
+            const photoHtml = photos.length === 0
+                ? '<div class="dqo-overview-no-photo">No photo</div>'
+                : `<img id="dqo-overview-photo-${audit.id}" src="" alt="Audit photo" style="background:var(--slate-100)" onclick="openStorageFile('${escapeHtml(photos[0].storagePath)}')">`;
+            html += `<div class="dqo-overview-audit" onclick="openAuditDetail('${audit.id}')">
+                <div class="dqo-overview-audit-head">
+                    <div>
+                        <div class="dqo-overview-date">${dateRange}</div>
+                        <div class="dqo-overview-pods"><span class="mono">${escapeHtml(audit.auditPodId)}</span> &harr; <span class="mono">${escapeHtml(audit.communityPodId)}</span></div>
+                    </div>
+                    <span class="audit-status-badge ${AUDIT_STATUS_CSS[audit.status] || ''}">${escapeHtml(audit.status || '')}</span>
+                </div>
+                <div class="dqo-overview-audit-body">
+                    <div class="dqo-overview-photo" onclick="event.stopPropagation()">${photoHtml}</div>
+                    <div class="dqo-overview-table-wrap">${_renderAuditDqoTable(audit)}</div>
+                </div>
+            </div>`;
+        }
+        html += '</section>';
+    }
+    body.innerHTML = html;
+
+    // Load photo signed URLs in the background
+    for (const [auditId, files] of Object.entries(photoFilesByAudit)) {
+        if (files.length === 0) continue;
+        (async () => {
+            try {
+                const url = await db.getSignedUrl(files[0].storagePath);
+                const img = document.getElementById('dqo-overview-photo-' + auditId);
+                if (img) img.src = url;
+            } catch (e) { /* photo missing — leave blank */ }
+        })();
+    }
+}
+
+// Fetch a remote image and return a data URL. Used to embed audit photos
+// in the printable HTML so the saved file is self-contained and renders
+// even after the Supabase signed URL expires.
+async function _fetchImageAsDataUrl(url) {
+    try {
+        const res = await fetch(url);
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        return await new Promise((resolve, reject) => {
+            const reader = new FileReader();
+            reader.onload = () => resolve(reader.result);
+            reader.onerror = reject;
+            reader.readAsDataURL(blob);
+        });
+    } catch (e) {
+        return null;
+    }
+}
+
+async function exportAuditDqoOverviewHtml() {
+    const withResults = audits.filter(a => a.analysisResults && Object.keys(a.analysisResults).length > 0);
+    if (withResults.length === 0) {
+        showAlert('No Data', 'There are no audits with analysis results to export yet.');
+        return;
+    }
+
+    showLoadingToast?.('Building printable report...');
+    const btns = document.querySelectorAll('#view-audit-dqo-overview .view-header button');
+    btns.forEach(b => b.disabled = true);
+
+    try {
+        // Group + sort the same way as the on-screen render
+        const byCommunity = new Map();
+        for (const a of withResults) {
+            if (!byCommunity.has(a.communityId)) byCommunity.set(a.communityId, []);
+            byCommunity.get(a.communityId).push(a);
+        }
+        for (const [, arr] of byCommunity) arr.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+        const sortedCommunityIds = [...byCommunity.keys()].sort((a, b) => {
+            const an = COMMUNITIES.find(c => c.id === a)?.name || a;
+            const bn = COMMUNITIES.find(c => c.id === b)?.name || b;
+            return an.localeCompare(bn);
+        });
+
+        // Embed first photo per audit as a data URL so the saved file
+        // remains viewable after signed-URL expiration. We only embed
+        // one per audit to keep the file size manageable.
+        const photoDataUrls = {};
+        for (const a of withResults) {
+            const files = _getAuditPhotoFiles(a.id, a.communityId);
+            if (files.length === 0) continue;
+            try {
+                const signed = await db.getSignedUrl(files[0].storagePath);
+                if (signed) {
+                    const dataUrl = await _fetchImageAsDataUrl(signed);
+                    if (dataUrl) photoDataUrls[a.id] = dataUrl;
+                }
+            } catch (e) { /* skip */ }
+        }
+
+        const renderDqoTableForPrint = (audit) => {
+            const results = audit.analysisResults || {};
+            const rows = AUDIT_PARAMETERS.map(p => {
+                const r = results[p.key];
+                if (!r) return `<tr><td>${p.label} (${p.unit})</td><td colspan="6" style="color:#94a3b8;text-align:center;font-style:italic">no data</td></tr>`;
+                const d = r.dqo || {};
+                const cell = (v, pass) => `<td style="${_audDqoCellColor(pass, v == null)}">${v == null || v === '' ? '—' : v}</td>`;
+                const passCell = r.pass ? '<td style="color:#0f7a4a;font-weight:700">PASS</td>' : '<td style="color:#b03a2e;font-weight:700">FAIL</td>';
+                return `<tr>
+                    <td>${p.label} (${p.unit})</td>
+                    ${cell(r.r2, d.r2)}${cell(r.slope, d.slope)}${cell(r.intercept, d.intercept)}
+                    ${cell(r.sd, d.sd)}${cell(r.rmse, d.rmse)}
+                    <td>${r.n ?? '—'}</td>${passCell}
+                </tr>`;
+            }).join('');
+            return `<table class="dqo-table">
+                <thead><tr>
+                    <th>Parameter</th>
+                    <th>R<sup>2</sup><div class="thsub">${DQO_RANGE_LABELS.r2}</div></th>
+                    <th>Slope<div class="thsub">${DQO_RANGE_LABELS.slope}</div></th>
+                    <th>Intercept<div class="thsub">${DQO_RANGE_LABELS.intercept}</div></th>
+                    <th>SD<div class="thsub">${DQO_RANGE_LABELS.sd}</div></th>
+                    <th>RMSE<div class="thsub">${DQO_RANGE_LABELS.rmse}</div></th>
+                    <th>n</th><th>Result</th>
+                </tr></thead>
+                <tbody>${rows}</tbody>
+            </table>`;
+        };
+
+        let sectionsHtml = '';
+        for (const communityId of sortedCommunityIds) {
+            const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
+            const list = byCommunity.get(communityId);
+            sectionsHtml += `<section class="community-section">
+                <h2>${escapeHtml(communityName)} <span class="muted">(${list.length} audit${list.length > 1 ? 's' : ''})</span></h2>`;
+            for (const audit of list) {
+                const dateRange = audit.startDate
+                    ? `${new Date(audit.startDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} – ${new Date((audit.endDate || audit.startDate) + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}`
+                    : 'Undated';
+                const photoDataUrl = photoDataUrls[audit.id];
+                const photoHtml = photoDataUrl
+                    ? `<img class="audit-photo" src="${photoDataUrl}" alt="Audit photo">`
+                    : '<div class="no-photo">No photo</div>';
+                sectionsHtml += `<div class="audit-card">
+                    <div class="audit-head">
+                        <div>
+                            <div class="audit-date">${dateRange}</div>
+                            <div class="audit-pods"><span class="mono">${escapeHtml(audit.auditPodId)}</span> &harr; <span class="mono">${escapeHtml(audit.communityPodId)}</span></div>
+                        </div>
+                        <div class="audit-status">${escapeHtml(audit.status || '')}</div>
+                    </div>
+                    <div class="audit-body">
+                        <div class="audit-photo-wrap">${photoHtml}</div>
+                        ${renderDqoTableForPrint(audit)}
+                    </div>
+                </div>`;
+            }
+            sectionsHtml += '</section>';
+        }
+
+        const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ });
+        const totals = (() => {
+            const allParams = withResults.flatMap(a => AUDIT_PARAMETERS.map(p => a.analysisResults[p.key]).filter(Boolean));
+            const pass = allParams.filter(r => r.pass).length;
+            return { audits: withResults.length, params: allParams.length, pass, fail: allParams.length - pass };
+        })();
+
+        const reportHtml = `<!DOCTYPE html>
+<html lang="en"><head>
+<meta charset="UTF-8">
+<title>ADEC Audit DQO Overview — ${today}</title>
+<style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: 'Helvetica Neue', Arial, sans-serif; color: #1e293b; max-width: 1100px; margin: 0 auto; padding: 32px 40px; line-height: 1.5; background: #fff; }
+    h1 { font-size: 24px; color: #1B2A4A; margin-bottom: 4px; }
+    h2 { font-size: 17px; color: #1B2A4A; margin: 30px 0 12px; padding-bottom: 6px; border-bottom: 2px solid #C9A84C; }
+    h2 .muted { font-size: 13px; color: #64748b; font-weight: 400; }
+    .report-meta { font-size: 12px; color: #64748b; margin-bottom: 24px; }
+    .summary { display: flex; gap: 16px; margin-bottom: 24px; }
+    .summary-card { flex: 1; padding: 12px 16px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 8px; }
+    .summary-card .label { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .summary-card .value { font-size: 24px; font-weight: 700; color: #1B2A4A; margin-top: 2px; }
+    .summary-card.pass .value { color: #0f7a4a; }
+    .summary-card.fail .value { color: #b03a2e; }
+    .audit-card { border: 1px solid #cbd5e1; border-radius: 8px; padding: 14px 16px; margin-bottom: 12px; break-inside: avoid; page-break-inside: avoid; background: #fff; }
+    .audit-head { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 10px; }
+    .audit-date { font-weight: 700; color: #1B2A4A; font-size: 14px; }
+    .audit-pods { font-size: 12px; color: #475569; margin-top: 2px; }
+    .audit-pods .mono { font-family: 'JetBrains Mono', Menlo, monospace; font-size: 11.5px; color: #1B2A4A; }
+    .audit-status { font-size: 11px; color: #64748b; text-transform: uppercase; letter-spacing: 0.5px; }
+    .audit-body { display: grid; grid-template-columns: 120px 1fr; gap: 14px; align-items: start; }
+    .audit-photo-wrap { width: 120px; height: 120px; border-radius: 6px; overflow: hidden; border: 1px solid #e2e8f0; background: #f1f5f9; display: flex; align-items: center; justify-content: center; }
+    .audit-photo { width: 100%; height: 100%; object-fit: cover; }
+    .no-photo { font-size: 11px; color: #94a3b8; text-align: center; padding: 8px; }
+    table.dqo-table { width: 100%; border-collapse: collapse; font-size: 12px; }
+    table.dqo-table th { padding: 8px 6px; font-size: 10.5px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.3px; color: #475569; border-bottom: 2px solid #e2e8f0; text-align: right; vertical-align: bottom; }
+    table.dqo-table th:first-child { text-align: left; }
+    table.dqo-table th:last-child { text-align: center; }
+    table.dqo-table th .thsub { font-size: 9.5px; font-weight: 400; text-transform: none; letter-spacing: 0; color: #94a3b8; margin-top: 1px; }
+    table.dqo-table td { padding: 6px; border-bottom: 1px solid #f1f5f9; font-family: 'JetBrains Mono', Menlo, monospace; font-size: 12px; text-align: right; font-variant-numeric: tabular-nums; }
+    table.dqo-table td:first-child { text-align: left; font-family: 'Helvetica Neue', Arial, sans-serif; font-weight: 600; }
+    table.dqo-table td:last-child { text-align: center; }
+    .community-section { break-inside: auto; }
+    .print-controls { position: fixed; bottom: 18px; right: 18px; background: white; padding: 10px 16px; border-radius: 8px; box-shadow: 0 4px 16px rgba(0,0,0,0.15); border: 1px solid #e2e8f0; }
+    .print-controls button { padding: 8px 18px; font-size: 13px; font-weight: 600; background: #1B2A4A; color: white; border: none; border-radius: 6px; cursor: pointer; }
+    @media print {
+        @page { margin: 0.6in; }
+        body { max-width: none; padding: 0; }
+        .no-print { display: none !important; }
+        .audit-card, .summary-card, table.dqo-table { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    }
+</style>
+</head><body>
+    <h1>ADEC Sensor Audit — DQO Overview</h1>
+    <div class="report-meta">Generated ${today}</div>
+    <div class="summary">
+        <div class="summary-card"><div class="label">Audits</div><div class="value">${totals.audits}</div></div>
+        <div class="summary-card"><div class="label">Parameter checks</div><div class="value">${totals.params}</div></div>
+        <div class="summary-card pass"><div class="label">Passing</div><div class="value">${totals.pass}</div></div>
+        <div class="summary-card fail"><div class="label">Failing</div><div class="value">${totals.fail}</div></div>
+    </div>
+    ${sectionsHtml}
+    <div class="no-print print-controls">
+        <button onclick="window.print()">Print / Save as PDF</button>
+    </div>
+</body></html>`;
+
+        const blob = new Blob([reportHtml], { type: 'text/html' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Audit_DQO_Overview_${new Date().toISOString().slice(0, 10)}.html`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+        showSuccessToast?.('DQO overview downloaded');
+    } catch (err) {
+        console.error('DQO overview export failed:', err);
+        showAlert?.('Export Failed', err.message || 'Could not build the printable report.');
+    } finally {
+        btns.forEach(b => b.disabled = false);
+    }
+}
+
 async function loadAuditPhotoUrls(auditId, communityId, files) {
     for (let i = 0; i < files.length; i++) {
         try {
@@ -10709,6 +11079,7 @@ async function deleteAuditPhoto(communityId, fileId, storagePath, auditId) {
 }
 
 async function uploadAuditPhotos(auditId, communityId, files) {
+    if (!files || files.length === 0) return;
     // Build a display name from the audit's dates
     const audit = audits.find(a => a.id === auditId);
     let displayName = 'Audit Setup';
@@ -10719,7 +11090,34 @@ async function uploadAuditPhotos(auditId, communityId, files) {
         const endStr = endD.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', timeZone: AK_TZ });
         displayName = `Audit Setup ${startStr} - ${endStr}`;
     }
+
+    const grid = document.getElementById('audit-photos-grid');
+    // If the grid was showing the "No photos yet" empty-state text, clear
+    // it so the pending thumbs below are the only thing visible.
+    if (grid && grid.querySelector('p')) grid.innerHTML = '';
+
+    // Stage a pending thumb for each file using a blob URL so the user
+    // sees the photo immediately instead of waiting for the upload to
+    // complete and the modal to be reopened.
+    const pending = [];
     for (const file of files) {
+        const pendingId = 'pending-' + generateId('p');
+        const previewUrl = URL.createObjectURL(file);
+        if (grid) {
+            const thumb = document.createElement('div');
+            thumb.className = 'audit-photo-thumb is-uploading';
+            thumb.dataset.pendingId = pendingId;
+            thumb.innerHTML = `
+                <img src="${previewUrl}" alt="${escapeHtml(file.name)}">
+                <div class="audit-photo-status"><div class="audit-photo-spinner"></div></div>`;
+            grid.appendChild(thumb);
+        }
+        pending.push({ file, pendingId, previewUrl });
+    }
+
+    let anyFailed = false;
+    for (const { file, pendingId, previewUrl } of pending) {
+        const thumb = grid?.querySelector(`[data-pending-id="${pendingId}"]`);
         try {
             const path = `${auditId}/${Date.now()}_${file.name}`;
             // Check BOTH the storage upload and the DB insert. Previously the
@@ -10735,11 +11133,41 @@ async function uploadAuditPhotos(auditId, communityId, files) {
             if (insertError) throw insertError;
             if (!communityFiles[communityId]) communityFiles[communityId] = [];
             communityFiles[communityId].push({ id: fileData?.[0]?.id || generateId('f'), name: displayName, type: file.type, storagePath: path, date: nowDatetime() });
-        } catch (err) { handleSaveError(err); }
+            // Mark the pending thumb as uploaded; we'll do one clean
+            // re-render at the end so the URL becomes a real signed URL.
+            if (thumb) thumb.classList.remove('is-uploading');
+        } catch (err) {
+            anyFailed = true;
+            console.error('Audit photo upload failed:', err);
+            if (thumb) {
+                thumb.classList.remove('is-uploading');
+                thumb.classList.add('is-failed');
+                const status = thumb.querySelector('.audit-photo-status');
+                if (status) status.innerHTML = 'Failed';
+            }
+            handleSaveError(err);
+        } finally {
+            // Release the blob URL once we're about to re-render below;
+            // if the upload succeeded we'll swap to a signed URL.
+            try { URL.revokeObjectURL(previewUrl); } catch (e) {}
+        }
     }
-    // Refresh the photo grid inline instead of reopening the whole modal
-    const grid = document.getElementById('audit-photos-grid');
-    if (grid) grid.innerHTML = renderAuditPhotos(auditId, communityId);
+
+    // Final clean re-render so successful pending thumbs become real,
+    // signed-URL-backed thumbs. Failed thumbs stay visible until the user
+    // closes the modal (we keep the failure marker on the temp thumb).
+    if (grid) {
+        // Remove only the pending placeholders that succeeded — leave any
+        // is-failed ones in place so the user sees what didn't upload.
+        grid.querySelectorAll('[data-pending-id]:not(.is-failed)').forEach(el => el.remove());
+        // Now re-render the canonical list. If everything's deleted (empty
+        // state) and we have failed thumbs, leave them; otherwise overwrite.
+        const failedThumbs = Array.from(grid.querySelectorAll('.is-failed'));
+        const newHtml = renderAuditPhotos(auditId, communityId);
+        grid.innerHTML = newHtml;
+        // Re-attach failed-upload markers at the end so the user can retry.
+        failedThumbs.forEach(t => grid.appendChild(t));
+    }
 }
 
 // ===== COLLOCATION SYSTEM =====
@@ -11255,13 +11683,13 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
 
         // BAM values (PM only)
         for (const key of ['pm25', 'pm10']) {
-            entry.bam[key] = bamCols[key] !== undefined ? parseFloat(row[bamCols[key]]) : NaN;
+            entry.bam[key] = bamCols[key] !== undefined ? parseSensorCellValue(row[bamCols[key]]) : NaN;
         }
 
         // Permanent pod values
         if (permaPod) {
             for (const key of Object.keys(PARAM_COLUMN_MAP)) {
-                entry.perma[key] = permaPod[key] !== undefined ? parseFloat(row[permaPod[key]]) : NaN;
+                entry.perma[key] = permaPod[key] !== undefined ? parseSensorCellValue(row[permaPod[key]]) : NaN;
             }
         }
 
@@ -11269,7 +11697,7 @@ function parseCollocationData(rows, colloc, bamSource, permaPodId) {
         for (const [podId, cols] of Object.entries(communityPods)) {
             entry.pods[podId] = {};
             for (const key of Object.keys(PARAM_COLUMN_MAP)) {
-                entry.pods[podId][key] = cols[key] !== undefined ? parseFloat(row[cols[key]]) : NaN;
+                entry.pods[podId][key] = cols[key] !== undefined ? parseSensorCellValue(row[cols[key]]) : NaN;
             }
         }
 
@@ -11826,8 +12254,11 @@ function _renderCollocRegChart(parsed, results, tabName) {
             const intColor = intPass ? PASS : FAIL;
             const r2Color = r2Pass ? PASS : FAIL;
 
-            // Regression line: neutral dark navy, matching audit scatter.
-            traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+            // y=x reference line — shows ideal 1:1 device agreement.
+            // Span covers both axes so the line reaches both data ranges.
+            const refLo = Math.min(xLo, yLo);
+            const refHi = Math.max(xHi, yHi);
+            traces.push({ x: [refLo, refHi], y: [refLo, refHi], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2, dash: 'dash' }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
 
             // Title annotation
             annotations.push({ text: `<b>${shortSensorId(podId)} vs ${refKey}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
@@ -11954,10 +12385,11 @@ function buildInterPodRegRow(divId, paramKey, paramLabel, pairs, trimmed, parsed
         const r2Pass = reg.r2 >= T.r2.min;
         const PASS = '#009E73', FAIL = '#D55E00';
 
-        // Regression line: neutral dark navy, consistent across audit +
-        // collocation plots. DQO pass/fail is conveyed in the equation
-        // text coloring only.
-        traces.push({ x: [xLo, xHi], y: [reg.slope * xLo + reg.intercept, reg.slope * xHi + reg.intercept], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2.5 }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
+        // y=x reference line — shows ideal 1:1 agreement. Span both
+        // axes so the line reaches the data ranges on each side.
+        const refLo = Math.min(xLo, yLo);
+        const refHi = Math.max(xHi, yHi);
+        traces.push({ x: [refLo, refHi], y: [refLo, refHi], type: 'scatter', mode: 'lines', line: { color: '#0a1628', width: 2, dash: 'dash' }, xaxis: xax, yaxis: yax, showlegend: false, hoverinfo: 'skip' });
 
         annotations.push({ text: `<b>${shortSensorId(pair.pod)} vs ${shortSensorId(pair.ref)}</b>`, xref: xax + ' domain', yref: yax + ' domain', x: 0.5, y: 1.08, showarrow: false, font: { size: 12, color: '#0a1628' } });
 
