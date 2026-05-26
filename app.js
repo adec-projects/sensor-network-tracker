@@ -9489,31 +9489,43 @@ function runLinearRegression(xArr, yArr) {
     const slope = (n * sumXY - sumX * sumY) / denom;
     const intercept = (sumY - slope * sumX) / n;
 
-    // R-squared
+    // R-squared (regression coefficient of determination)
     const meanY = sumY / n;
     let ssTot = 0, ssRes = 0;
-    const residuals = [];
     for (const p of pairs) {
         const predicted = slope * p.x + intercept;
         const res = p.y - predicted;
-        residuals.push(res);
         ssRes += res * res;
         ssTot += (p.y - meanY) * (p.y - meanY);
     }
     const r2 = ssTot === 0 ? 0 : 1 - ssRes / ssTot;
 
-    // SD of residuals
-    const meanRes = residuals.reduce((a, b) => a + b, 0) / n;
-    const sdRes = Math.sqrt(residuals.reduce((a, r) => a + (r - meanRes) * (r - meanRes), 0) / (n - 1));
-
-    // RMSE
-    const rmse = Math.sqrt(ssRes / n);
+    // SD and RMSE — follow the QAPP / DEC collocation convention, not
+    // regression-residual conventions. These match the formulas Ayla's
+    // Excel workbook uses for the DQI table, and the difference matters:
+    //   SD: population standard deviation of every reading from both
+    //       sensors pooled together (one big array of length 2n, /n).
+    //   RMSE: root mean square of the inter-sensor difference,
+    //       sqrt(mean((x − y)^2)).
+    // Residual-based formulas under-report agreement error and were
+    // silently passing audits the QAPP would flag.
+    const meanPool = (sumX + sumY) / (2 * n);
+    let pooledSqSum = 0, diffSqSum = 0;
+    for (const p of pairs) {
+        const dx = p.x - meanPool;
+        const dy = p.y - meanPool;
+        pooledSqSum += dx * dx + dy * dy;
+        const diff = p.x - p.y;
+        diffSqSum += diff * diff;
+    }
+    const sd = Math.sqrt(pooledSqSum / (2 * n));
+    const rmse = Math.sqrt(diffSqSum / n);
 
     return {
         slope: Math.round(slope * 10000) / 10000,
         intercept: Math.round(intercept * 10000) / 10000,
         r2: Math.round(r2 * 10000) / 10000,
-        sd: Math.round(sdRes * 10000) / 10000,
+        sd: Math.round(sd * 10000) / 10000,
         rmse: Math.round(rmse * 10000) / 10000,
         n,
         pairs,
