@@ -3,7 +3,7 @@
 ## What This Is
 Internal tool for Alaska Department of Environmental Conservation (ADEC) to track air quality sensors (QuantAQ Modulairs), the communities they're deployed in, and contacts at each site. Replaces a clunky Salesforce workflow.
 
-Live at: https://amqa-tools.github.io/sensor-network-tracker/
+Live at: https://adec-projects.github.io/sensor-network-tracker/
 
 ## How to Run
 - **Locally:** open `index.html` in a browser. There is no build step — it's vanilla HTML + CSS + JS that loads the Supabase JS library from a CDN and talks directly to the hosted Supabase project.
