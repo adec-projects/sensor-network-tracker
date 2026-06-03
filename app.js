@@ -2731,20 +2731,6 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
-            <div class="info-item details-card" style="grid-column:1/-1;border-top:1px solid var(--slate-200);padding-top:10px;margin-top:6px">
-                <label>Notes / Details <span class="details-edit-hint" onclick="sensorDetailsEdit('${s.id}',true)">&#9998; Edit</span></label>
-                <div id="sensor-details-view-${s.id}" class="details-view-block" onclick="sensorDetailsEdit('${s.id}',true)" title="Click to edit">
-                    <div class="details-text ${s.details ? '' : 'empty'}">${s.details ? escapeHtml(s.details) : 'Lock combos, access notes — click to add'}</div>
-                </div>
-                <div id="sensor-details-edit-${s.id}" style="display:none">
-                    <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Lock combos, access notes">${escapeHtml(s.details || '')}</textarea>
-                    <div class="details-save-row">
-                        <button class="btn btn-primary btn-sm" onclick="saveSensorDetailsBtn('${s.id}')">Save</button>
-                        <button class="btn btn-sm" onclick="sensorDetailsEdit('${s.id}',false)">Cancel</button>
-                        <span id="sensor-details-msg-${s.id}" class="details-save-msg"></span>
-                    </div>
-                </div>
-            </div>
             ${lastEdited ? `<div class="info-item" style="grid-column:1/-1;font-size:12px;color:var(--slate-400);border-top:1px solid var(--slate-100);padding-top:8px;margin-top:4px">${lastEdited}${s.active === false ? ' · <span style="color:var(--aurora-rose);font-weight:600">ARCHIVED</span>' : ''}</div>` : ''}
             <div class="info-item" style="grid-column:1/-1;text-align:right;margin-top:4px">
                 ${s.active === false
