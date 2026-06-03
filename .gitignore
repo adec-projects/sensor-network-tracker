@@ -4,3 +4,7 @@ supabase/.temp/
 supabase/.branches/
 .env
 .env.local
+
+# Raw Salesforce export data (PII) — never commit
+sf-export/*
+!sf-export/README.md

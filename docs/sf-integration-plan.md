@@ -1,0 +1,208 @@
+# Salesforce → App Integration Plan
+
+Working spec for migrating the historical Salesforce data into the ADEC Sensor Network
+Tracker. This is the source of truth for the migration; update it as decisions change.
+
+**Status:** Draft — awaiting full Salesforce data export.
+**Owner:** Ayla. **Approach approved:** community-by-community, review-and-approve, every
+imported record tagged.
+
+---
+
+## 1. Goals & principles
+
+- **Transparency, accessibility, organization** for all historical records.
+- **Community-by-community**, not record-type-by-record-type. During review you see
+  everything for one community at once (contacts, sensors, comms, sensor history), work it
+  to completion, then move on.
+- **Nothing is a blind 1:1 copy.** Salesforce data is messy and mis-typed; we re-classify
+  and clean *during* review, not after.
+- **Less duplication.** Collapse Salesforce's redundant structure into the app's normalized
+  model, and dedupe records as we go.
+- **Every imported record is tagged** as a Salesforce import — queryable and reversible.
+- **Structured feature tables stay pure.** `service_tickets` and `audits` are for rich
+  go-forward workflows. Thin historical free-text does **not** get forced into them.
+
+---
+
+## 2. What the Salesforce data actually looks like
+
+From inspecting a representative Account page ("Glennallen - BLM"):
+
+- **The structured objects are empty.** Assets (0), Serviced Assets (0), Work Orders (0),
+  Cases (0). The team never used Salesforce's built-in sensor/issue objects.
+- **All real history lives in the Activity timeline as free text**, and the activity *type
+  is unreliable*:
+  | What it actually is | How SF logged it | Example subject |
+  |---|---|---|
+  | Email | "logged a call" | "Email to Jake about sensor shutoff issue" |
+  | Phone call | logged a call | "Call" |
+  | Device issue | "had an event" | "Mod_466 PM sensor issue" |
+  | Audit | "had an event" | "Sensor audit (7 days)" |
+  | Install | "had an event" | "Sensor 466 installed" |
+- **Sensors are text, not records.** "Mod_466" / "Sensor 466" appear only inside subjects.
+- **Artifacts are double-listed.** The same `.msg` email shows in both "Notes & Attachments"
+  and "Files."
+- **Contact status is crammed into names.** e.g. "Mike Sondergaard NO LONGER A CONTACT."
+- **Accounts conflate community + org.** "Glennallen - BLM"; the account list mixes true
+  communities with organizations (Doyon Ltd, ANTHC, Galena Interior Learning Academy).
+
+**Implication:** the migration is driven by **reading subject lines and re-classifying**,
+not by trusting Salesforce's record types.
+
+---
+
+## 3. Target model & routing
+
+Two destinations only. Structured feature tables are intentionally left out of the import.
+
+| Salesforce record | → App destination | Notes |
+|---|---|---|
+| Email (however logged) | `comms` (`comm_type='Email'`) + `comm_tags` | corrected type |
+| Phone call | `comms` (`comm_type='Phone'`) + `comm_tags` | |
+| Site visit / text / other comm | `comms` (corrected `comm_type`) + `comm_tags` | |
+| Device / sensor issue | `notes` (`type='Sensor Issue'`) + `note_tags` → sensor (+community) | **not** service_tickets |
+| Historical audit / collocation | `notes` (`type='Audit'`) + `note_tags` | **not** audits (see §4) |
+| Install / deployment | `notes` (`type='Installation'`) + `note_tags` → sensor | may also backfill `sensors.date_installed` |
+| General / misc | `notes` (`type='General'`) + `note_tags` | |
+| `.msg` / attachments | `community-files` storage (deduped) | linked to the community |
+| Org-only accounts (BLM, Doyon, ANTHC…) | **skipped** | per decision |
+
+`comms.comm_type` and `notes.type` are free-text, so new values need no schema change —
+just convention.
+
+---
+
+## 4. Key decision: structured features stay pure
+
+Ayla decided historical **device issues become lightweight notes**, not service tickets —
+`service_tickets` is reserved for real go-forward repair/RMA workflow.
+
+**Recommendation: apply the same logic to audits.** The historical "Sensor audit (7 days)" /
+"(24hr)" entries are thin free-text events with no pod IDs and no analysis data. Forcing them
+into the `audits` table (which is built for collocation analysis — pod IDs, regression
+results, charts) would clutter that feature the same way. So historical audits → **notes**
+(`type='Audit'`), and the `audits` table stays clean for real go-forward collocations.
+
+> **OPEN — confirm:** historical audits as notes (recommended), or as real `audits` rows?
+
+This keeps the rule simple: **comms for communications; notes for everything else.** The only
+structured table we write to is `comms` (because the data genuinely fits it).
+
+---
+
+## 5. Subject-line classifier
+
+Each Salesforce activity is auto-classified from its subject; the result is a **default the
+reviewer overrides** per record.
+
+| If subject matches… | Default destination |
+|---|---|
+| `email`, `emailed`, `RE:`, `FW:`, `sent` | comm · Email |
+| logged as call, no email hint | comm · Phone |
+| `site visit`, `visited`, `onsite` | comm · Site Visit |
+| `audit`, `collocation`, `colloc` | note · Audit |
+| `install`, `installed`, `deploy`, `deployment` | note · Installation |
+| `issue`, `problem`, `shutoff`, `offline`, `not reporting`, `PM sensor`, `repair`, `RMA`, `error` | note · Sensor Issue |
+| (anything else) | note · General |
+
+**Sensor linking:** extract a sensor token (`Mod_###`, `Mod ###`, `Sensor ###`, bare `###`)
+from the subject, normalize it, and match against `sensors.id`. If matched, the record is
+cross-tagged to that sensor; if ambiguous, the reviewer picks.
+
+**Contact/community linking:** the activity's parent Account → community; named people in
+"logged a call with X" → match to existing `contacts` and cross-tag.
+
+---
+
+## 6. Schema changes (draft migration)
+
+No changes to `service_tickets` or `audits` (we don't import into them). The changes are
+additive provenance/author fields on the tables we *do* write to. Final file goes under
+`supabase/migrations/` right before we run it.
+
+```sql
+-- DRAFT — Salesforce integration provenance fields
+-- Adds source tagging, original SF id, and original author to imported tables.
+
+-- comms
+ALTER TABLE comms ADD COLUMN IF NOT EXISTS source     text DEFAULT 'manual';
+ALTER TABLE comms ADD COLUMN IF NOT EXISTS sf_id      text;
+ALTER TABLE comms ADD COLUMN IF NOT EXISTS logged_by  text DEFAULT '';
+
+-- notes
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS source     text DEFAULT 'manual';
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS sf_id      text;
+ALTER TABLE notes ADD COLUMN IF NOT EXISTS logged_by  text DEFAULT '';
+
+-- community_files (dedupe + provenance for .msg attachments)
+ALTER TABLE community_files ADD COLUMN IF NOT EXISTS source text DEFAULT 'manual';
+ALTER TABLE community_files ADD COLUMN IF NOT EXISTS sf_id  text;
+
+-- Idempotency: a given SF record imports at most once per table.
+CREATE UNIQUE INDEX IF NOT EXISTS uq_comms_sf_id
+    ON comms(sf_id) WHERE sf_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_notes_sf_id
+    ON notes(sf_id) WHERE sf_id IS NOT NULL;
+CREATE UNIQUE INDEX IF NOT EXISTS uq_files_sf_id
+    ON community_files(sf_id) WHERE sf_id IS NOT NULL;
+```
+
+- **`source`** — `'salesforce_import'` on every imported row (default `'manual'`). Lets us
+  filter, badge, and cleanly **reverse** a bad batch.
+- **`sf_id`** — original Salesforce record id → traceability + safe re-runs.
+- **`logged_by`** — original SF author (e.g. "Isaac Van Flein"), since they aren't app users
+  and `created_by` can't hold them.
+- **UI:** show a "Salesforce Import" badge on these records, like the existing collocation
+  one (`app.js:11528`).
+
+---
+
+## 7. Dedup & cleanup rules
+
+- **Files:** dedupe the `.msg`/attachment double-listing by `filename + size`.
+- **Comms:** dedupe by `sf_id`; additionally flag near-duplicates (same date + subject +
+  contact, e.g. the two May 13 "Mike Sondergaard" calls) for merge/skip in review.
+- **Contacts (already migrated):** audit for the "NO LONGER A CONTACT"-in-name pattern; set
+  `active=false` and restore the clean name. Tracked as a side task.
+- **Re-runs are safe:** the `sf_id` unique indexes prevent duplicate inserts.
+
+---
+
+## 8. Per-community review workflow (the importer)
+
+A standalone page (scaffolded from `archive/sf-contact-migrator.html` — same Supabase
+bootstrap, login, navy/gold theme):
+
+1. **Account → community map.** Build the mapping (skip org-only accounts). Reviewer can
+   correct any mapping.
+2. **Community picker** with progress: "Community 12 of 43 · 8 records pending."
+3. **Per community:** show existing contacts for context, then the classified record list.
+   Each record card shows the raw Salesforce data beside the proposed app record, with
+   editable **type / sensor / contact tags / date / author**, and **Approve / Edit / Skip**.
+4. **Dry-run first** — show what *would* be written before committing.
+5. On approve, write via `db.*` helpers with `source='salesforce_import'` + `sf_id`, tagged.
+6. Visible status log; nothing writes until approved.
+
+---
+
+## 9. Execution sequence
+
+1. **Ayla:** run Setup → Data Export → Export Now ("include all data" + attachments); drop
+   the ZIP in `sf-export/`. *(Raw export is git-ignored.)*
+2. **Claude:** unzip, inventory the CSVs, and produce the concrete **Account → community
+   map** + a sample of classified records for sign-off.
+3. **Ayla:** approve the mapping, the classifier defaults, and §6 schema changes.
+4. **Claude:** run the migration; build the per-community importer.
+5. **Ayla:** review & approve community by community; approved records write in, tagged.
+6. **Later:** reuse the same machinery for any remaining record types.
+
+---
+
+## 10. Open items
+
+- [ ] Confirm historical audits → notes (recommended) vs. real `audits` rows (§4).
+- [ ] Sensor-id format in `sensors.id` vs. subject tokens ("Mod_466") — confirm match rule
+      once the export is in hand.
+- [ ] Whether installs should also backfill `sensors.date_installed`.
+- [ ] Contacts cleanup pass for "NO LONGER A CONTACT" names.
