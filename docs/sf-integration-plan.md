@@ -263,4 +263,25 @@ The migration splits into two independent tracks:
     from go-forward audits. A **Reset** button deletes all importer-created audits
     (`source='excel_import'`) and their uploaded Excels so the batch can be re-run cleanly.
 - **Track B — Communities (comms, notes, files).** Driven by the full Salesforce Data Export
-  (`sf-export/`). Per-community review importer. SF "audit" timeline entries ignored here.
+  (`sf-export/full-export/`). Per-community review importer. SF "audit" timeline entries
+  ignored here (audits come from Track A's Excel ZIP).
+
+  **Findings (full export inventory):**
+  - **Task.csv (1,728)** — but **1,336 are bulk `List Email:`** stakeholder blasts (→ exclude or
+    treat as a separate outreach log). The **392 real tasks** classify as ~303 Phone, ~64 Email,
+    ~24 notes/other → mostly **comms**.
+  - **Event.csv (910)** — device service history: ~331 Sensor Issue/Service, ~246 Installation,
+    ~160 General, ~151 Audit (skip — Track A), ~22 comms → mostly **notes** tagged to sensor +
+    community.
+  - **Notes** — 285 `SNOTE` records (Salesforce Notes) → `notes`.
+  - **Files** — 78 PDF, 74 JPG, 2 PNG, 1 MSG, 1 XLSX, 1 DOCX (via ContentVersion +
+    ContentDocumentLink) → `community-files` storage (photos may tag to audits/community).
+  - **Account.csv (150)** typed: **63 `Community`** + orgs/places (Tribe 20, Library 10,
+    School 9, Native Corporation 6, …) → account→community map; "ignore org accounts" = skip pure
+    orgs, but map gathering-place accounts (Library/School/Museum) to their community.
+  - **Contact (212)** already migrated → map `WhoId`; **User (35)** → `logged_by` author names.
+  - **Community linkage is partial** (e.g. 667 events have no account) → the review tool must let
+    the reviewer assign/confirm the community per record, defaulting from account → subject text →
+    contact.
+  - **Migration:** `20260603130000_sf_comms_notes_provenance.sql` (source / sf_id / logged_by on
+    comms + notes + files, with sf_id unique indexes for safe re-runs).
