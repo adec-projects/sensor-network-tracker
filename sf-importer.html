@@ -113,16 +113,43 @@ let counts={ok:0,skip:0,dup:0};
 let dupGroups=new Map();
 
 const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
-// Records that look like the same real-world event (same subject + date) —
-// e.g. an install written once under the community and again under the sensor.
-// Keyed only for meaningful subjects so generic "Call" rows don't group.
-function recordKey(r){
-  if(r.kind==='file') return '';
-  const s=norm(r.subject);
-  if(s.length<5) return '';
-  return `${r.kind}|${s}|${(r.date||'').slice(0,10)}`;
+const KW_STOP=new Set(['the','and','for','with','was','were','from','that','this','have','has','had','will','you','your','our','out','about','into','over','under','call','called','email','emailed','sent','update','note','left','message','voicemail','spoke','talked','phone']);
+// Significant keywords from a subject: words >=4 chars or any number (sensor
+// numbers like "649" matter), minus common filler.
+function keywords(s){
+  return [...new Set(String(s||'').toLowerCase().split(/[^a-z0-9]+/).filter(w=>w && (w.length>=4 || /^\d+$/.test(w)) && !KW_STOP.has(w)))];
 }
-function dupIdxs(r){ return dupGroups.get(recordKey(r))||[]; }
+// Sensor/asset numbers in a subject (full digit runs >=100, excluding years).
+function sensorNums(s){ return new Set((String(s||'').match(/\d+/g)||[]).map(Number).filter(n=>n>=100 && !(n>=2000&&n<=2030))); }
+// Cluster likely-duplicate records: NOTES on the same date that share >=2
+// keywords (fuzzy — e.g. "Sensor 649 installed" vs "Installed 649 at site"),
+// and COMMS only on an exact subject+date match (so distinct calls don't merge).
+function computeDupGroups(){
+  dupGroups=new Map();
+  records.forEach(r=>r._cluster=null);
+  const parent={}; records.forEach((r,i)=>parent[i]=i);
+  const find=x=>{ while(parent[x]!==x){ parent[x]=parent[parent[x]]; x=parent[x]; } return x; };
+  const union=(a,b)=>{ parent[find(a)]=find(b); };
+  const buckets=new Map();
+  records.forEach((r,i)=>{ if(r.kind==='file') return; const d=(r.date||'').slice(0,10); if(!d) return;
+    const k=r.kind+'|'+d; (buckets.get(k)||buckets.set(k,[]).get(k)).push(i); });
+  for(const [k,idxs] of buckets){
+    const kind=k.split('|')[0];
+    const kw={}, nm={};
+    if(kind!=='comm') idxs.forEach(i=>{ kw[i]=keywords(records[i].subject); nm[i]=sensorNums(records[i].subject); });
+    for(let a=0;a<idxs.length;a++) for(let b=a+1;b<idxs.length;b++){
+      const i=idxs[a], j=idxs[b]; let link=false;
+      if(kind==='comm'){ const s=norm(records[i].subject); link = s.length>=5 && s===norm(records[j].subject); }
+      else if(nm[i].size && nm[j].size){ link = [...nm[i]].some(n=>nm[j].has(n)); }   // both name a sensor: must share one
+      else { const inter=kw[i].filter(w=>kw[j].includes(w)); const uni=new Set([...kw[i],...kw[j]]); link = inter.length>=2 && uni.size>0 && inter.length/uni.size>=0.6; }  // else near-identical text
+      if(link) union(i,j);
+    }
+  }
+  const clusters=new Map();
+  records.forEach((r,i)=>{ if(r.kind==='file'||!(r.date||'').slice(0,10)) return; const c=find(i); (clusters.get(c)||clusters.set(c,[]).get(c)).push(i); });
+  for(const [c,idxs] of clusters){ if(idxs.length>1){ dupGroups.set(c,idxs); idxs.forEach(i=>records[i]._cluster=c); } }
+}
+function dupIdxs(r){ return (r._cluster!=null && dupGroups.get(r._cluster)) || []; }
 
 async function doLogin(){
   const email=document.getElementById('email').value.trim();
@@ -188,8 +215,7 @@ function loadData(file){
       records.push({...f, kind:'file', subject:f.title, body:'', communityId:resolveCommunity(f),
         fileName:(f.file||'').split('/').pop(), state: dup?'dup':'pending'});
     }
-    dupGroups=new Map();
-    records.forEach((rec,i)=>{ const k=recordKey(rec); if(!k) return; if(!dupGroups.has(k)) dupGroups.set(k,[]); dupGroups.get(k).push(i); });
+    computeDupGroups();
     counts={ok:0,skip:0,dup:records.filter(r=>r.state==='dup').length};
     regroup(); renderCommList(); renderCounts();
   };
