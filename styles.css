@@ -78,10 +78,10 @@ button:focus-visible, .btn:focus-visible {
        in every common colorblind simulation). Used across audit + colloc
        DQI tables, scatter regression lines, equation text, and badges
        so the visual language is consistent. */
-    --dqi-pass: #009E73;
-    --dqi-pass-bg: #e0f5ed;
-    --dqi-fail: #D55E00;
-    --dqi-fail-bg: #fcecdd;
+    --dqi-pass: #0B6E4F;   /* darker green — used as the box/outline color */
+    --dqi-pass-bg: #e3f3ec;
+    --dqi-fail: #A11B16;   /* darker red — used as the box/outline color */
+    --dqi-fail-bg: #fbe6e4;
 
     --surface: #ffffff;
 
@@ -2376,12 +2376,16 @@ tr:hover .contact-delete-btn {
     border-bottom: none;
 }
 
+/* Pass/fail use black text inside a colored box (not colored text) so they
+   stay legible and color-blind friendly — the box + PASS/FAIL word carry the
+   meaning, color is secondary. */
 .dqi-pass {
     display: inline-block;
     background: var(--dqi-pass-bg);
-    color: var(--dqi-pass);
-    padding: 2px 10px;
-    border-radius: 10px;
+    color: #111;
+    border: 1.5px solid var(--dqi-pass);
+    padding: 1px 9px;
+    border-radius: 6px;
     font-size: 11px;
     font-weight: 700;
     font-family: var(--font-sans);
@@ -2391,22 +2395,30 @@ tr:hover .contact-delete-btn {
 .dqi-fail {
     display: inline-block;
     background: var(--dqi-fail-bg);
-    color: var(--dqi-fail);
-    padding: 2px 10px;
-    border-radius: 10px;
+    color: #111;
+    border: 1.5px solid var(--dqi-fail);
+    padding: 1px 9px;
+    border-radius: 6px;
     font-size: 11px;
     font-weight: 700;
     font-family: var(--font-sans);
     letter-spacing: 0.3px;
 }
 
+/* Metric value cells: black text with a colored box drawn inside the cell. */
 .dqi-cell-pass {
-    color: var(--dqi-pass);
+    color: #111;
+    background: var(--dqi-pass-bg);
+    outline: 2px solid var(--dqi-pass);
+    outline-offset: -2px;
 }
 
 .dqi-cell-fail {
-    color: var(--dqi-fail);
-    font-weight: 700;
+    color: #111;
+    background: var(--dqi-fail-bg);
+    outline: 2px solid var(--dqi-fail);
+    outline-offset: -2px;
+    font-weight: 600;
 }
 
 .dqi-overall {

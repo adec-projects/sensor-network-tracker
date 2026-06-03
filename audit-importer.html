@@ -12,6 +12,7 @@
     --navy:#1a2332; --navy-light:#243044; --navy-mid:#2d3d56; --gold:#d4a84b;
     --gold-light:#e8c97a; --white:#fff; --text:#e8ecf1; --text-dim:#8899aa;
     --green:#4caf50; --red:#e74c3c; --orange:#f39c12;
+    --dqi-pass:#0B6E4F; --dqi-pass-bg:#e3f3ec; --dqi-fail:#A11B16; --dqi-fail-bg:#fbe6e4;
   }
   *{margin:0;padding:0;box-sizing:border-box;}
   body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;padding:24px;}
@@ -54,7 +55,8 @@
   table.dqi th:first-child,table.dqi td:first-child{text-align:left;}
   table.dqi th{color:var(--text-dim);font-weight:600;font-size:.72rem;}
   .rng{font-weight:400;font-size:.66rem;color:var(--navy-mid);display:block;}
-  td.pass{color:var(--green);} td.fail{color:var(--red);font-weight:700;}
+  td.pass{color:#111;background:var(--dqi-pass-bg);outline:2px solid var(--dqi-pass);outline-offset:-2px;}
+  td.fail{color:#111;background:var(--dqi-fail-bg);outline:2px solid var(--dqi-fail);outline-offset:-2px;font-weight:600;}
   .verdict{font-weight:700;}
   .actions{display:flex;gap:10px;margin-top:14px;}
   .note-line{font-size:.8rem;color:var(--text-dim);margin-top:6px;}

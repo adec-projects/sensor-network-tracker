@@ -8194,7 +8194,7 @@ function openAuditDetail(auditId) {
 
     const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
         ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; const d = r.dqo; const mc = (ok) => d ? (ok ? 'color:var(--dqi-pass);font-weight:600' : 'color:var(--dqi-fail);font-weight:700') : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`; }).join('')}
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
@@ -8430,7 +8430,7 @@ function renderAuditExcelForm() {
         for (const p of AUDIT_PARAMETERS) {
             const r = active.results[p.key]; if (!r) continue;
             const d = checkDQI(r);
-            const mc = (ok) => ok ? 'color:var(--dqi-pass);font-weight:600' : 'color:var(--dqi-fail);font-weight:700';
+            const mc = (ok) => dqiCellStyle(ok);
             const cell = (v, ok) => `<td style="${v == null ? '' : mc(ok)}">${v == null ? '—' : v}</td>`;
             rows += `<tr><td>${p.label} (${p.unit})</td>${cell(r.r2, d.r2)}${cell(r.slope, d.slope)}${cell(r.intercept, d.intercept)}${cell(r.sd, d.sd)}${cell(r.rmse, d.rmse)}<td>${d.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`;
         }
@@ -8815,10 +8815,18 @@ const DQI_RANGE_LABELS = {
 // Render the best-fit equation with each metric (slope, intercept, R²)
 // colored independently based on its own DQI pass/fail. Gives reviewers
 // an at-a-glance view of which specific metric is failing on each chart.
+// Shared inline style for pass/fail metric values: black text inside a
+// colored box (color-blind friendly), not colored text.
+function dqiCellStyle(ok) {
+    const c = ok ? 'var(--dqi-pass)' : 'var(--dqi-fail)';
+    const bg = ok ? 'var(--dqi-pass-bg)' : 'var(--dqi-fail-bg)';
+    return `color:#111;background:${bg};outline:2px solid ${c};outline-offset:-2px;border-radius:3px;padding:1px 6px;font-weight:600`;
+}
+
 function renderEquationLine(r) {
     if (!r) return '';
     const d = r.dqo || {};
-    const css = (pass) => pass ? 'color:var(--dqi-pass);font-weight:600' : 'color:var(--dqi-fail);font-weight:700';
+    const css = (pass) => dqiCellStyle(pass);
     const sign = r.intercept >= 0 ? '+' : '\u2212';
     return `y = <span style="${css(d.slope)}">${r.slope}</span>x ${sign} <span style="${css(d.intercept)}">${Math.abs(r.intercept)}</span>,&nbsp;&nbsp;&nbsp;&nbsp; R\u00B2 = <span style="${css(d.r2)}">${r.r2}</span>`;
 }
@@ -10673,15 +10681,16 @@ function generateAuditReport(auditId) {
     // DQI table rows — using labelHtml for subscripts. Ranges live in the
     // header row (reportDqoHeader below), not repeated under every value.
     // Colorblind-safe Okabe-Ito palette — matches the in-app badges.
-    const DQI_PASS_FG = '#009E73';
-    const DQI_PASS_BG = '#e0f5ed';
-    const DQI_FAIL_FG = '#D55E00';
-    const DQI_FAIL_BG = '#fcecdd';
+    const DQI_PASS_FG = '#0B6E4F';
+    const DQI_PASS_BG = '#e3f3ec';
+    const DQI_FAIL_FG = '#A11B16';
+    const DQI_FAIL_BG = '#fbe6e4';
+    const boxStyle = (pass) => `color:#111;background:${pass ? DQI_PASS_BG : DQI_FAIL_BG};outline:2px solid ${pass ? DQI_PASS_FG : DQI_FAIL_FG};outline-offset:-2px;border-radius:3px;padding:1px 6px;font-weight:600`;
     const dqiRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
         if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
-        const cls = (pass) => pass ? `color:${DQI_PASS_FG}` : `color:${DQI_FAIL_FG};font-weight:700`;
+        const cls = (pass) => boxStyle(pass);
         return `<tr>
             <td style="font-family:'DM Sans',sans-serif;font-weight:600">${p.labelHtml} (${p.unit})</td>
             <td style="${cls(d.r2)}">${r.r2}</td>
@@ -10691,8 +10700,8 @@ function generateAuditReport(auditId) {
             <td style="${cls(d.rmse)}">${r.rmse}</td>
             <td style="text-align:center">${r.n || '\u2014'}</td>
             <td style="text-align:center">${r.pass
-                ? `<span style="background:${DQI_PASS_BG};color:${DQI_PASS_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">PASS</span>`
-                : `<span style="background:${DQI_FAIL_BG};color:${DQI_FAIL_FG};padding:2px 10px;border-radius:10px;font-size:11px;font-weight:700">FAIL</span>`}</td>
+                ? `<span style="background:${DQI_PASS_BG};color:#111;border:1.5px solid ${DQI_PASS_FG};padding:1px 9px;border-radius:6px;font-size:11px;font-weight:700">PASS</span>`
+                : `<span style="background:${DQI_FAIL_BG};color:#111;border:1.5px solid ${DQI_FAIL_FG};padding:1px 9px;border-radius:6px;font-size:11px;font-weight:700">FAIL</span>`}</td>
         </tr>`;
     }).join('');
 
@@ -10845,7 +10854,7 @@ function generateAuditReport(auditId) {
         const r = (cached?.regressionResults || results)[p.key];
         // Color each metric in the equation by its own DQI pass/fail —
         // same as the in-app view so the printed report stays consistent.
-        const eqCss = (pass) => pass ? `color:${DQI_PASS_FG}` : `color:${DQI_FAIL_FG};font-weight:700`;
+        const eqCss = (pass) => boxStyle(pass);
         const d = (r && r.dqo) || {};
         const sign = r && r.intercept >= 0 ? '+' : '\u2212';
         const eqText = r
