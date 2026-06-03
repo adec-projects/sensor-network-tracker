@@ -62,7 +62,7 @@ Two destinations only. Structured feature tables are intentionally left out of t
 | Phone call | `comms` (`comm_type='Phone'`) + `comm_tags` | |
 | Site visit / text / other comm | `comms` (corrected `comm_type`) + `comm_tags` | |
 | Device / sensor issue | `notes` (`type='Sensor Issue'`) + `note_tags` → sensor (+community) | **not** service_tickets |
-| Historical audit / collocation | `notes` (`type='Audit'`) + `note_tags` | **not** audits (see §4) |
+| Historical audit / collocation | **`audits`** (real record) + manual Excel/DQI upload | see §4 |
 | Install / deployment | `notes` (`type='Installation'`) + `note_tags` → sensor | may also backfill `sensors.date_installed` |
 | General / misc | `notes` (`type='General'`) + `note_tags` | |
 | `.msg` / attachments | `community-files` storage (deduped) | linked to the community |
@@ -73,21 +73,33 @@ just convention.
 
 ---
 
-## 4. Key decision: structured features stay pure
+## 4. Routing decisions
 
-Ayla decided historical **device issues become lightweight notes**, not service tickets —
-`service_tickets` is reserved for real go-forward repair/RMA workflow.
+**Device issues → lightweight notes, not service tickets.** `service_tickets` is reserved for
+real go-forward repair/RMA workflow. Historical "Mod_466 PM sensor issue" entries become
+`notes` (`type='Sensor Issue'`) cross-tagged to the sensor (+community).
 
-**Recommendation: apply the same logic to audits.** The historical "Sensor audit (7 days)" /
-"(24hr)" entries are thin free-text events with no pod IDs and no analysis data. Forcing them
-into the `audits` table (which is built for collocation analysis — pod IDs, regression
-results, charts) would clutter that feature the same way. So historical audits → **notes**
-(`type='Audit'`), and the `audits` table stays clean for real go-forward collocations.
+**Historical audits → real `audits` records, built from a dedicated ZIP of audit files —
+NOT from the Salesforce timeline.** The audit Excel sheets are the authoritative source
+(community, pods, dates, and the DQI data all in one place), far richer than the vague
+"Sensor audit (7 days)" timeline entries. So audits get their own track:
 
-> **OPEN — confirm:** historical audits as notes (recommended), or as real `audits` rows?
+1. **Ayla provides a ZIP of all audit records** (the audit Excel sheets) → `sf-export/audits/`.
+2. A dedicated audit importer parses each file and creates a real `audits` row with its
+   metadata (community, sensor/pods, dates), tagged `source='salesforce_import'`.
+3. It **pulls the DQI table from each Excel** into `analysis_results` so each audit renders in
+   the **same DQI table format** as go-forward audits (`renderAnalysisResults`).
+4. The SF activity-timeline "audit" entries are then **ignored** during the community review
+   (the ZIP is the source of truth), avoiding duplicate audit records.
 
-This keeps the rule simple: **comms for communications; notes for everything else.** The only
-structured table we write to is `comms` (because the data genuinely fits it).
+> **OPEN — need one sample audit file** to lock the parser: the existing pipeline
+> (`parseAuditData`, `app.js:9036+`) parses *raw AirVision hourly data* and computes the
+> regression. The historical audit sheets may instead already contain a *finished DQI/summary
+> table*, which needs a different "read the DQI table directly" parser. Also need to confirm
+> how each file encodes community / pod IDs / dates (filename convention? a header cell?).
+
+So the rule is: **comms for communications; notes for issues/installs/general; real `audits`
+rows built from the audit-records ZIP.**
 
 ---
 
@@ -101,7 +113,7 @@ reviewer overrides** per record.
 | `email`, `emailed`, `RE:`, `FW:`, `sent` | comm · Email |
 | logged as call, no email hint | comm · Phone |
 | `site visit`, `visited`, `onsite` | comm · Site Visit |
-| `audit`, `collocation`, `colloc` | note · Audit |
+| `audit`, `collocation`, `colloc` | **`audits` row** · status "Finished, Analysis Pending" (Excel uploaded later) |
 | `install`, `installed`, `deploy`, `deployment` | note · Installation |
 | `issue`, `problem`, `shutoff`, `offline`, `not reporting`, `PM sensor`, `repair`, `RMA`, `error` | note · Sensor Issue |
 | (anything else) | note · General |
@@ -117,8 +129,9 @@ cross-tagged to that sensor; if ambiguous, the reviewer picks.
 
 ## 6. Schema changes (draft migration)
 
-No changes to `service_tickets` or `audits` (we don't import into them). The changes are
-additive provenance/author fields on the tables we *do* write to. Final file goes under
+No changes to `service_tickets` (we don't import into it). The changes are additive
+provenance/author fields on the tables we *do* write to, plus relaxing two `audits`
+constraints so historical audits without pod IDs can be created. Final file goes under
 `supabase/migrations/` right before we run it.
 
 ```sql
@@ -138,6 +151,12 @@ ALTER TABLE notes ADD COLUMN IF NOT EXISTS logged_by  text DEFAULT '';
 -- community_files (dedupe + provenance for .msg attachments)
 ALTER TABLE community_files ADD COLUMN IF NOT EXISTS source text DEFAULT 'manual';
 ALTER TABLE community_files ADD COLUMN IF NOT EXISTS sf_id  text;
+
+-- audits (historical audits imported from the audit-records ZIP)
+ALTER TABLE audits ADD COLUMN IF NOT EXISTS source text DEFAULT 'manual';
+-- Historical audits may lack a travelling audit pod / community pod id.
+ALTER TABLE audits ALTER COLUMN audit_pod_id     DROP NOT NULL;
+ALTER TABLE audits ALTER COLUMN community_pod_id DROP NOT NULL;
 
 -- Idempotency: a given SF record imports at most once per table.
 CREATE UNIQUE INDEX IF NOT EXISTS uq_comms_sf_id
@@ -201,8 +220,22 @@ bootstrap, login, navy/gold theme):
 
 ## 10. Open items
 
-- [ ] Confirm historical audits → notes (recommended) vs. real `audits` rows (§4).
+- [ ] **Audit Excel format** (§4): does each historical audit file contain a *finished DQI
+      table* (needs a "read DQI table" parser) or *raw AirVision hourly data* (existing
+      `parseAuditData` works)? — pending one sample file.
+- [ ] How each audit file encodes its community / pod IDs / dates (filename vs. header cell).
 - [ ] Sensor-id format in `sensors.id` vs. subject tokens ("Mod_466") — confirm match rule
       once the export is in hand.
 - [ ] Whether installs should also backfill `sensors.date_installed`.
 - [ ] Contacts cleanup pass for "NO LONGER A CONTACT" names.
+
+---
+
+## 11. Tracks (parallel workstreams)
+
+The migration splits into two independent tracks:
+
+- **Track A — Audits.** Driven by the audit-records ZIP (`sf-export/audits/`). Dedicated
+  importer → real `audits` rows + DQI tables. Can start as soon as a sample audit file lands.
+- **Track B — Communities (comms, notes, files).** Driven by the full Salesforce Data Export
+  (`sf-export/`). Per-community review importer. SF "audit" timeline entries ignored here.
