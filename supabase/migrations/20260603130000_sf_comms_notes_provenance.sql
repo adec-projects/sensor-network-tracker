@@ -21,5 +21,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_files_sf_id ON community_files(sf_id) WHERE
 
 -- Let the importer's Reset undo a batch — scoped to imported rows only, so it
 -- can't delete normal comms/notes. (comm_tags/note_tags cascade on delete.)
+DROP POLICY IF EXISTS "Delete SF-imported comms" ON comms;
+DROP POLICY IF EXISTS "Delete SF-imported notes" ON notes;
 CREATE POLICY "Delete SF-imported comms" ON comms FOR DELETE TO authenticated USING (source = 'salesforce_import');
 CREATE POLICY "Delete SF-imported notes" ON notes FOR DELETE TO authenticated USING (source = 'salesforce_import');
