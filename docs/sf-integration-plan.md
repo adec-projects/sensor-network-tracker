@@ -86,7 +86,8 @@ NOT from the Salesforce timeline.** The audit Excel sheets are the authoritative
 
 1. **Ayla provides a ZIP of all audit records** (the audit Excel sheets) → `sf-export/audits/`.
 2. A dedicated audit importer parses each file and creates a real `audits` row with its
-   metadata (community, sensor/pods, dates), tagged `source='salesforce_import'`.
+   metadata (community, sensor/pods, dates), tagged `source='excel_import'` (these come from
+   audit Excel sheets, not Salesforce).
 3. It **pulls the DQI table from each Excel** into `analysis_results` so each audit renders in
    the **same DQI table format** as go-forward audits (`renderAnalysisResults`).
 4. The SF activity-timeline "audit" entries are then **ignored** during the community review
@@ -259,7 +260,7 @@ The migration splits into two independent tracks:
     be confirmed before approving. (Cordova/Kodiak PM2.5 and Goldstream CO differ between sheets.)
   - **Status:** imported audits get the terminal status **`Complete, Excel Analysis`** (registered
     in app.js so it renders as a green/done badge and its own Audits column) to distinguish them
-    from go-forward audits. A **Reset** button deletes all `source='salesforce_import'` audits and
-    their uploaded Excels so the batch can be re-run cleanly.
+    from go-forward audits. A **Reset** button deletes all importer-created audits
+    (`source='excel_import'`) and their uploaded Excels so the batch can be re-run cleanly.
 - **Track B — Communities (comms, notes, files).** Driven by the full Salesforce Data Export
   (`sf-export/`). Per-community review importer. SF "audit" timeline entries ignored here.

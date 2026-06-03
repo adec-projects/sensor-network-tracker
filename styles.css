@@ -3186,6 +3186,59 @@ tr:hover .contact-delete-btn {
 }
 .dqi-photo-add:hover .add-default { display: none; }
 .dqi-photo-add:hover .add-hover { display: inline; }
+/* In-page Excel preview modal */
+.excel-preview-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(15, 23, 42, 0.55);
+    display: none;
+    align-items: center;
+    justify-content: center;
+    z-index: 1000;
+    padding: 24px;
+}
+.excel-preview-overlay.open { display: flex; }
+.excel-preview-box {
+    background: #fff;
+    width: 92vw;
+    max-width: 1200px;
+    height: 86vh;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+.excel-preview-head {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--slate-200);
+}
+.excel-preview-tabs {
+    display: flex;
+    gap: 4px;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--slate-200);
+    overflow-x: auto;
+    background: var(--slate-50);
+}
+.excel-tab {
+    padding: 5px 12px;
+    border: 1px solid var(--slate-200);
+    background: #fff;
+    border-radius: 6px;
+    font-size: 12px;
+    cursor: pointer;
+    white-space: nowrap;
+    font-family: var(--font-sans);
+}
+.excel-tab.active { background: var(--navy-500); color: #fff; border-color: var(--navy-500); }
+.excel-preview-content { flex: 1; overflow: auto; padding: 12px; }
+.excel-preview-content table { border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }
+.excel-preview-content td, .excel-preview-content th { border: 1px solid var(--slate-200); padding: 3px 6px; white-space: nowrap; }
+
 .dqi-overview-table-wrap { overflow-x: auto; }
 table.dqi-overview-table {
     width: 100%;

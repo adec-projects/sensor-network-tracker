@@ -8029,8 +8029,8 @@ function confirmCloseTicket() {
 
 // ===== AUDITS =====
 const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Finished, Analysis Pending', 'Complete'];
-// Terminal status used for historical audits imported from Excel (Salesforce
-// migration). Kept out of AUDIT_STATUSES so it doesn't add a step to the
+// Terminal status used for historical audits brought in via the audit-sheet
+// Excel importer. Kept out of AUDIT_STATUSES so it doesn't add a step to the
 // normal flow, but recognized everywhere a status is rendered or gated.
 const EXCEL_COMPLETE = 'Complete, Excel Analysis';
 const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Finished, Analysis Pending': 'as-analysis', 'Complete': 'as-verified', 'Complete, Excel Analysis': 'as-verified' };
@@ -8194,7 +8194,7 @@ function openAuditDetail(auditId) {
 
     const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
         ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; return `<tr><td>${p.label} (${p.unit})</td><td>${r.r2 ?? '—'}</td><td>${r.slope ?? '—'}</td><td>${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`; }).join('')}
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; const d = r.dqo; const mc = (ok) => d ? (ok ? 'color:var(--dqi-pass);font-weight:600' : 'color:var(--dqi-fail);font-weight:700') : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
@@ -8221,7 +8221,7 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
             ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote', 'audit')}
         </div>
-        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}${audit.analysisFilePath ? `<div style="margin-top:10px"><a href="#" onclick="downloadAuditSource('${escapeHtml(audit.analysisFilePath)}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128206; Download source Excel${audit.analysisFileName ? ` (${escapeHtml(audit.analysisFileName)})` : ''}</a></div>` : ''}</div>
+        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}${audit.analysisFilePath ? `<div style="margin-top:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap"><a href="#" onclick="previewAuditExcel('${escapeHtml(audit.analysisFilePath)}','${encodeURIComponent(audit.analysisFileName || '')}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128196; Preview Excel</a><a href="#" onclick="downloadAuditSource('${escapeHtml(audit.analysisFilePath)}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128206; Download${audit.analysisFileName ? ` (${escapeHtml(audit.analysisFileName)})` : ''}</a></div>` : ''}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
             <label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>
             <div id="audit-photos-grid" class="audit-photos-grid">${renderAuditPhotos(audit.id, audit.communityId)}</div>
@@ -8239,6 +8239,49 @@ async function downloadAuditSource(storagePath) {
     } catch (e) {
         showAlert ? showAlert('Could not open file', e.message) : alert('Could not open file: ' + e.message);
     }
+}
+
+// In-page Excel preview: fetch the workbook via signed URL, parse it with
+// SheetJS, and render each sheet as an HTML table in a big modal overlay.
+let _excelWb = null, _excelName = '';
+async function previewAuditExcel(storagePath, fileNameEnc) {
+    _excelName = fileNameEnc ? decodeURIComponent(fileNameEnc) : 'Audit Excel';
+    let o = document.getElementById('excel-preview-overlay');
+    if (!o) {
+        o = document.createElement('div');
+        o.id = 'excel-preview-overlay';
+        o.className = 'excel-preview-overlay';
+        o.onclick = (e) => { if (e.target === o) closeExcelPreview(); };
+        document.body.appendChild(o);
+    }
+    o.classList.add('open');
+    o.innerHTML = `<div class="excel-preview-box"><div class="excel-preview-head"><strong>${escapeHtml(_excelName)}</strong><button class="btn btn-sm" style="margin-left:auto" onclick="closeExcelPreview()">Close</button></div><div style="padding:24px;color:var(--slate-400)">Loading workbook&hellip;</div></div>`;
+    try {
+        const url = await db.getSignedUrl(storagePath);
+        const buf = await (await fetch(url)).arrayBuffer();
+        _excelWb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+        renderExcelPreview(0);
+    } catch (e) {
+        const box = o.querySelector('.excel-preview-box');
+        if (box) box.innerHTML = `<div class="excel-preview-head"><strong>Preview failed</strong><button class="btn btn-sm" style="margin-left:auto" onclick="closeExcelPreview()">Close</button></div><div style="padding:24px;color:var(--aurora-rose)">${escapeHtml(e.message || 'Could not load file')}</div>`;
+    }
+}
+function renderExcelPreview(sheetIdx) {
+    if (!_excelWb) return;
+    const o = document.getElementById('excel-preview-overlay');
+    if (!o) return;
+    const name = _excelWb.SheetNames[sheetIdx];
+    const tabs = _excelWb.SheetNames.map((n, i) => `<button class="excel-tab${i === sheetIdx ? ' active' : ''}" onclick="renderExcelPreview(${i})">${escapeHtml(n)}</button>`).join('');
+    const table = XLSX.utils.sheet_to_html(_excelWb.Sheets[name]);
+    o.querySelector('.excel-preview-box').innerHTML = `
+        <div class="excel-preview-head"><strong>${escapeHtml(_excelName)}</strong><span style="color:var(--slate-400);font-size:12px;margin-left:8px">${escapeHtml(name)}</span><button class="btn btn-sm" style="margin-left:auto" onclick="closeExcelPreview()">Close</button></div>
+        <div class="excel-preview-tabs">${tabs}</div>
+        <div class="excel-preview-content">${table}</div>`;
+}
+function closeExcelPreview() {
+    const o = document.getElementById('excel-preview-overlay');
+    if (o) { o.classList.remove('open'); o.innerHTML = ''; }
+    _excelWb = null;
 }
 
 function saveAuditField(auditId, field, value) {

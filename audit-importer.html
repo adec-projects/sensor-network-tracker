@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Audit Sheet Importer — Salesforce → Sensor Tracker</title>
+<title>Audit Sheet Importer — Sensor Tracker</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <style>
@@ -66,7 +66,7 @@
 <body>
 <div class="wrap">
   <h1>Audit Sheet Importer</h1>
-  <p class="subtitle">Pulls the DQI table from each Salesforce audit Excel and creates a real audit record. &nbsp;<a class="doclink" href="docs/sf-integration-plan.md">spec</a></p>
+  <p class="subtitle">Pulls the DQI table from each audit Excel and creates a real audit record. &nbsp;<a class="doclink" href="docs/sf-integration-plan.md">spec</a></p>
 
   <div id="login">
     <h2>Sign In</h2>
@@ -82,7 +82,7 @@
         <label style="font-size:.72rem;color:var(--text-dim);display:block;margin-bottom:4px">Select audit .xls files (or the whole Audit Sheets folder)</label>
         <input type="file" id="files" accept=".xls,.xlsx" multiple onchange="onFiles(this.files)" style="margin:0;width:auto">
       </div>
-      <button class="btn btn-ghost" onclick="resetImports()" title="Delete every audit previously imported from Salesforce and its uploaded Excel, so you can start over">&#8635; Reset imported</button>
+      <button class="btn btn-ghost" onclick="resetImports()" title="Delete every audit created by this importer and its uploaded Excel, so you can start over">&#8635; Reset imported</button>
       <div class="counts">
         <span class="c-app">On app: <b id="n-app">0</b></span>
         <span class="c-dup">Duplicates: <b id="n-dup">0</b></span>
@@ -375,9 +375,9 @@ async function approve(i){
     analysis_results:analysisResults,
     analysis_name:hasResults?`Audit ${val('f-apod-'+i)} — ${communityName} ${val('f-cpod-'+i)}, ${startDate} to ${endDate}`:'',
     analysis_upload_date:hasResults?new Date().toISOString():null,
-    analysis_uploaded_by:hasResults?(user.email+' (SF import)'):'',
+    analysis_uploaded_by:hasResults?user.email:'',
     analysis_chart_data:null,            // null on purpose — see spec §4 (avoid recompute clobber)
-    source:'salesforce_import',
+    source:'excel_import',
     created_by:user.id,
   };
   const btnMsg=document.getElementById('msg-'+i); btnMsg.textContent='Uploading Excel…';
@@ -412,12 +412,13 @@ function setSheet(i,idx){ parsed[i].dqiIndex=+idx; renderCards(); }
 // Delete all previously SF-imported audits (and their uploaded Excel files)
 // so the whole batch can be re-run cleanly with corrected data/status.
 async function resetImports(){
-  if(!confirm('Delete ALL audits previously imported from Salesforce (source = salesforce_import), including their uploaded Excel files? This cannot be undone.'))return;
-  const {data,error}=await supa.from('audits').select('id,analysis_file_path').eq('source','salesforce_import');
+  if(!confirm('Delete ALL audits created by this importer, including their uploaded Excel files? This cannot be undone.'))return;
+  const sources=['excel_import','salesforce_import']; // include the old tag for cleanup
+  const {data,error}=await supa.from('audits').select('id,analysis_file_path').in('source',sources);
   if(error){alert('Reset failed: '+error.message);return;}
   const paths=(data||[]).map(a=>a.analysis_file_path).filter(Boolean);
   if(paths.length){ try{ await supa.storage.from('community-files').remove(paths); }catch(e){} }
-  const del=await supa.from('audits').delete().eq('source','salesforce_import');
+  const del=await supa.from('audits').delete().in('source',sources);
   if(del.error){alert('Reset failed: '+del.error.message);return;}
   await loadRefData();
   alert(`Reset complete — removed ${(data||[]).length} imported audit(s). Re-select your files to start over.`);
