@@ -4415,7 +4415,13 @@ function renderTimeline(containerId, items) {
     container.innerHTML = items.map(item => {
         const typeClass = getTimelineTypeClass(item.type);
         const tags = buildTagsHTML(item);
-        const hasFullBody = item.fullBody;
+        // Only offer "click to expand" when the full body actually has content
+        // that isn't already shown in the title text — otherwise expanding just
+        // repeats the same note.
+        const _fb = (item.fullBody || '').replace(/\s+/g, ' ').trim();
+        const _shown = stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody)
+            .replace(/\s+/g, ' ').trim().toLowerCase();
+        const hasFullBody = _fb.length > 0 && !_shown.includes(_fb.toLowerCase());
         const expandable = hasFullBody ? `onclick="this.querySelector('.timeline-text-full').classList.toggle('open')" style="cursor:pointer"` : '';
 
         // Display userNotes from structured JSON additionalInfo, or raw text for legacy notes

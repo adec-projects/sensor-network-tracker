@@ -375,7 +375,7 @@ async function writeRecord(r,i,extra){
     const conset=new Set([contactId, ...((extra&&extra.contacts)||[])].filter(Boolean));
     if(r.kind==='comm'){
       const ins=await supa.from('comms').insert({
-        date, comm_type:type, subject, text:(body||subject).slice(0,400), full_body:body,
+        date, comm_type:type, subject, text:(subject||body).slice(0,400), full_body:body,
         community_id:communityId, source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||''
       }).select('id');
       if(ins.error) throw ins.error;
