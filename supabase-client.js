@@ -549,6 +549,8 @@ const db = {
             analysis_name: audit.analysisName || '', analysis_upload_date: audit.analysisUploadDate || null,
             analysis_uploaded_by: audit.analysisUploadedBy || '',
             analysis_chart_data: audit.analysisChartData || null, created_by: audit.createdById || null,
+            source: audit.source || 'manual',
+            analysis_file_path: audit.analysisFilePath || '', analysis_file_name: audit.analysisFileName || '',
         }).select('*, profiles:created_by(name)');
         if (error) throw error;
         const a = data[0];
@@ -562,6 +564,7 @@ const db = {
             analysisUploadDate: a.analysis_upload_date || null,
             analysisUploadedBy: a.analysis_uploaded_by || '',
             analysisChartData: a.analysis_chart_data || null,
+            analysisFilePath: a.analysis_file_path || '', analysisFileName: a.analysis_file_name || '',
             createdBy: a.profiles?.name || '', createdById: a.created_by,
             createdAt: a.created_at, updatedAt: a.updated_at,
         };

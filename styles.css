@@ -3239,6 +3239,45 @@ tr:hover .contact-delete-btn {
 .excel-preview-content table { border-collapse: collapse; font-size: 12px; font-family: var(--font-mono); }
 .excel-preview-content td, .excel-preview-content th { border: 1px solid var(--slate-200); padding: 3px 6px; white-space: nowrap; }
 
+/* Upload Audit from Excel modal */
+.upload-audit-box {
+    background: #fff;
+    width: 760px;
+    max-width: 94vw;
+    max-height: 90vh;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.4);
+}
+.upload-audit-body { padding: 18px 20px 22px; overflow: auto; }
+.upload-audit-steps { margin: 2px 0 16px 18px; font-size: 13px; color: var(--slate-500); line-height: 1.7; }
+.upload-audit-drop {
+    display: block;
+    border: 2px dashed var(--slate-200);
+    border-radius: 8px;
+    padding: 22px;
+    text-align: center;
+    cursor: pointer;
+    color: var(--navy-500);
+    font-size: 14px;
+    transition: 0.12s;
+}
+.upload-audit-drop:hover { border-color: var(--navy-500); background: var(--slate-50); }
+.uaf-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 12px; margin-top: 16px; }
+.uaf-field label { display: block; font-size: 11px; text-transform: uppercase; letter-spacing: 0.04em; color: var(--slate-400); margin-bottom: 4px; }
+.uaf-field input, .uaf-field select {
+    width: 100%;
+    padding: 8px 10px;
+    border: 1px solid var(--slate-200);
+    border-radius: 6px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    background: #fff;
+}
+.uaf-field input[readonly] { background: var(--slate-50); color: var(--slate-500); }
+
 .dqi-overview-table-wrap { overflow-x: auto; }
 table.dqi-overview-table {
     width: 100%;

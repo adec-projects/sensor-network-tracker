@@ -8276,6 +8276,229 @@ function closeExcelPreview() {
     if (o) { o.classList.remove('open'); o.innerHTML = ''; }
 }
 
+// ===== UPLOAD AUDIT FROM EXCEL (in-app) =====
+// Create a new audit record from a completed audit Excel: auto-fills pods and
+// dates from the file name, pulls the DQI table (with a sheet picker when the
+// file has more than one), and attaches the workbook. Mirrors audit-importer.html.
+const _AUDIT_MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
+let _auditXls = null;
+
+function _auditParamKey(label) {
+    const t = String(label).trim().toLowerCase();
+    if (t.startsWith('pm2.5') || t.startsWith('pm25') || t.startsWith('pm 2.5')) return 'pm25';
+    if (t.startsWith('pm10') || t.startsWith('pm 10')) return 'pm10';
+    if (t.startsWith('no2')) return 'no2';
+    if (t.startsWith('no')) return 'no';
+    if (t.startsWith('co')) return 'co';
+    if (t.startsWith('o3')) return 'o3';
+    return null;
+}
+function _auditExtractDQIAll(wb) {
+    const candidates = [];
+    for (const sn of wb.SheetNames) {
+        const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, defval: '' });
+        for (let r = 0; r < Math.min(12, aoa.length); r++) {
+            const row = (aoa[r] || []).map(c => String(c).toLowerCase());
+            const ci = {};
+            row.forEach((c, i) => {
+                if (c.includes('factor') && ci.factor == null) ci.factor = i;
+                if ((c.includes('actual r') || /\br2\b/.test(c) || c.includes('r²')) && ci.r2 == null) ci.r2 = i;
+                if (c.includes('slope') && ci.slope == null) ci.slope = i;
+                if (c.includes('intercept') && ci.intercept == null) ci.intercept = i;
+                if (/^\s*sd\b/.test(c) && ci.sd == null) ci.sd = i;
+                if (c.includes('rmse') && ci.rmse == null) ci.rmse = i;
+            });
+            if (ci.factor != null && ci.r2 != null && ci.slope != null && ci.intercept != null) {
+                const res = {}; let gap = 0;
+                for (let rr = r + 1; rr < aoa.length; rr++) {
+                    const fac = String((aoa[rr] || [])[ci.factor] || '').trim();
+                    const key = _auditParamKey(fac);
+                    if (!key) { if (fac === '') { gap++; if (gap > 2) break; } continue; }
+                    gap = 0;
+                    const num = (idx) => { const v = parseFloat((aoa[rr] || [])[idx]); return isFinite(v) ? Math.round(v * 10000) / 10000 : null; };
+                    res[key] = { r2: num(ci.r2), slope: num(ci.slope), intercept: num(ci.intercept), sd: ci.sd != null ? num(ci.sd) : null, rmse: ci.rmse != null ? num(ci.rmse) : null };
+                }
+                if (Object.keys(res).length >= 2) { candidates.push({ sheet: sn, results: res }); break; }
+            }
+        }
+    }
+    return candidates;
+}
+function _auditDefaultDqiIdx(cands) {
+    let best = 0, bp = -1;
+    cands.forEach((c, i) => { const pri = /spike|modif|edit|final|clean|remov|correct/i.test(c.sheet) ? 2 : 1; if (pri >= bp) { bp = pri; best = i; } });
+    return best;
+}
+function _auditParseDates(base) {
+    const year = (base.match(/(20\d\d)/) || [])[1] || '';
+    const mk = (mo, d) => (mo && d && year) ? `${year}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}` : '';
+    let m = base.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*_?(\d{1,2})[-_](\d{1,2})(?!\d)/i);
+    if (m) { const after = base.slice(m.index + m[0].length, m.index + m[0].length + 1); if (!/[A-Za-z]/.test(after)) { const mo = _AUDIT_MONTHS[m[1].toLowerCase().slice(0, 3)]; return { start: mk(mo, m[2]), end: mk(mo, m[3]) }; } }
+    const pairs = [...base.matchAll(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*_?-?(\d{1,2})/gi)].map(x => ({ mo: _AUDIT_MONTHS[x[1].toLowerCase().slice(0, 3)], d: +x[2] }));
+    if (pairs.length >= 2) return { start: mk(pairs[0].mo, pairs[0].d), end: mk(pairs[1].mo, pairs[1].d) };
+    if (pairs.length === 1) return { start: mk(pairs[0].mo, pairs[0].d), end: '' };
+    return { start: '', end: '' };
+}
+function _auditParseFilename(name) {
+    const base = name.replace(/\.(xls|xlsx)$/i, '');
+    const apod = (base.match(/Audit(\d{3,4})/i) || [])[1] || '';
+    let comm = '', cpod = '', m = base.match(/Audit\d{3,4}_([A-Za-z]+)[_ ]?(\d{3,4})?/i);
+    if (m) { comm = m[1]; cpod = m[2] || ''; } else { m = base.match(/^([A-Za-z]+)_Audit/i); if (m) comm = m[1]; }
+    const { start, end } = _auditParseDates(base);
+    return { apod, comm, cpod, start, end };
+}
+function _auditPodId(num) { return num ? ('MOD-' + String(num).padStart(5, '0')) : ''; }
+function _auditGuessCommunityId(name) {
+    if (!name) return '';
+    const n = name.toLowerCase();
+    let c = COMMUNITIES.find(x => (x.name || '').toLowerCase() === n || x.id === n);
+    if (!c) c = COMMUNITIES.find(x => (x.name || '').toLowerCase().startsWith(n) || n.startsWith((x.name || '').toLowerCase()));
+    return c ? c.id : '';
+}
+function _auditBuildResults(candidate) {
+    const out = {};
+    for (const p of AUDIT_PARAMETERS) {
+        const r = candidate.results[p.key]; if (!r) continue;
+        const dqo = checkDQI(r);
+        out[p.key] = { slope: r.slope, intercept: r.intercept, r2: r.r2, sd: r.sd, rmse: r.rmse, n: null, pairs: [], dqo, pass: dqo.pass };
+    }
+    return out;
+}
+
+function openUploadAuditExcel() {
+    _auditXls = null;
+    let o = document.getElementById('upload-audit-overlay');
+    if (!o) {
+        o = document.createElement('div');
+        o.id = 'upload-audit-overlay';
+        o.className = 'excel-preview-overlay';
+        o.onclick = (e) => { if (e.target === o) closeUploadAuditExcel(); };
+        document.body.appendChild(o);
+    }
+    o.classList.add('open');
+    o.innerHTML = `<div class="upload-audit-box">
+        <div class="excel-preview-head"><strong>Upload Audit from Excel</strong><button class="btn btn-sm" style="margin-left:auto" onclick="closeUploadAuditExcel()">Close</button></div>
+        <div class="upload-audit-body">
+            <ol class="upload-audit-steps">
+                <li>Upload the <strong>completed</strong> audit Excel — the one with the DQI analysis table already in it.</li>
+                <li>The pods and dates auto-fill from the file name when possible — double-check and fix anything.</li>
+                <li>If the file has more than one DQI table, pick the official sheet (e.g. the spikes-removed / edited one).</li>
+                <li>Review the DQI table, then <strong>Create Audit</strong>. The Excel is attached to the audit.</li>
+            </ol>
+            <label class="upload-audit-drop">
+                <input type="file" accept=".xls,.xlsx" onchange="handleAuditExcelPick(this.files[0])" style="display:none">
+                <span>&#128196; Click to choose a completed audit Excel (.xls / .xlsx)</span>
+            </label>
+            <div id="upload-audit-form"></div>
+        </div>
+    </div>`;
+}
+function closeUploadAuditExcel() {
+    const o = document.getElementById('upload-audit-overlay');
+    if (o) { o.classList.remove('open'); o.innerHTML = ''; }
+    _auditXls = null;
+}
+async function handleAuditExcelPick(file) {
+    if (!file) return;
+    const form = document.getElementById('upload-audit-form');
+    form.innerHTML = '<div style="padding:14px;color:var(--slate-400)">Reading workbook&hellip;</div>';
+    try {
+        const buf = await file.arrayBuffer();
+        const wb = XLSX.read(new Uint8Array(buf), { type: 'array' });
+        const meta = _auditParseFilename(file.name);
+        const candidates = _auditExtractDQIAll(wb);
+        _auditXls = { file, meta, candidates, dqiIndex: _auditDefaultDqiIdx(candidates), communityId: _auditGuessCommunityId(meta.comm) };
+        renderAuditExcelForm();
+    } catch (e) {
+        form.innerHTML = `<div style="padding:14px;color:var(--aurora-rose)">Could not read file: ${escapeHtml(e.message || '')}</div>`;
+    }
+}
+function setAuditXlsSheet(idx) { if (_auditXls) { _auditXls.dqiIndex = +idx; renderAuditExcelForm(); } }
+function renderAuditExcelForm() {
+    const s = _auditXls; if (!s) return;
+    const form = document.getElementById('upload-audit-form'); if (!form) return;
+    const active = s.candidates[s.dqiIndex] || null;
+    const commOpts = COMMUNITIES.slice().sort((a, b) => (a.name || '').localeCompare(b.name || '')).map(c => `<option value="${c.id}" ${c.id === s.communityId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('');
+    let sheetSel = '';
+    if (s.candidates.length > 1) {
+        sheetSel = `<div class="uaf-field" style="grid-column:1/-1"><label>DQI source sheet — file has ${s.candidates.length}</label>
+            <select onchange="setAuditXlsSheet(this.value)">${s.candidates.map((c, i) => `<option value="${i}" ${i === s.dqiIndex ? 'selected' : ''}>${escapeHtml(c.sheet)}</option>`).join('')}</select></div>`;
+    }
+    let table;
+    if (active) {
+        let rows = '';
+        for (const p of AUDIT_PARAMETERS) {
+            const r = active.results[p.key]; if (!r) continue;
+            const d = checkDQI(r);
+            const mc = (ok) => ok ? 'color:var(--dqi-pass);font-weight:600' : 'color:var(--dqi-fail);font-weight:700';
+            const cell = (v, ok) => `<td style="${v == null ? '' : mc(ok)}">${v == null ? '—' : v}</td>`;
+            rows += `<tr><td>${p.label} (${p.unit})</td>${cell(r.r2, d.r2)}${cell(r.slope, d.slope)}${cell(r.intercept, d.intercept)}${cell(r.sd, d.sd)}${cell(r.rmse, d.rmse)}<td>${d.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`;
+        }
+        table = `<table class="analysis-results-table" style="margin-top:14px"><thead><tr><th>Parameter</th><th>R²</th><th>Slope</th><th>Intercept</th><th>SD</th><th>RMSE</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`;
+    } else {
+        table = '<div style="padding:10px 0;color:var(--aurora-rose);font-size:13px">No DQI analysis table found in this file. You can still create the audit, but it will have no results.</div>';
+    }
+    form.innerHTML = `
+        <div class="uaf-grid">
+            <div class="uaf-field" style="grid-column:1/-1"><label>Community</label><select id="uaf-comm"><option value="">— pick —</option>${commOpts}</select></div>
+            <div class="uaf-field"><label>Audit Pod</label><input id="uaf-apod" value="${_auditPodId(s.meta.apod)}"></div>
+            <div class="uaf-field"><label>Community Pod</label><input id="uaf-cpod" value="${_auditPodId(s.meta.cpod)}"></div>
+            <div class="uaf-field"><label>Status</label><input id="uaf-status" value="${active ? 'Complete, Excel Analysis' : 'Finished, Analysis Pending'}" readonly></div>
+            <div class="uaf-field"><label>Start Date</label><input id="uaf-start" type="date" value="${s.meta.start}"></div>
+            <div class="uaf-field"><label>End Date</label><input id="uaf-end" type="date" value="${s.meta.end}"></div>
+            ${sheetSel}
+        </div>
+        ${table}
+        <div style="margin-top:16px;display:flex;gap:10px;justify-content:flex-end;align-items:center">
+            <span id="uaf-msg" style="font-size:13px;color:var(--aurora-rose);margin-right:auto"></span>
+            <button class="btn" onclick="closeUploadAuditExcel()">Cancel</button>
+            <button class="btn btn-primary" onclick="createAuditFromExcel()">Create Audit</button>
+        </div>`;
+}
+async function createAuditFromExcel() {
+    const s = _auditXls; if (!s) return;
+    const msg = document.getElementById('uaf-msg');
+    const communityId = document.getElementById('uaf-comm').value;
+    if (!communityId) { msg.style.color = 'var(--aurora-rose)'; msg.textContent = 'Pick a community first.'; return; }
+    const active = s.candidates[s.dqiIndex] || null;
+    const analysisResults = active ? _auditBuildResults(active) : {};
+    const hasResults = Object.keys(analysisResults).length > 0;
+    const apod = document.getElementById('uaf-apod').value.trim();
+    const cpod = document.getElementById('uaf-cpod').value.trim();
+    const startDate = document.getElementById('uaf-start').value;
+    const endDate = document.getElementById('uaf-end').value;
+    const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
+    msg.style.color = 'var(--slate-400)'; msg.textContent = 'Uploading Excel…';
+    try {
+        const safe = s.file.name.replace(/[^\w.\-]+/g, '_');
+        const path = `${communityId}/audit_${Date.now()}_${safe}`;
+        const up = await supa.storage.from('community-files').upload(path, s.file, { upsert: false });
+        if (up.error) throw up.error;
+        msg.textContent = 'Saving audit…';
+        const saved = await db.insertAudit({
+            auditPodId: apod || null, communityPodId: cpod || null, communityId,
+            status: hasResults ? 'Complete, Excel Analysis' : 'Finished, Analysis Pending',
+            startDate: startDate || null, endDate: endDate || null,
+            analysisResults,
+            analysisName: hasResults ? `Audit ${apod} — ${communityName} ${cpod}, ${startDate} to ${endDate}` : '',
+            analysisUploadDate: hasResults ? new Date().toISOString() : null,
+            analysisUploadedBy: getCurrentUserName(),
+            analysisChartData: null,
+            source: 'excel_import',
+            analysisFilePath: path, analysisFileName: s.file.name,
+            createdBy: getCurrentUserName(), createdById: currentUserId,
+        });
+        audits.unshift(saved);
+        closeUploadAuditExcel();
+        showSuccessToast('Audit created from Excel');
+        updateSidebarAuditCount();
+        if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
+        if (document.getElementById('view-audit-dqi-overview')?.classList.contains('active')) renderAuditDqiOverview();
+    } catch (e) {
+        msg.style.color = 'var(--aurora-rose)'; msg.textContent = 'Error: ' + (e.message || 'Failed to create audit');
+    }
+}
+
 function saveAuditField(auditId, field, value) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit || audit[field] === value) return;
