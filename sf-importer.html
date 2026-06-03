@@ -76,10 +76,15 @@
   <div id="app" class="hidden">
     <div class="toolbar">
       <div>
-        <label style="font-size:.7rem;color:var(--text-dim);display:block;margin-bottom:4px">Load classified data (sf-export/sf-import-data.json)</label>
+        <label style="font-size:.7rem;color:var(--text-dim);display:block;margin-bottom:4px">1. Classified data (sf-export/sf-import-data.json)</label>
         <input type="file" id="datafile" accept=".json" onchange="loadData(this.files[0])" style="font-size:.82rem">
       </div>
-      <button class="btn btn-ghost btn-sm" onclick="resetImports()" title="Delete every comm/note previously imported from Salesforce, so you can start over">&#8635; Reset imported</button>
+      <div>
+        <label style="font-size:.7rem;color:var(--text-dim);display:block;margin-bottom:4px">2. File binaries folder (sf-export/api-pull/files) — for photos/PDFs</label>
+        <input type="file" id="binfiles" webkitdirectory directory multiple onchange="loadBinaries(this.files)" style="font-size:.82rem">
+        <span id="bin-count" style="font-size:.72rem;color:var(--text-dim)"></span>
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetImports()" title="Delete every comm/note/file previously imported from Salesforce, so you can start over">&#8635; Reset imported</button>
       <div class="counts">
         <span style="color:var(--text-dim)">Pending: <b id="n-pending">0</b></span>
         <span style="color:var(--green)">Imported: <b id="n-ok">0</b></span>
@@ -102,7 +107,7 @@ const supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
 const COMM_TYPES=['Email','Phone','Site Visit','Text','Other'];
 const NOTE_TYPES=['Sensor Issue','Installation','General','Maintenance','Service'];
 
-let user=null, communities=[], contacts=[], sensors=[], existingSf=new Set();
+let user=null, communities=[], contacts=[], sensors=[], existingSf=new Set(), fileBlobs={};
 let records=[], byCommunity=new Map(), unassignedKey='__unassigned__', current=null;
 let counts={ok:0,skip:0,dup:0};
 
@@ -129,7 +134,8 @@ async function loadRef(){
   ]);
   communities=(c.data||[]).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   contacts=ct.data||[]; sensors=new Set((s.data||[]).map(r=>r.id));
-  existingSf=new Set([...(ec.data||[]),...(en.data||[])].map(r=>r.sf_id));
+  const ef=await supa.from('community_files').select('sf_id').not('sf_id','is',null);
+  existingSf=new Set([...(ec.data||[]),...(en.data||[]),...(ef.data||[])].map(r=>r.sf_id));
 }
 
 function resolveCommunity(rec){
@@ -166,10 +172,21 @@ function loadData(file){
           state: dup?'dup':'pending'});
       }
     }
+    for(const f of (parsed.files||[])){
+      const dup=existingSf.has(f.sfId);
+      records.push({...f, kind:'file', subject:f.title, body:'', communityId:resolveCommunity(f),
+        fileName:(f.file||'').split('/').pop(), state: dup?'dup':'pending'});
+    }
     counts={ok:0,skip:0,dup:records.filter(r=>r.state==='dup').length};
     regroup(); renderCommList(); renderCounts();
   };
   r.readAsText(file);
+}
+function loadBinaries(files){
+  fileBlobs={};
+  for(const f of files) fileBlobs[f.name]=f;
+  document.getElementById('bin-count').textContent=`${files.length} files loaded`;
+  if(current) renderRecords();
 }
 
 function regroup(){
@@ -220,13 +237,16 @@ function renderRecords(){
     h+=arr.map(r=>cardHtml(r)).join('');
     return h;
   };
+  const files=list.filter(r=>r.kind==='file');
   html+=section('Communications',comms);
   html+=section('Notes / device history',notes);
+  html+=section('Files / photos',files);
   root.innerHTML=html;
 }
 
 function cardHtml(r){
   const i=records.indexOf(r);
+  if(r.kind==='file') return fileCardHtml(r,i);
   const isComm=r.kind==='comm';
   const typeOpts=(isComm?COMM_TYPES:NOTE_TYPES).map(t=>`<option ${t===r.type?'selected':''}>${t}</option>`).join('');
   const dupTag=r.state==='dup'?'<span class="kind" style="background:rgba(212,168,75,.16);color:var(--gold-light)">already imported</span>':'';
@@ -236,7 +256,7 @@ function cardHtml(r){
     <div class="card-top">
       <span class="kind ${r.kind}">${isComm?'COMM':'NOTE'}</span>
       ${dupTag}
-      <span class="raw">SF ${r.src} · ${r.sfId.slice(0,8)} · raw: “${(r.subject||'').slice(0,48)}”</span>
+      <span class="raw">SF ${r.sfId.slice(0,8)} · raw: “${(r.subject||'').slice(0,48)}”</span>
       <span class="author">logged by ${r.loggedBy||'—'}</span>
     </div>
     <div class="grid">
@@ -256,6 +276,33 @@ function cardHtml(r){
   </div>`;
 }
 
+function fileCardHtml(r,i){
+  const blob=fileBlobs[r.fileName];
+  const dupTag=r.state==='dup'?'<span class="kind" style="background:rgba(212,168,75,.16);color:var(--gold-light)">already imported</span>':'';
+  const doneTag=r.state==='ok'?'<span style="color:var(--green);font-weight:600">✓ Imported</span>':r.state==='skip'?'<span style="color:var(--orange)">Skipped</span>':'';
+  const thumb=(blob && r.isImage)?`<img src="${URL.createObjectURL(blob)}" style="width:90px;height:90px;object-fit:cover;border-radius:6px;border:1px solid var(--navy-mid)">`:`<div style="width:90px;height:90px;display:flex;align-items:center;justify-content:center;background:var(--navy);border-radius:6px;font-family:'JetBrains Mono',monospace;font-size:.8rem;color:var(--text-dim)">.${r.ext}</div>`;
+  const ready=blob?'':'<span style="color:var(--orange);font-size:.76rem">binary not loaded — pick the files folder above</span>';
+  return `<div class="card ${r.state==='ok'||r.state==='skip'?'done':''}" id="card-${i}">
+    <div class="card-top"><span class="kind note" style="background:rgba(91,141,239,.14);color:var(--blue);border-color:var(--blue)">FILE</span>${dupTag}
+      <span class="raw">${escapeAttr(r.title||'')}.${r.ext} ${ready}</span></div>
+    <div style="display:flex;gap:12px;align-items:flex-start">
+      ${thumb}
+      <div style="flex:1">
+        <div class="grid" style="grid-template-columns:1fr 1fr">
+          <div class="field full"><label>File name</label><input id="f-subject-${i}" value="${escapeAttr(r.title||'')}"></div>
+          <div class="field"><label>Community</label><select id="f-comm-${i}">${commOptions(r.communityId)}</select></div>
+          <div class="field"><label>Type</label><input value=".${r.ext}" readonly></div>
+        </div>
+        <div class="actions">
+          <button class="btn btn-green btn-sm" onclick="approveOne(${i})" ${blob?'':'disabled'}>${r.state==='dup'?'Import anyway':'Approve'}</button>
+          <button class="btn btn-skip btn-sm" onclick="skipOne(${i})">Skip</button>
+          <span class="msg" id="msg-${i}">${doneTag}</span>
+        </div>
+      </div>
+    </div>
+  </div>`;
+}
+
 function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
 function escapeAttr(s){return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():'';}
@@ -267,6 +314,20 @@ async function writeRecord(r,i){
   const subject=val('f-subject-'+i), body=val('f-body-'+i);
   const contactId=val('f-contact-'+i);
   try{
+    if(r.kind==='file'){
+      const blob=fileBlobs[r.fileName];
+      if(!blob){ document.getElementById('msg-'+i).textContent='Load the files folder first.'; return false; }
+      const name=(subject||r.title||r.fileName)+'.'+r.ext;
+      const path=`${communityId}/sf_${Date.now()}_${(subject||r.fileName).replace(/[^\w.\-]+/g,'_')}.${r.ext}`;
+      const up=await supa.storage.from('community-files').upload(path,blob,{upsert:false});
+      if(up.error) throw up.error;
+      const ins=await supa.from('community_files').insert({
+        community_id:communityId, file_name:name, file_type:blob.type||r.ext,
+        storage_path:path, source:'salesforce_import', sf_id:r.sfId
+      });
+      if(ins.error){ await supa.storage.from('community-files').remove([path]); throw ins.error; }
+      existingSf.add(r.sfId); return true;
+    }
     if(r.kind==='comm'){
       const ins=await supa.from('comms').insert({
         date, comm_type:type, subject, text:(body||subject).slice(0,400), full_body:body,
@@ -320,10 +381,14 @@ async function approveAll(){
 }
 
 async function resetImports(){
-  if(!confirm('Delete ALL comms and notes previously imported from Salesforce (source = salesforce_import)? This cannot be undone.'))return;
+  if(!confirm('Delete ALL comms, notes, and files previously imported from Salesforce (source = salesforce_import)? This cannot be undone.'))return;
+  const cf=await supa.from('community_files').select('id,storage_path').eq('source','salesforce_import');
+  const paths=(cf.data||[]).map(r=>r.storage_path).filter(Boolean);
+  if(paths.length){ try{ await supa.storage.from('community-files').remove(paths); }catch(e){} }
   const a=await supa.from('comms').delete().eq('source','salesforce_import');
   const b=await supa.from('notes').delete().eq('source','salesforce_import');
-  if(a.error||b.error){ alert('Reset failed: '+((a.error||b.error).message)); return; }
+  const c=await supa.from('community_files').delete().eq('source','salesforce_import');
+  if(a.error||b.error||c.error){ alert('Reset failed: '+((a.error||b.error||c.error).message)); return; }
   existingSf=new Set();
   records.forEach(r=>{ if(r.state==='dup') r.state='pending'; });
   counts={ok:0,skip:0,dup:0};
