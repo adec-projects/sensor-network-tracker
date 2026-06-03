@@ -10551,12 +10551,20 @@ function renderCommunityOverview(communityId) {
     // Recent comms (3 items)
     const commComms = comms.filter(c => allCommunityIds.includes(c.community) || (c.taggedCommunities && c.taggedCommunities.some(id => allCommunityIds.includes(id))))
         .sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')).slice(0, 3);
+    const _commGeneric = ['call', 'phone', 'phone call', 'called', 'email', 'emailed', 'site visit', 'visit', 'text', 'sms', 'other', 'log call'];
     const commsHtml = commComms.length > 0
-        ? commComms.map(c => `<div class="ov-timeline-item">
+        ? commComms.map(c => {
+            // Prefer the actual content; fall back to the title unless it's a
+            // generic echo of the type ("Call"), which we'd rather not repeat.
+            const body = (c.fullBody || '').trim();
+            const txt = (c.text || '').trim();
+            const preview = body || (_commGeneric.includes(txt.toLowerCase()) ? '' : txt);
+            return `<div class="ov-timeline-item">
             <span class="ov-timeline-type">${c.commType || c.type}</span>
-            <span class="ov-timeline-text">${escapeHtml((c.text || '').substring(0, 100))}${(c.text || '').length > 100 ? '...' : ''}</span>
+            <span class="ov-timeline-text">${preview ? escapeHtml(preview.substring(0, 100)) + (preview.length > 100 ? '…' : '') : '<span style="color:var(--slate-300)">—</span>'}</span>
             <span class="ov-timeline-date">${formatDate(c.date || c.createdAt)}</span>
-        </div>`).join('')
+        </div>`;
+        }).join('')
         : '<p class="ov-empty">No communications yet</p>';
 
     // Top contacts (2) — primary contacts first, then alphabetical
