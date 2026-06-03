@@ -176,12 +176,20 @@ async function loadRef(){
   existingSf=new Set([...(ec.data||[]),...(en.data||[]),...(ef.data||[])].map(r=>r.sf_id));
 }
 
+const ORG_WORDS=new Set(['village','traditional','council','tribal','tribe','native','association','corporation','school','elementary','city','borough','center','health','district','community','company','services','department','office','island','high','middle','public','consortium','regional','area']);
+const words=s=>String(s||'').toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
 function resolveCommunity(rec){
   if(rec.accountName){
     const a=norm(rec.accountName);
     let m=communities.find(c=>norm(c.name)===a);
     if(!m) m=communities.find(c=>a.startsWith(norm(c.name))||norm(c.name).startsWith(a));
     if(m) return m.id;
+    // shared distinctive word: "Chickaloon Village..." -> "Sutton-Alpine/Chickaloon"
+    const toks=words(rec.accountName).filter(w=>w.length>=5 && !ORG_WORDS.has(w));
+    for(const t of toks){
+      const c=communities.find(x=>words(x.name).includes(t));
+      if(c) return c.id;
+    }
   }
   // fallback: a community name appears in the subject ("Installed in Bethel")
   const subj=norm(rec.subject);
