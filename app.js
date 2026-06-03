@@ -8221,7 +8221,7 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
             ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote', 'audit')}
         </div>
-        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}${audit.analysisFilePath ? `<div style="margin-top:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap"><a href="#" onclick="previewAuditExcel('${escapeHtml(audit.analysisFilePath)}','${encodeURIComponent(audit.analysisFileName || '')}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128196; Preview Excel</a><a href="#" onclick="downloadAuditSource('${escapeHtml(audit.analysisFilePath)}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128206; Download${audit.analysisFileName ? ` (${escapeHtml(audit.analysisFileName)})` : ''}</a></div>` : ''}</div>
+        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label><div style="overflow-x:auto">${analysisHtml}</div>${audit.analysisFilePath ? `<div style="margin-top:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap"><a href="#" onclick="previewAuditExcel('${escapeHtml(audit.analysisFilePath)}','${encodeURIComponent(audit.analysisFileName || '')}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128196; Preview Excel</a><a href="#" onclick="downloadAuditSource('${escapeHtml(audit.analysisFilePath)}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128206; Download${audit.analysisFileName ? ` (${escapeHtml(audit.analysisFileName)})` : ''}</a></div>` : ''}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
             <label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>
             <div id="audit-photos-grid" class="audit-photos-grid">${renderAuditPhotos(audit.id, audit.communityId)}</div>
@@ -8820,7 +8820,7 @@ const DQI_RANGE_LABELS = {
 function dqiCellStyle(ok) {
     const c = ok ? 'var(--dqi-pass)' : 'var(--dqi-fail)';
     const bg = ok ? 'var(--dqi-pass-bg)' : 'var(--dqi-fail-bg)';
-    return `color:#111;background:${bg};outline:2px solid ${c};outline-offset:-2px;border-radius:3px;padding:1px 6px;font-weight:600`;
+    return `color:#111;background:${bg};outline:2px solid ${c};outline-offset:-2px;border-radius:3px;padding:0 4px;font-weight:600`;
 }
 
 function renderEquationLine(r) {

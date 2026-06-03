@@ -3153,7 +3153,7 @@ tr:hover .contact-delete-btn {
 }
 .dqi-overview-audit-body {
     display: grid;
-    grid-template-columns: 110px 1fr;
+    grid-template-columns: 110px minmax(0, 1fr);
     gap: 14px;
     align-items: start;
 }
@@ -3319,7 +3319,7 @@ table.dqi-overview-table th:last-child { text-align: center; }
     margin-top: 1px;
 }
 table.dqi-overview-table td {
-    padding: 6px;
+    padding: 5px 5px;
     border-bottom: 1px solid var(--slate-100);
     font-family: var(--font-mono);
     font-size: 12px;
