@@ -8242,10 +8242,14 @@ async function downloadAuditSource(storagePath) {
 }
 
 // In-page Excel preview: fetch the workbook via signed URL, parse it with
-// SheetJS, and render each sheet as an HTML table in a big modal overlay.
-let _excelWb = null, _excelName = '';
+// Microsoft's Office Online viewer, which renders the real workbook
+// (formatting, multiple sheets, and the embedded charts) read-only in an
+// iframe — the same "view it normally, then download" experience as Google
+// Drive. The viewer fetches the file from the signed URL, so the file is
+// briefly readable by Microsoft's renderer; for internal audit sheets that's
+// acceptable, and nothing is editable.
 async function previewAuditExcel(storagePath, fileNameEnc) {
-    _excelName = fileNameEnc ? decodeURIComponent(fileNameEnc) : 'Audit Excel';
+    const name = fileNameEnc ? decodeURIComponent(fileNameEnc) : 'Audit Excel';
     let o = document.getElementById('excel-preview-overlay');
     if (!o) {
         o = document.createElement('div');
@@ -8255,33 +8259,21 @@ async function previewAuditExcel(storagePath, fileNameEnc) {
         document.body.appendChild(o);
     }
     o.classList.add('open');
-    o.innerHTML = `<div class="excel-preview-box"><div class="excel-preview-head"><strong>${escapeHtml(_excelName)}</strong><button class="btn btn-sm" style="margin-left:auto" onclick="closeExcelPreview()">Close</button></div><div style="padding:24px;color:var(--slate-400)">Loading workbook&hellip;</div></div>`;
+    const head = `<div class="excel-preview-head"><strong>${escapeHtml(name)}</strong><span style="color:var(--slate-400);font-size:12px;margin-left:8px">read-only preview</span><button class="btn btn-sm" style="margin-left:auto" onclick="downloadAuditSource('${escapeHtml(storagePath)}')">Download</button><button class="btn btn-sm" onclick="closeExcelPreview()">Close</button></div>`;
+    o.innerHTML = `<div class="excel-preview-box">${head}<div class="excel-preview-content" style="padding:0;display:flex;align-items:center;justify-content:center;color:var(--slate-400)">Loading preview&hellip;</div></div>`;
     try {
         const url = await db.getSignedUrl(storagePath);
-        const buf = await (await fetch(url)).arrayBuffer();
-        _excelWb = XLSX.read(new Uint8Array(buf), { type: 'array' });
-        renderExcelPreview(0);
+        const viewer = 'https://view.officeapps.live.com/op/embed.aspx?src=' + encodeURIComponent(url);
+        const content = o.querySelector('.excel-preview-content');
+        content.innerHTML = `<iframe src="${viewer}" style="width:100%;height:100%;border:0" allowfullscreen></iframe>`;
     } catch (e) {
         const box = o.querySelector('.excel-preview-box');
-        if (box) box.innerHTML = `<div class="excel-preview-head"><strong>Preview failed</strong><button class="btn btn-sm" style="margin-left:auto" onclick="closeExcelPreview()">Close</button></div><div style="padding:24px;color:var(--aurora-rose)">${escapeHtml(e.message || 'Could not load file')}</div>`;
+        if (box) box.innerHTML = `${head}<div class="excel-preview-content" style="color:var(--aurora-rose)">${escapeHtml(e.message || 'Could not load file')}</div>`;
     }
-}
-function renderExcelPreview(sheetIdx) {
-    if (!_excelWb) return;
-    const o = document.getElementById('excel-preview-overlay');
-    if (!o) return;
-    const name = _excelWb.SheetNames[sheetIdx];
-    const tabs = _excelWb.SheetNames.map((n, i) => `<button class="excel-tab${i === sheetIdx ? ' active' : ''}" onclick="renderExcelPreview(${i})">${escapeHtml(n)}</button>`).join('');
-    const table = XLSX.utils.sheet_to_html(_excelWb.Sheets[name]);
-    o.querySelector('.excel-preview-box').innerHTML = `
-        <div class="excel-preview-head"><strong>${escapeHtml(_excelName)}</strong><span style="color:var(--slate-400);font-size:12px;margin-left:8px">${escapeHtml(name)}</span><button class="btn btn-sm" style="margin-left:auto" onclick="closeExcelPreview()">Close</button></div>
-        <div class="excel-preview-tabs">${tabs}</div>
-        <div class="excel-preview-content">${table}</div>`;
 }
 function closeExcelPreview() {
     const o = document.getElementById('excel-preview-overlay');
     if (o) { o.classList.remove('open'); o.innerHTML = ''; }
-    _excelWb = null;
 }
 
 function saveAuditField(auditId, field, value) {
