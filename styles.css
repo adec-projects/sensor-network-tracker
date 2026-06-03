@@ -3316,6 +3316,29 @@ tr:hover .contact-delete-btn {
 .details-save-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .details-save-msg { font-size: 12px; font-weight: 600; }
 
+/* Hover-to-edit details: read-only text that becomes an editor on click. */
+.details-view-block {
+    cursor: pointer;
+    border-radius: var(--radius-sm);
+    padding: 6px 8px;
+    margin: 2px -8px 0;
+    border: 1px solid transparent;
+    transition: background 0.12s, border-color 0.12s;
+}
+.details-view-block:hover { background: var(--slate-50); border-color: var(--slate-200); }
+.details-text { font-size: 13px; color: var(--slate-700); line-height: 1.5; white-space: pre-wrap; word-break: break-word; }
+.details-text.empty { color: var(--slate-400); font-style: italic; }
+.details-edit-hint {
+    float: right;
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--navy-500, #45597d);
+    cursor: pointer;
+    opacity: 0;
+    transition: opacity 0.12s;
+}
+.details-card:hover .details-edit-hint { opacity: 1; }
+
 .dqi-overview-table-wrap { overflow-x: auto; }
 table.dqi-overview-table {
     width: 100%;
