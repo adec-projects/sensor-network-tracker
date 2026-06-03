@@ -8029,7 +8029,15 @@ function confirmCloseTicket() {
 
 // ===== AUDITS =====
 const AUDIT_STATUSES = ['Scheduled', 'In Progress', 'Finished, Analysis Pending', 'Complete'];
-const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Finished, Analysis Pending': 'as-analysis', 'Complete': 'as-verified' };
+// Terminal status used for historical audits imported from Excel (Salesforce
+// migration). Kept out of AUDIT_STATUSES so it doesn't add a step to the
+// normal flow, but recognized everywhere a status is rendered or gated.
+const EXCEL_COMPLETE = 'Complete, Excel Analysis';
+const AUDIT_STATUS_CSS = { 'Scheduled': 'as-scheduled', 'In Progress': 'as-in-progress', 'Finished, Analysis Pending': 'as-analysis', 'Complete': 'as-verified', 'Complete, Excel Analysis': 'as-verified' };
+// "Done" = terminal. Excel-complete audits show as fully complete in the
+// progress bar (last step) even though they're not in the linear flow.
+function isAuditDone(status) { return status === 'Complete' || status === EXCEL_COMPLETE; }
+function auditStepIdx(status) { return status === EXCEL_COMPLETE ? AUDIT_STATUSES.length - 1 : AUDIT_STATUSES.indexOf(status); }
 const AUDIT_PARAMETERS = [
     { key: 'pm25', label: 'PM2.5', labelHtml: 'PM<sub>2.5</sub>', unit: '\u00B5g/m\u00B3', hasTimeSeries: true },
     { key: 'pm10', label: 'PM10', labelHtml: 'PM<sub>10</sub>', unit: '\u00B5g/m\u00B3', hasTimeSeries: true },
@@ -8059,7 +8067,7 @@ function renderAuditsView() {
     if (statusFilter) filtered = filtered.filter(a => a.status === statusFilter);
 
     const pipeline = document.getElementById('audit-pipeline');
-    const statusesToShow = statusFilter ? [statusFilter] : AUDIT_STATUSES;
+    const statusesToShow = statusFilter ? [statusFilter] : [...AUDIT_STATUSES, EXCEL_COMPLETE];
     pipeline.innerHTML = statusesToShow.map(status => {
         const items = filtered.filter(a => a.status === status);
         return `<div class="audit-pipeline-column">
@@ -8073,7 +8081,7 @@ function renderAuditCard(audit) {
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
     const dateRange = audit.startDate ? `${new Date(audit.startDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })} - ${new Date(audit.endDate + 'T00:00').toLocaleDateString('en-US', { timeZone: AK_TZ })}` : '—';
     const progress = AUDIT_STATUSES.map((st, i) => {
-        const idx = AUDIT_STATUSES.indexOf(audit.status);
+        const idx = auditStepIdx(audit.status);
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
         return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
     }).join('');
@@ -8171,12 +8179,13 @@ function openAuditDetail(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
-    const idx = AUDIT_STATUSES.indexOf(audit.status);
-    const isAuditComplete = audit.status === 'Complete';
+    const idx = auditStepIdx(audit.status);
+    const flowIdx = AUDIT_STATUSES.indexOf(audit.status);
+    const isAuditComplete = isAuditDone(audit.status);
     const nextStatus = isAuditComplete
         ? null
-        : (idx >= 0 && idx < AUDIT_STATUSES.length - 1
-            ? AUDIT_STATUSES[idx + 1]
+        : (flowIdx >= 0 && flowIdx < AUDIT_STATUSES.length - 1
+            ? AUDIT_STATUSES[flowIdx + 1]
             : 'Complete');
     const progress = AUDIT_STATUSES.map((st, i) => {
         const state = i < idx ? 'completed' : i === idx ? 'current' : 'pending';
@@ -8194,7 +8203,7 @@ function openAuditDetail(auditId) {
         <div style="padding:12px 28px 0"><div class="ticket-steps ticket-steps-detail">${progress}</div></div>
         <div class="ticket-detail-actions" style="border-top:none">
             ${nextStatus ? `<button class="btn btn-primary" onclick="advanceAuditStatus('${audit.id}')">Advance to: ${nextStatus}</button>` : ''}
-            ${idx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
+            ${flowIdx > 0 ? `<a class="undo-link" onclick="revertAuditStatus('${audit.id}')">Undo</a>` : ''}
             <span class="action-spacer"></span>
             ${audit.status === 'Finished, Analysis Pending' || audit.status === 'Complete' ? `<button class="btn" onclick="beginAnalysis('${audit.id}')" style="border-color:var(--navy-500);color:var(--navy-500)">${Object.keys(audit.analysisResults || {}).length > 0 ? 'View Analysis' : 'Begin Analysis'}</button>` : ''}
             ${Object.keys(audit.analysisResults || {}).length > 0 ? `<button class="btn" onclick="reuploadAuditData('${audit.id}')" style="font-size:11px;opacity:0.7">Re-upload Data</button>` : ''}
@@ -8275,7 +8284,7 @@ function saveAuditConductors(auditId, installVal, takedownVal) {
 function advanceAuditStatus(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
-    if (audit.status === 'Complete') return;
+    if (isAuditDone(audit.status)) return;
     const idx = AUDIT_STATUSES.indexOf(audit.status);
     const oldStatus = audit.status;
     const newStatus = (idx >= 0 && idx < AUDIT_STATUSES.length - 1)

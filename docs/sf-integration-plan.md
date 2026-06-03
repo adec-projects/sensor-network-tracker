@@ -252,5 +252,14 @@ The migration splits into two independent tracks:
   - **Dedupe against the app:** the importer loads existing `audits` and **skips any file whose
     community + audit date already exists on the app** (date-specific match), so audits already
     entered aren't duplicated.
+  - **Multiple DQI tables per file:** 4 files contain both an original and a corrected table
+    (`Graphs` + `Graphs - Spikes Removed`, `Graphs` + `Modified Graphs`, `Hour Data` +
+    `Hour Data Edited`, `Hour Data` + `Graphs`). The importer extracts **all** tables, defaults
+    to the corrected one, and shows a **per-card sheet picker** so the exact official numbers can
+    be confirmed before approving. (Cordova/Kodiak PM2.5 and Goldstream CO differ between sheets.)
+  - **Status:** imported audits get the terminal status **`Complete, Excel Analysis`** (registered
+    in app.js so it renders as a green/done badge and its own Audits column) to distinguish them
+    from go-forward audits. A **Reset** button deletes all `source='salesforce_import'` audits and
+    their uploaded Excels so the batch can be re-run cleanly.
 - **Track B — Communities (comms, notes, files).** Driven by the full Salesforce Data Export
   (`sf-export/`). Per-community review importer. SF "audit" timeline entries ignored here.

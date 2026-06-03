@@ -82,6 +82,7 @@
         <label style="font-size:.72rem;color:var(--text-dim);display:block;margin-bottom:4px">Select audit .xls files (or the whole Audit Sheets folder)</label>
         <input type="file" id="files" accept=".xls,.xlsx" multiple onchange="onFiles(this.files)" style="margin:0;width:auto">
       </div>
+      <button class="btn btn-ghost" onclick="resetImports()" title="Delete every audit previously imported from Salesforce and its uploaded Excel, so you can start over">&#8635; Reset imported</button>
       <div class="counts">
         <span class="c-app">On app: <b id="n-app">0</b></span>
         <span class="c-dup">Duplicates: <b id="n-dup">0</b></span>
@@ -176,8 +177,12 @@ function paramKey(label){
   return null; // temp / humidity / unknown -> dropped
 }
 
-// Locate the DQI summary table in any sheet and return {key:{r2,slope,intercept,sd,rmse}}
-function extractDQI(wb){
+// Locate EVERY DQI summary table in the workbook (one per sheet that has one).
+// Files sometimes contain an original table plus a corrected one (e.g.
+// "Graphs" + "Graphs - Spikes Removed"); we surface all so the reviewer
+// picks the official sheet. Returns [{sheet,results,hasSDR}].
+function extractDQIAll(wb){
+  const candidates=[];
   for(const sn of wb.SheetNames){
     const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
     for(let r=0;r<Math.min(12,aoa.length);r++){
@@ -202,11 +207,20 @@ function extractDQI(wb){
           res[key]={r2:num(ci.r2),slope:num(ci.slope),intercept:num(ci.intercept),
                     sd:ci.sd!=null?num(ci.sd):null, rmse:ci.rmse!=null?num(ci.rmse):null};
         }
-        if(Object.keys(res).length>=2) return {sheet:sn,results:res,hasSDR:(ci.sd!=null&&ci.rmse!=null)};
+        if(Object.keys(res).length>=2){ candidates.push({sheet:sn,results:res,hasSDR:(ci.sd!=null&&ci.rmse!=null)}); break; }
       }
     }
   }
-  return null;
+  return candidates;
+}
+// Default to a corrected/edited table when one exists (later sheet wins ties).
+function defaultDqiIdx(cands){
+  let best=0, bestPri=-1;
+  cands.forEach((c,i)=>{
+    const pri=/spike|modif|edit|final|clean|remov|correct/i.test(c.sheet)?2:1;
+    if(pri>=bestPri){bestPri=pri;best=i;}
+  });
+  return best;
 }
 
 function checkDQI(r){
@@ -261,12 +275,13 @@ async function onFiles(fileList){
       const buf=await file.arrayBuffer();
       const wb=XLSX.read(new Uint8Array(buf),{type:'array'});
       const meta=parseFilename(file.name);
-      const dqi=extractDQI(wb);
+      const candidates=extractDQIAll(wb);
+      const dqiIndex=defaultDqiIdx(candidates);
       const communityId=guessCommunityId(meta.comm);
       const dup=findDuplicate(meta,communityId);
-      parsed.push({file,meta,dqi,communityId,dup,state:dup?'dup':'pending'});
+      parsed.push({file,meta,candidates,dqiIndex,communityId,dup,state:dup?'dup':'pending'});
     }catch(e){
-      parsed.push({file,meta:parseFilename(file.name),dqi:null,communityId:'',dup:null,state:'pending',error:e.message});
+      parsed.push({file,meta:parseFilename(file.name),candidates:[],dqiIndex:0,communityId:'',dup:null,state:'pending',error:e.message});
     }
   }
   parsed.sort((a,b)=>a.file.name.localeCompare(b.file.name));
@@ -281,11 +296,20 @@ function renderCards(){
   const root=document.getElementById('cards'); root.innerHTML='';
   parsed.forEach((p,i)=>{
     const m=p.meta;
+    const active=p.candidates[p.dqiIndex]||null;
     const dupBadge=p.dup?`<span class="badge dup">Already on app — ${p.dup.start_date||''}</span>`:'';
-    const tblBadge=p.dqi?`<span class="badge ok">DQI table found · ${p.dqi.sheet}</span>`:`<span class="badge warn">No DQI table — create empty / skip</span>`;
+    const tblBadge=active?`<span class="badge ok">DQI table · ${active.sheet}</span>`:`<span class="badge warn">No DQI table — create empty / skip</span>`;
+    const multiBadge=p.candidates.length>1?`<span class="badge warn">${p.candidates.length} tables in file — verify sheet</span>`:'';
     const errBadge=p.error?`<span class="badge warn">Parse error: ${p.error}</span>`:'';
+    let sheetSel='';
+    if(p.candidates.length>1){
+      sheetSel=`<div style="margin:10px 0 2px"><label style="font-size:.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em">DQI source sheet</label>
+        <select onchange="setSheet(${i},this.value)" style="margin-top:3px">
+          ${p.candidates.map((c,ci)=>`<option value="${ci}" ${ci===p.dqiIndex?'selected':''}>${c.sheet}</option>`).join('')}
+        </select></div>`;
+    }
     let dqiHtml='';
-    if(p.dqi){
+    if(active){
       dqiHtml=`<table class="dqi"><thead><tr><th>Parameter</th>
         <th>R²<span class="rng">${DQI_RANGE.r2}</span></th>
         <th>Slope<span class="rng">${DQI_RANGE.slope}</span></th>
@@ -294,7 +318,7 @@ function renderCards(){
         <th>RMSE<span class="rng">${DQI_RANGE.rmse}</span></th>
         <th>DQI</th></tr></thead><tbody>`;
       for(const par of APP_PARAMS){
-        const r=p.dqi.results[par.key]; if(!r)continue;
+        const r=active.results[par.key]; if(!r)continue;
         const d=checkDQI(r);
         const cell=(v,ok)=>`<td class="${v==null?'':(ok?'pass':'fail')}">${v==null?'—':v}</td>`;
         dqiHtml+=`<tr><td>${par.label}</td>${cell(r.r2,d.r2)}${cell(r.slope,d.slope)}${cell(r.intercept,d.intercept)}${cell(r.sd,d.sd)}${cell(r.rmse,d.rmse)}
@@ -308,7 +332,7 @@ function renderCards(){
     card.innerHTML=`
       <div class="card-head">
         <strong>${m.comm||'(unknown community)'} ${m.cpod?('· pod '+m.cpod):''}</strong>
-        <span style="display:flex;gap:6px;flex-wrap:wrap">${dupBadge}${tblBadge}${errBadge}</span>
+        <span style="display:flex;gap:6px;flex-wrap:wrap">${dupBadge}${tblBadge}${multiBadge}${errBadge}</span>
       </div>
       <div class="fname">${p.file.name}</div>
       <div class="meta-grid">
@@ -317,9 +341,9 @@ function renderCards(){
         <div><label>Community Pod</label><input id="f-cpod-${i}" value="${podId(m.cpod)}"></div>
         <div><label>Start Date</label><input id="f-start-${i}" type="date" value="${m.start}"></div>
         <div><label>End Date</label><input id="f-end-${i}" type="date" value="${m.end}"></div>
-        <div><label>Status</label><input id="f-status-${i}" value="${m.status}"></div>
+        <div><label>Status</label><input id="f-status-${i}" value="${active ? 'Complete, Excel Analysis' : m.status}"></div>
       </div>
-      ${dqiHtml}
+      ${sheetSel}${dqiHtml}
       <div class="actions">
         <button class="btn btn-green" onclick="approve(${i})">${p.dup?'Import anyway':'Approve & Create'}</button>
         <button class="btn btn-skip" onclick="skip(${i})">Skip</button>
@@ -337,14 +361,15 @@ async function approve(i){
   const communityId=val('f-comm-'+i);
   if(!communityId){document.getElementById('msg-'+i).textContent='Pick a community first.';return;}
   const startDate=val('f-start-'+i), endDate=val('f-end-'+i);
-  const analysisResults=p.dqi?buildAnalysisResults(p.dqi):{};
+  const active=p.candidates[p.dqiIndex]||null;
+  const analysisResults=active?buildAnalysisResults(active):{};
   const hasResults=Object.keys(analysisResults).length>0;
   const communityName=(communities.find(c=>c.id===communityId)||{}).name||communityId;
   const row={
     audit_pod_id:val('f-apod-'+i)||null,
     community_pod_id:val('f-cpod-'+i)||null,
     community_id:communityId,
-    status:hasResults?(val('f-status-'+i)||'Complete'):'Finished, Analysis Pending',
+    status:hasResults?(val('f-status-'+i)||'Complete, Excel Analysis'):'Finished, Analysis Pending',
     start_date:startDate||null, end_date:endDate||null,
     conducted_by:'',
     analysis_results:analysisResults,
@@ -380,6 +405,22 @@ function skip(i){
   const card=document.getElementById('card-'+i); card.classList.add('done');
   card.querySelector('.actions').innerHTML='<span style="color:var(--orange);font-weight:600">Skipped</span>';
   render(); checkDone();
+}
+
+function setSheet(i,idx){ parsed[i].dqiIndex=+idx; renderCards(); }
+
+// Delete all previously SF-imported audits (and their uploaded Excel files)
+// so the whole batch can be re-run cleanly with corrected data/status.
+async function resetImports(){
+  if(!confirm('Delete ALL audits previously imported from Salesforce (source = salesforce_import), including their uploaded Excel files? This cannot be undone.'))return;
+  const {data,error}=await supa.from('audits').select('id,analysis_file_path').eq('source','salesforce_import');
+  if(error){alert('Reset failed: '+error.message);return;}
+  const paths=(data||[]).map(a=>a.analysis_file_path).filter(Boolean);
+  if(paths.length){ try{ await supa.storage.from('community-files').remove(paths); }catch(e){} }
+  const del=await supa.from('audits').delete().eq('source','salesforce_import');
+  if(del.error){alert('Reset failed: '+del.error.message);return;}
+  await loadRefData();
+  alert(`Reset complete — removed ${(data||[]).length} imported audit(s). Re-select your files to start over.`);
 }
 
 function render(){
