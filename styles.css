@@ -3313,6 +3313,8 @@ tr:hover .contact-delete-btn {
     color: var(--slate-400);
     margin: 10px 0 4px;
 }
+.details-save-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
+.details-save-msg { font-size: 12px; font-weight: 600; }
 
 .dqi-overview-table-wrap { overflow-x: auto; }
 table.dqi-overview-table {

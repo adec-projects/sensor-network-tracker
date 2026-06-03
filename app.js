@@ -632,18 +632,35 @@ function showSuccessToast(text) {
 
 function persistSensor(s) { return db.upsertSensor(s).catch(handleSaveError); }
 
-// Persistent free-text details on a sensor (lock combos, access notes, etc.)
-function saveSensorDetails(id, value) {
+// Explicit-save handlers for the Notes/Details boxes, with inline feedback so
+// a save (or a real error) is visible instead of silently failing on blur.
+async function saveSensorDetailsBtn(id) {
     const s = sensors.find(x => x.id === id);
     if (!s) return;
-    s.details = value;
-    persistSensor(s);
+    const ta = document.getElementById('sensor-details-' + id);
+    const msg = document.getElementById('sensor-details-msg-' + id);
+    s.details = ta ? ta.value : (s.details || '');
+    if (msg) { msg.textContent = 'Saving…'; msg.style.color = 'var(--slate-400)'; }
+    try {
+        await db.upsertSensor(s);
+        if (msg) { msg.textContent = 'Saved ✓'; msg.style.color = 'var(--dqi-pass)'; setTimeout(() => { if (msg) msg.textContent = ''; }, 2500); }
+    } catch (e) {
+        if (msg) { msg.textContent = 'Save failed: ' + (e?.message || e); msg.style.color = 'var(--aurora-rose)'; }
+    }
 }
-// Persistent community details / network availability (raw rows, snake_case keys)
-function saveCommunityDetails(id, field, value) {
+async function saveCommunityDetailsBtn(id) {
     const c = COMMUNITIES.find(x => x.id === id);
-    if (c) c[field] = value;
-    db.updateCommunity(id, { [field]: value }).catch(handleSaveError);
+    const details = document.getElementById('comm-details-' + id)?.value || '';
+    const network_availability = document.getElementById('comm-netavail-' + id)?.value || '';
+    const msg = document.getElementById('comm-details-msg-' + id);
+    if (msg) { msg.textContent = 'Saving…'; msg.style.color = 'var(--slate-400)'; }
+    try {
+        await db.updateCommunity(id, { details, network_availability });
+        if (c) { c.details = details; c.network_availability = network_availability; }
+        if (msg) { msg.textContent = 'Saved ✓'; msg.style.color = 'var(--dqi-pass)'; setTimeout(() => { if (msg) msg.textContent = ''; }, 2500); }
+    } catch (e) {
+        if (msg) { msg.textContent = 'Save failed: ' + (e?.message || e); msg.style.color = 'var(--aurora-rose)'; }
+    }
 }
 function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
 function persistNote(n) { return db.insertNote(n).catch(handleSaveError); }
@@ -2699,7 +2716,11 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
             <div class="info-item" style="grid-column:1/-1;border-top:1px solid var(--slate-200);padding-top:10px;margin-top:6px"><label>Notes / Details</label>
-                <textarea class="details-input" placeholder="Lock combos, access notes — anything to keep handy" onchange="saveSensorDetails('${s.id}', this.value)">${escapeHtml(s.details || '')}</textarea>
+                <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Lock combos, access notes — anything to keep handy">${escapeHtml(s.details || '')}</textarea>
+                <div class="details-save-row">
+                    <button class="btn btn-primary btn-sm" onclick="saveSensorDetailsBtn('${s.id}')">Save</button>
+                    <span id="sensor-details-msg-${s.id}" class="details-save-msg"></span>
+                </div>
             </div>
             ${lastEdited ? `<div class="info-item" style="grid-column:1/-1;font-size:12px;color:var(--slate-400);border-top:1px solid var(--slate-100);padding-top:8px;margin-top:4px">${lastEdited}${s.active === false ? ' · <span style="color:var(--aurora-rose);font-weight:600">ARCHIVED</span>' : ''}</div>` : ''}
             <div class="info-item" style="grid-column:1/-1;text-align:right;margin-top:4px">
@@ -10611,9 +10632,13 @@ function renderCommunityOverview(communityId) {
             </div>
             <div class="ov-card">
                 <h3 class="ov-card-title">Notes / Details</h3>
-                <textarea class="details-input" placeholder="Lock combos, gate codes, access notes — anything to keep handy" onchange="saveCommunityDetails('${communityId}','details',this.value)">${escapeHtml(community.details || '')}</textarea>
+                <textarea id="comm-details-${communityId}" class="details-input" placeholder="Lock combos, gate codes, access notes — anything to keep handy">${escapeHtml(community.details || '')}</textarea>
                 <h4 class="details-subhead">Network Availability</h4>
-                <textarea class="details-input" placeholder="Wi-Fi / cell networks available in this community" onchange="saveCommunityDetails('${communityId}','network_availability',this.value)">${escapeHtml(community.network_availability || '')}</textarea>
+                <textarea id="comm-netavail-${communityId}" class="details-input" placeholder="Wi-Fi / cell networks available in this community">${escapeHtml(community.network_availability || '')}</textarea>
+                <div class="details-save-row">
+                    <button class="btn btn-primary btn-sm" onclick="saveCommunityDetailsBtn('${communityId}')">Save</button>
+                    <span id="comm-details-msg-${communityId}" class="details-save-msg"></span>
+                </div>
             </div>
             <div class="ov-card ov-card-wide">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-comms')">Recent Communications <span class="ov-card-expand">&rarr;</span></h3>
