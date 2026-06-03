@@ -4433,9 +4433,11 @@ function renderTimeline(containerId, items) {
             : '';
 
         const createdAt = item.createdAt || item.created_at || '';
-        const attribution = item.createdBy
-            ? `<div class="timeline-attribution">Logged by ${item.createdBy}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
-            : '';
+        const attribution = item.source === 'salesforce_import'
+            ? `<div class="timeline-attribution">Created by ${item.loggedBy ? escapeHtml(item.loggedBy) : 'Unknown'} <span class="sf-import-badge" title="Imported from Salesforce">SF import</span></div>`
+            : item.createdBy
+                ? `<div class="timeline-attribution">Logged by ${item.createdBy}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
+                : '';
 
         const isNote = !item.commType;
         const isProgressNote = !!item._source;
