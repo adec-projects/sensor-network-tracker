@@ -8212,7 +8212,7 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
             ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote', 'audit')}
         </div>
-        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}</div>
+        <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label>${analysisHtml}${audit.analysisFilePath ? `<div style="margin-top:10px"><a href="#" onclick="downloadAuditSource('${escapeHtml(audit.analysisFilePath)}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128206; Download source Excel${audit.analysisFileName ? ` (${escapeHtml(audit.analysisFileName)})` : ''}</a></div>` : ''}</div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Photos</label>
             <label class="btn btn-sm" style="cursor:pointer;margin-bottom:8px">Upload Photos <input type="file" accept="image/*" multiple style="display:none" onchange="uploadAuditPhotos('${audit.id}', '${audit.communityId}', this.files)"></label>
             <div id="audit-photos-grid" class="audit-photos-grid">${renderAuditPhotos(audit.id, audit.communityId)}</div>
@@ -8221,6 +8221,15 @@ function openAuditDetail(auditId) {
             <button class="btn btn-sm btn-danger" onclick="deleteAudit('${audit.id}')" style="font-size:11px;opacity:0.7">Delete Audit</button>
         </div>`;
     openModal('modal-audit-detail');
+}
+
+async function downloadAuditSource(storagePath) {
+    try {
+        const url = await db.getSignedUrl(storagePath);
+        if (url) window.open(url, '_blank');
+    } catch (e) {
+        showAlert ? showAlert('Could not open file', e.message) : alert('Could not open file: ' + e.message);
+    }
 }
 
 function saveAuditField(auditId, field, value) {
@@ -10916,7 +10925,7 @@ function renderAuditDqiOverview() {
             const photos = _getAuditPhotoFiles(audit.id, communityId);
             photoFilesByAudit[audit.id] = photos;
             const photoHtml = photos.length === 0
-                ? '<div class="dqi-overview-no-photo">No photo</div>'
+                ? `<label class="dqi-overview-no-photo dqi-photo-add" title="Upload audit photo" onclick="event.stopPropagation()"><span class="add-default">No photo</span><span class="add-hover">&#43; Add photo</span><input type="file" accept="image/*" multiple hidden onchange="uploadAuditPhotoOverview('${audit.id}','${communityId}',this.files)"></label>`
                 : `<img id="dqi-overview-photo-${audit.id}" src="" alt="Audit photo" style="background:var(--slate-100)" onclick="openStorageFile('${escapeHtml(photos[0].storagePath)}')">`;
             html += `<div class="dqi-overview-audit" onclick="openAuditDetail('${audit.id}')">
                 <div class="dqi-overview-audit-head">
@@ -11181,6 +11190,13 @@ async function deleteAuditPhoto(communityId, fileId, storagePath, auditId) {
         const grid = document.getElementById('audit-photos-grid');
         if (grid) grid.innerHTML = renderAuditPhotos(auditId, communityId);
     }, { danger: true });
+}
+
+// Hover-to-upload from the DQI overview's "No photo" slot. uploadAuditPhotos
+// updates the in-memory communityFiles cache, so we just re-render after.
+async function uploadAuditPhotoOverview(auditId, communityId, files) {
+    await uploadAuditPhotos(auditId, communityId, files);
+    if (typeof renderAuditDqiOverview === 'function') renderAuditDqiOverview();
 }
 
 async function uploadAuditPhotos(auditId, communityId, files) {

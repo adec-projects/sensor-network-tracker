@@ -533,6 +533,7 @@ const db = {
             analysisUploadDate: a.analysis_upload_date || null,
             analysisUploadedBy: a.analysis_uploaded_by || '',
             analysisChartData: a.analysis_chart_data || null,
+            analysisFilePath: a.analysis_file_path || '', analysisFileName: a.analysis_file_name || '',
             createdBy: a.profiles?.name || (a.created_by ? '[Deleted User]' : ''), createdById: a.created_by,
             createdAt: a.created_at, updatedAt: a.updated_at,
         }));

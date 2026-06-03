@@ -1,0 +1,396 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Audit Sheet Importer — Salesforce → Sensor Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root{
+    --navy:#1a2332; --navy-light:#243044; --navy-mid:#2d3d56; --gold:#d4a84b;
+    --gold-light:#e8c97a; --white:#fff; --text:#e8ecf1; --text-dim:#8899aa;
+    --green:#4caf50; --red:#e74c3c; --orange:#f39c12;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;padding:24px;}
+  .wrap{max-width:920px;margin:0 auto;}
+  h1{color:var(--gold);font-size:1.5rem;}
+  .subtitle{color:var(--text-dim);font-size:.9rem;margin-bottom:20px;}
+  a.doclink{color:var(--gold-light);font-size:.8rem;}
+  #login{background:var(--navy-light);border-radius:12px;padding:28px;max-width:380px;margin:40px auto;}
+  #login h2{color:var(--gold);font-size:1.1rem;margin-bottom:14px;}
+  input,select{width:100%;padding:9px 11px;border-radius:7px;border:1px solid var(--navy-mid);
+    background:var(--navy);color:var(--text);font-family:inherit;font-size:.9rem;margin-bottom:10px;}
+  select{cursor:pointer;}
+  input:focus,select:focus{outline:none;border-color:var(--gold);}
+  .btn{padding:9px 20px;border:none;border-radius:8px;font-family:inherit;font-weight:600;font-size:.9rem;cursor:pointer;transition:.15s;}
+  .btn:hover{transform:translateY(-1px);}
+  .btn-gold{background:var(--gold);color:var(--navy);}
+  .btn-green{background:var(--green);color:#fff;}
+  .btn-skip{background:var(--navy-mid);color:var(--text);}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--navy-mid);}
+  #err{color:var(--red);font-size:.85rem;}
+  .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--navy-light);
+    border-radius:10px;padding:16px;margin-bottom:16px;}
+  .counts{display:flex;gap:14px;margin-left:auto;font-size:.85rem;}
+  .counts b{font-family:'JetBrains Mono',monospace;}
+  .c-app{color:var(--text-dim);} .c-ok{color:var(--green);} .c-skip{color:var(--orange);} .c-dup{color:var(--gold-light);}
+  .card{background:var(--navy-light);border:1px solid var(--navy-mid);border-radius:12px;padding:20px;margin-bottom:16px;}
+  .card.done{opacity:.55;}
+  .card.dup{border-color:var(--gold);}
+  .card-head{display:flex;justify-content:space-between;align-items:center;gap:8px;flex-wrap:wrap;margin-bottom:6px;}
+  .fname{font-family:'JetBrains Mono',monospace;font-size:.78rem;color:var(--text-dim);word-break:break-all;}
+  .badge{font-size:.7rem;padding:3px 8px;border-radius:5px;font-weight:600;}
+  .badge.dup{background:rgba(212,168,75,.18);color:var(--gold-light);border:1px solid var(--gold);}
+  .badge.warn{background:rgba(243,156,18,.16);color:var(--orange);border:1px solid var(--orange);}
+  .badge.ok{background:rgba(76,175,80,.16);color:var(--green);border:1px solid var(--green);}
+  .meta-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:12px 0;}
+  .meta-grid label{font-size:.72rem;color:var(--text-dim);text-transform:uppercase;letter-spacing:.04em;display:block;margin-bottom:3px;}
+  .meta-grid input,.meta-grid select{margin-bottom:0;}
+  table.dqi{width:100%;border-collapse:collapse;font-size:.82rem;margin-top:8px;}
+  table.dqi th,table.dqi td{padding:5px 8px;text-align:right;border-bottom:1px solid var(--navy-mid);}
+  table.dqi th:first-child,table.dqi td:first-child{text-align:left;}
+  table.dqi th{color:var(--text-dim);font-weight:600;font-size:.72rem;}
+  .rng{font-weight:400;font-size:.66rem;color:var(--navy-mid);display:block;}
+  td.pass{color:var(--green);} td.fail{color:var(--red);font-weight:700;}
+  .verdict{font-weight:700;}
+  .actions{display:flex;gap:10px;margin-top:14px;}
+  .note-line{font-size:.8rem;color:var(--text-dim);margin-top:6px;}
+  #done-msg{background:var(--navy-light);border-radius:12px;padding:30px;text-align:center;margin-top:16px;}
+  #done-msg h2{color:var(--green);}
+  .hidden{display:none;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Audit Sheet Importer</h1>
+  <p class="subtitle">Pulls the DQI table from each Salesforce audit Excel and creates a real audit record. &nbsp;<a class="doclink" href="docs/sf-integration-plan.md">spec</a></p>
+
+  <div id="login">
+    <h2>Sign In</h2>
+    <input type="email" id="email" placeholder="Email" autocomplete="username">
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn btn-gold" style="width:100%" onclick="doLogin()">Sign In</button>
+    <div id="err"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="toolbar">
+      <div>
+        <label style="font-size:.72rem;color:var(--text-dim);display:block;margin-bottom:4px">Select audit .xls files (or the whole Audit Sheets folder)</label>
+        <input type="file" id="files" accept=".xls,.xlsx" multiple onchange="onFiles(this.files)" style="margin:0;width:auto">
+      </div>
+      <div class="counts">
+        <span class="c-app">On app: <b id="n-app">0</b></span>
+        <span class="c-dup">Duplicates: <b id="n-dup">0</b></span>
+        <span class="c-ok">Imported: <b id="n-ok">0</b></span>
+        <span class="c-skip">Skipped: <b id="n-skip">0</b></span>
+      </div>
+    </div>
+    <div id="cards"></div>
+    <div id="done-msg" class="hidden"><h2>All files reviewed.</h2><p class="note-line">You can re-run any time — already-imported audits are detected and skipped.</p></div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL='https://uejryzioxogquflijgyf.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM';
+const supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+// ---- DQI config (mirrors app.js DQI_THRESHOLDS / AUDIT_PARAMETERS) ----
+const DQI_THRESHOLDS={r2:{min:0.70},slope:{min:0.65,max:1.35},intercept:{min:-5,max:5},sd:{max:5},rmse:{max:7}};
+const DQI_RANGE={r2:'≥ 0.70',slope:'0.65–1.35',intercept:'±5',sd:'≤ 5',rmse:'≤ 7'};
+const APP_PARAMS=[ // app key order; Temp/Humidity intentionally dropped (app doesn't render them)
+  {key:'pm25',label:'PM2.5'},{key:'pm10',label:'PM10'},{key:'co',label:'CO'},
+  {key:'no',label:'NO'},{key:'no2',label:'NO2'},{key:'o3',label:'O3'}];
+const MONTHS={jan:1,feb:2,mar:3,apr:4,may:5,jun:6,jul:7,aug:8,sep:9,oct:10,nov:11,dec:12};
+
+let communities=[], sensors=[], existingAudits=[], user=null;
+let parsed=[]; // {file, meta, dqi, dupOf, els}
+let counts={ok:0,skip:0};
+
+// ---------- auth ----------
+async function doLogin(){
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value;
+  const {data,error}=await supa.auth.signInWithPassword({email,password});
+  if(error){document.getElementById('err').textContent=error.message;return;}
+  user=data.user;
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  await loadRefData();
+}
+
+async function loadRefData(){
+  const [c,s,a]=await Promise.all([
+    supa.from('communities').select('id,name,active'),
+    supa.from('sensors').select('id'),
+    supa.from('audits').select('id,community_id,audit_pod_id,community_pod_id,start_date,end_date,source')
+  ]);
+  communities=(c.data||[]).sort((x,y)=>(x.name||'').localeCompare(y.name||''));
+  sensors=(s.data||[]).map(r=>r.id);
+  existingAudits=a.data||[];
+  document.getElementById('n-app').textContent=existingAudits.length;
+}
+
+// ---------- parsing ----------
+function parseFilename(name){
+  const base=name.replace(/\.(xls|xlsx)$/i,'');
+  const apod=(base.match(/Audit(\d{3,4})/i)||[])[1]||'';
+  let comm='', cpod='';
+  let m=base.match(/Audit\d{3,4}_([A-Za-z]+)[_ ]?(\d{3,4})?/i);
+  if(m){comm=m[1];cpod=m[2]||'';}
+  else{m=base.match(/^([A-Za-z]+)_Audit/i); if(m)comm=m[1];}
+  const status=/final|complete|analysis/i.test(base)?'Complete':'Finished, Analysis Pending';
+  const {start,end}=parseDates(base);
+  return {apod,comm,cpod,start,end,status};
+}
+
+function parseDates(base){
+  const year=(base.match(/(20\d\d)/)||[])[1]||'';
+  const mk=(mo,d)=> (mo&&d&&year)?`${year}-${String(mo).padStart(2,'0')}-${String(d).padStart(2,'0')}`:'';
+  // same-month range, e.g. Dec5-9 / Nov7_19 / April14-15
+  let m=base.match(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*_?(\d{1,2})[-_](\d{1,2})(?!\d)/i);
+  if(m && !/[A-Za-z]/.test(base.slice(m.index+m[0].length,m.index+m[0].length+1))){
+    const mo=MONTHS[m[1].toLowerCase().slice(0,3)];
+    return {start:mk(mo,m[2]),end:mk(mo,m[3])};
+  }
+  // two month-day pairs, e.g. Feb19_Mar6 / January21-Feb6 / December1_December10
+  const pairs=[...base.matchAll(/(jan|feb|mar|apr|may|jun|jul|aug|sep|oct|nov|dec)[a-z.]*_?-?(\d{1,2})/gi)]
+    .map(x=>({mo:MONTHS[x[1].toLowerCase().slice(0,3)],d:+x[2]}));
+  if(pairs.length>=2) return {start:mk(pairs[0].mo,pairs[0].d),end:mk(pairs[1].mo,pairs[1].d)};
+  if(pairs.length===1) return {start:mk(pairs[0].mo,pairs[0].d),end:''};
+  return {start:'',end:''};
+}
+
+function paramKey(label){
+  const t=String(label).trim().toLowerCase();
+  if(t.startsWith('pm2.5')||t.startsWith('pm25')||t.startsWith('pm 2.5'))return 'pm25';
+  if(t.startsWith('pm10')||t.startsWith('pm 10'))return 'pm10';
+  if(t.startsWith('no2'))return 'no2';
+  if(t.startsWith('no'))return 'no';
+  if(t.startsWith('co'))return 'co';
+  if(t.startsWith('o3'))return 'o3';
+  return null; // temp / humidity / unknown -> dropped
+}
+
+// Locate the DQI summary table in any sheet and return {key:{r2,slope,intercept,sd,rmse}}
+function extractDQI(wb){
+  for(const sn of wb.SheetNames){
+    const aoa=XLSX.utils.sheet_to_json(wb.Sheets[sn],{header:1,defval:''});
+    for(let r=0;r<Math.min(12,aoa.length);r++){
+      const row=(aoa[r]||[]).map(c=>String(c).toLowerCase());
+      const ci={};
+      row.forEach((c,i)=>{
+        if(c.includes('factor')&&ci.factor==null)ci.factor=i;
+        if((c.includes('actual r')||/\br2\b/.test(c)||c.includes('r²'))&&ci.r2==null)ci.r2=i;
+        if(c.includes('slope')&&ci.slope==null)ci.slope=i;
+        if(c.includes('intercept')&&ci.intercept==null)ci.intercept=i;
+        if(/^\s*sd\b/.test(c)&&ci.sd==null)ci.sd=i;
+        if(c.includes('rmse')&&ci.rmse==null)ci.rmse=i;
+      });
+      if(ci.factor!=null&&ci.r2!=null&&ci.slope!=null&&ci.intercept!=null){
+        const res={}; let gap=0;
+        for(let rr=r+1;rr<aoa.length;rr++){
+          const fac=String((aoa[rr]||[])[ci.factor]||'').trim();
+          const key=paramKey(fac);
+          if(!key){ if(fac===''){gap++; if(gap>2)break;} continue; }
+          gap=0;
+          const num=(idx)=>{const v=parseFloat((aoa[rr]||[])[idx]);return isFinite(v)?Math.round(v*10000)/10000:null;};
+          res[key]={r2:num(ci.r2),slope:num(ci.slope),intercept:num(ci.intercept),
+                    sd:ci.sd!=null?num(ci.sd):null, rmse:ci.rmse!=null?num(ci.rmse):null};
+        }
+        if(Object.keys(res).length>=2) return {sheet:sn,results:res,hasSDR:(ci.sd!=null&&ci.rmse!=null)};
+      }
+    }
+  }
+  return null;
+}
+
+function checkDQI(r){
+  const T=DQI_THRESHOLDS;
+  const has=v=>v!=null&&isFinite(v);
+  const d={
+    r2:has(r.r2)&&r.r2>=T.r2.min,
+    slope:has(r.slope)&&r.slope>=T.slope.min&&r.slope<=T.slope.max,
+    intercept:has(r.intercept)&&r.intercept>=T.intercept.min&&r.intercept<=T.intercept.max,
+    sd:r.sd==null?true:r.sd<=T.sd.max,
+    rmse:r.rmse==null?true:r.rmse<=T.rmse.max,
+  };
+  d.pass=d.r2&&d.slope&&d.intercept&&d.sd&&d.rmse;
+  return d;
+}
+
+function buildAnalysisResults(dqi){
+  const out={};
+  for(const p of APP_PARAMS){
+    const r=dqi.results[p.key]; if(!r)continue;
+    const dqo=checkDQI(r);
+    out[p.key]={slope:r.slope,intercept:r.intercept,r2:r.r2,sd:r.sd,rmse:r.rmse,n:null,pairs:[],dqo,pass:dqo.pass};
+  }
+  return out;
+}
+
+// ---------- dedupe ----------
+function findDuplicate(meta,communityId){
+  if(!communityId||!meta.start)return null;
+  const t=new Date(meta.start).getTime();
+  return existingAudits.find(a=>a.community_id===communityId && a.start_date &&
+    Math.abs(new Date(a.start_date).getTime()-t)<=2*86400000)||null;
+}
+
+function guessCommunityId(name){
+  if(!name)return '';
+  const n=name.toLowerCase();
+  let c=communities.find(x=>(x.name||'').toLowerCase()===n||x.id===n);
+  if(!c)c=communities.find(x=>(x.name||'').toLowerCase().startsWith(n)||n.startsWith((x.name||'').toLowerCase()));
+  return c?c.id:'';
+}
+function podId(num){return num?('MOD-'+String(num).padStart(5,'0')):'';}
+
+// ---------- files ----------
+async function onFiles(fileList){
+  document.getElementById('cards').innerHTML='';
+  document.getElementById('done-msg').classList.add('hidden');
+  parsed=[]; counts={ok:0,skip:0}; render();
+  for(const file of fileList){
+    if(!/\.(xls|xlsx)$/i.test(file.name))continue;
+    try{
+      const buf=await file.arrayBuffer();
+      const wb=XLSX.read(new Uint8Array(buf),{type:'array'});
+      const meta=parseFilename(file.name);
+      const dqi=extractDQI(wb);
+      const communityId=guessCommunityId(meta.comm);
+      const dup=findDuplicate(meta,communityId);
+      parsed.push({file,meta,dqi,communityId,dup,state:dup?'dup':'pending'});
+    }catch(e){
+      parsed.push({file,meta:parseFilename(file.name),dqi:null,communityId:'',dup:null,state:'pending',error:e.message});
+    }
+  }
+  parsed.sort((a,b)=>a.file.name.localeCompare(b.file.name));
+  renderCards();
+}
+
+function commOptions(sel){
+  return communities.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${c.name}</option>`).join('');
+}
+
+function renderCards(){
+  const root=document.getElementById('cards'); root.innerHTML='';
+  parsed.forEach((p,i)=>{
+    const m=p.meta;
+    const dupBadge=p.dup?`<span class="badge dup">Already on app — ${p.dup.start_date||''}</span>`:'';
+    const tblBadge=p.dqi?`<span class="badge ok">DQI table found · ${p.dqi.sheet}</span>`:`<span class="badge warn">No DQI table — create empty / skip</span>`;
+    const errBadge=p.error?`<span class="badge warn">Parse error: ${p.error}</span>`:'';
+    let dqiHtml='';
+    if(p.dqi){
+      dqiHtml=`<table class="dqi"><thead><tr><th>Parameter</th>
+        <th>R²<span class="rng">${DQI_RANGE.r2}</span></th>
+        <th>Slope<span class="rng">${DQI_RANGE.slope}</span></th>
+        <th>Intercept<span class="rng">${DQI_RANGE.intercept}</span></th>
+        <th>SD<span class="rng">${DQI_RANGE.sd}</span></th>
+        <th>RMSE<span class="rng">${DQI_RANGE.rmse}</span></th>
+        <th>DQI</th></tr></thead><tbody>`;
+      for(const par of APP_PARAMS){
+        const r=p.dqi.results[par.key]; if(!r)continue;
+        const d=checkDQI(r);
+        const cell=(v,ok)=>`<td class="${v==null?'':(ok?'pass':'fail')}">${v==null?'—':v}</td>`;
+        dqiHtml+=`<tr><td>${par.label}</td>${cell(r.r2,d.r2)}${cell(r.slope,d.slope)}${cell(r.intercept,d.intercept)}${cell(r.sd,d.sd)}${cell(r.rmse,d.rmse)}
+          <td class="verdict ${d.pass?'pass':'fail'}">${d.pass?'PASS':'FAIL'}</td></tr>`;
+      }
+      dqiHtml+='</tbody></table>';
+    }
+    const card=document.createElement('div');
+    card.className='card'+(p.dup?' dup':'');
+    card.id='card-'+i;
+    card.innerHTML=`
+      <div class="card-head">
+        <strong>${m.comm||'(unknown community)'} ${m.cpod?('· pod '+m.cpod):''}</strong>
+        <span style="display:flex;gap:6px;flex-wrap:wrap">${dupBadge}${tblBadge}${errBadge}</span>
+      </div>
+      <div class="fname">${p.file.name}</div>
+      <div class="meta-grid">
+        <div><label>Community</label><select id="f-comm-${i}"><option value="">— pick —</option>${commOptions(p.communityId)}</select></div>
+        <div><label>Audit Pod</label><input id="f-apod-${i}" value="${podId(m.apod)}"></div>
+        <div><label>Community Pod</label><input id="f-cpod-${i}" value="${podId(m.cpod)}"></div>
+        <div><label>Start Date</label><input id="f-start-${i}" type="date" value="${m.start}"></div>
+        <div><label>End Date</label><input id="f-end-${i}" type="date" value="${m.end}"></div>
+        <div><label>Status</label><input id="f-status-${i}" value="${m.status}"></div>
+      </div>
+      ${dqiHtml}
+      <div class="actions">
+        <button class="btn btn-green" onclick="approve(${i})">${p.dup?'Import anyway':'Approve & Create'}</button>
+        <button class="btn btn-skip" onclick="skip(${i})">Skip</button>
+      </div>
+      <div class="note-line" id="msg-${i}"></div>`;
+    root.appendChild(card);
+  });
+  render();
+}
+
+function val(id){const e=document.getElementById(id);return e?e.value.trim():'';}
+
+async function approve(i){
+  const p=parsed[i]; if(!p||p.state==='done')return;
+  const communityId=val('f-comm-'+i);
+  if(!communityId){document.getElementById('msg-'+i).textContent='Pick a community first.';return;}
+  const startDate=val('f-start-'+i), endDate=val('f-end-'+i);
+  const analysisResults=p.dqi?buildAnalysisResults(p.dqi):{};
+  const hasResults=Object.keys(analysisResults).length>0;
+  const communityName=(communities.find(c=>c.id===communityId)||{}).name||communityId;
+  const row={
+    audit_pod_id:val('f-apod-'+i)||null,
+    community_pod_id:val('f-cpod-'+i)||null,
+    community_id:communityId,
+    status:hasResults?(val('f-status-'+i)||'Complete'):'Finished, Analysis Pending',
+    start_date:startDate||null, end_date:endDate||null,
+    conducted_by:'',
+    analysis_results:analysisResults,
+    analysis_name:hasResults?`Audit ${val('f-apod-'+i)} — ${communityName} ${val('f-cpod-'+i)}, ${startDate} to ${endDate}`:'',
+    analysis_upload_date:hasResults?new Date().toISOString():null,
+    analysis_uploaded_by:hasResults?(user.email+' (SF import)'):'',
+    analysis_chart_data:null,            // null on purpose — see spec §4 (avoid recompute clobber)
+    source:'salesforce_import',
+    created_by:user.id,
+  };
+  const btnMsg=document.getElementById('msg-'+i); btnMsg.textContent='Uploading Excel…';
+  // 1) upload the source workbook to the community-files bucket
+  const safe=p.file.name.replace(/[^\w.\-]+/g,'_');
+  const path=`${communityId}/audit_${Date.now()}_${safe}`;
+  const up=await supa.storage.from('community-files').upload(path,p.file,{upsert:false});
+  if(up.error){btnMsg.textContent='File upload failed: '+up.error.message;return;}
+  row.analysis_file_path=path;
+  row.analysis_file_name=p.file.name;
+  btnMsg.textContent='Saving audit…';
+  const {data,error}=await supa.from('audits').insert(row).select('id,community_id,start_date,end_date,audit_pod_id,community_pod_id,source');
+  if(error){ await supa.storage.from('community-files').remove([path]); btnMsg.textContent='Error: '+error.message;return;}
+  existingAudits.push(data[0]);
+  p.state='done'; counts.ok++;
+  const card=document.getElementById('card-'+i); card.classList.add('done');
+  card.querySelector('.actions').innerHTML='<span style="color:var(--green);font-weight:600">✓ Created'+(hasResults?' with DQI table':' (analysis pending)')+' · Excel attached</span>';
+  document.getElementById('n-app').textContent=existingAudits.length;
+  render(); checkDone();
+}
+
+function skip(i){
+  const p=parsed[i]; if(!p||p.state==='done')return;
+  p.state='done'; counts.skip++;
+  const card=document.getElementById('card-'+i); card.classList.add('done');
+  card.querySelector('.actions').innerHTML='<span style="color:var(--orange);font-weight:600">Skipped</span>';
+  render(); checkDone();
+}
+
+function render(){
+  document.getElementById('n-ok').textContent=counts.ok;
+  document.getElementById('n-skip').textContent=counts.skip;
+  document.getElementById('n-dup').textContent=parsed.filter(p=>p.dup).length;
+}
+function checkDone(){
+  if(parsed.length && parsed.every(p=>p.state==='done'))
+    document.getElementById('done-msg').classList.remove('hidden');
+}
+</script>
+</body>
+</html>

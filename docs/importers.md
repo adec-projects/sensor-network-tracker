@@ -8,6 +8,20 @@ Each importer is a self-contained page that loads the Supabase JS library from a
 
 ## Available importers
 
+### `audit-importer.html`
+Imports historical audit Excel sheets (the "Audit Sheets" ZIP) into real `audits` rows.
+Per file it parses the filename metadata, locates the pre-computed DQI table in whichever
+sheet holds it (`Sheet1` / `RESULTS` / `Hour Data` / `Graphs`), and shows a **preview card**
+for each audit — editable community/pods/dates plus the pulled DQI table. **Nothing is written
+until you Approve that card.** On approve it uploads the source `.xls` to the `community-files`
+bucket and creates the audit (tagged `source='salesforce_import'`, with the Excel linked via
+`analysis_file_path`). Already-on-app audits (same community + date) are flagged and skipped.
+Chart data is left null on purpose so the audit shows the **report's** DQI numbers, not a
+recomputed version (the app excludes the first 24h; the reports don't). Requires the
+`20260603120000_sf_audit_provenance.sql` migration first.
+
+**Use when:** loading the historical Salesforce audit sheets. See `docs/sf-integration-plan.md`.
+
 ### `sf-contact-migrator.html`
 Migrates contacts out of the legacy Salesforce system into the `contacts` table. Handles the column-name mapping, de-dupes by email, and assigns contacts to communities.
 

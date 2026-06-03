@@ -236,6 +236,21 @@ bootstrap, login, navy/gold theme):
 The migration splits into two independent tracks:
 
 - **Track A — Audits.** Driven by the audit-records ZIP (`sf-export/audits/`). Dedicated
-  importer → real `audits` rows + DQI tables. Can start as soon as a sample audit file lands.
+  importer → real `audits` rows + DQI tables. **In progress** — 23 files analyzed.
+
+  **Findings (23 audit `.xls` files):**
+  - Each file holds raw hourly paired data **and** a pre-computed DQI table. We **pull the DQI
+    table** (faithful to the signed reports) rather than recompute — the app's first-24h
+    exclusion makes recomputed numbers diverge from the official reports (e.g. Badger PM10
+    R² 0.955→0.075). Historical imported audits therefore **bypass the first-24h trim**.
+  - DQI table location varies by vintage (`Sheet1` / `RESULTS` / `Hour Data` / `Graphs`);
+    located by header (`Factor` + `R2`/`Slope`/`Intercept`, plus `SD`/`RMSE` on newer files).
+  - **22/23 auto-extract.** Only **Tyonek** (audit 460 / pod 469) lacks a finished table →
+    flag for manual completion or skip. Two older files (Badger Dec-2024, Glennallen Apr-2025)
+    lack SD/RMSE. Filenames encode audit pod / community / community pod / dates / status, but
+    **Ketchikan** (no community pod #) and **Skagway** (no audit pod #) need manual fill.
+  - **Dedupe against the app:** the importer loads existing `audits` and **skips any file whose
+    community + audit date already exists on the app** (date-specific match), so audits already
+    entered aren't duplicated.
 - **Track B — Communities (comms, notes, files).** Driven by the full Salesforce Data Export
   (`sf-export/`). Per-community review importer. SF "audit" timeline entries ignored here.
