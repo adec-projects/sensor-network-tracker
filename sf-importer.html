@@ -110,8 +110,19 @@ const NOTE_TYPES=['Sensor Issue','Installation','General','Maintenance','Service
 let user=null, communities=[], contacts=[], sensors=[], existingSf=new Set(), fileBlobs={};
 let records=[], byCommunity=new Map(), unassignedKey='__unassigned__', current=null;
 let counts={ok:0,skip:0,dup:0};
+let dupGroups=new Map();
 
 const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+// Records that look like the same real-world event (same subject + date) —
+// e.g. an install written once under the community and again under the sensor.
+// Keyed only for meaningful subjects so generic "Call" rows don't group.
+function recordKey(r){
+  if(r.kind==='file') return '';
+  const s=norm(r.subject);
+  if(s.length<5) return '';
+  return `${r.kind}|${s}|${(r.date||'').slice(0,10)}`;
+}
+function dupIdxs(r){ return dupGroups.get(recordKey(r))||[]; }
 
 async function doLogin(){
   const email=document.getElementById('email').value.trim();
@@ -177,6 +188,8 @@ function loadData(file){
       records.push({...f, kind:'file', subject:f.title, body:'', communityId:resolveCommunity(f),
         fileName:(f.file||'').split('/').pop(), state: dup?'dup':'pending'});
     }
+    dupGroups=new Map();
+    records.forEach((rec,i)=>{ const k=recordKey(rec); if(!k) return; if(!dupGroups.has(k)) dupGroups.set(k,[]); dupGroups.get(k).push(i); });
     counts={ok:0,skip:0,dup:records.filter(r=>r.state==='dup').length};
     regroup(); renderCommList(); renderCounts();
   };
@@ -252,12 +265,15 @@ function cardHtml(r){
   const dupTag=r.state==='dup'?'<span class="kind" style="background:rgba(212,168,75,.16);color:var(--gold-light)">already imported</span>':'';
   const doneTag=r.state==='ok'?'<span style="color:var(--green);font-weight:600">✓ Imported</span>':r.state==='skip'?'<span style="color:var(--orange)">Skipped</span>':'';
   const sensorField=isComm?'':`<div class="field"><label>Sensor tag</label><input id="f-sensor-${i}" value="${r.sensorId||r.sensorHint||''}" placeholder="MOD-00xxx"></div>`;
+  const grp=dupIdxs(r);
+  const dupFlag=grp.length>1?`<span class="kind" style="background:rgba(243,156,18,.16);color:var(--orange);border:1px solid var(--orange)">possible duplicate ×${grp.length}</span>`:'';
+  const mergeBtn=(grp.length>1 && r.state!=='ok' && r.state!=='skip')?`<button class="btn btn-sm" style="background:var(--orange);color:#fff" onclick="mergeGroup(${i})" title="Write one record tagged to all ${grp.length} parties (community + sensor + contact), and absorb the duplicates">Merge ${grp.length} → one</button>`:'';
   return `<div class="card ${r.state==='ok'||r.state==='skip'?'done':''}" id="card-${i}">
     <div class="card-top">
       <span class="kind ${r.kind}">${isComm?'COMM':'NOTE'}</span>
-      ${dupTag}
+      ${dupTag}${dupFlag}
       <span class="raw">SF ${r.sfId.slice(0,8)} · raw: “${(r.subject||'').slice(0,48)}”</span>
-      <span class="author">logged by ${r.loggedBy||'—'}</span>
+      <span class="author">Created by ${r.loggedBy||'Unknown'}, SF import</span>
     </div>
     <div class="grid">
       <div class="field"><label>Type</label><select id="f-type-${i}">${typeOpts}</select></div>
@@ -270,6 +286,7 @@ function cardHtml(r){
     </div>
     <div class="actions">
       <button class="btn btn-green btn-sm" onclick="approveOne(${i})">${r.state==='dup'?'Import anyway':'Approve'}</button>
+      ${mergeBtn}
       <button class="btn btn-skip btn-sm" onclick="skipOne(${i})">Skip</button>
       <span class="msg" id="msg-${i}">${doneTag}</span>
     </div>
@@ -307,7 +324,7 @@ function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&
 function escapeAttr(s){return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
 function val(id){const e=document.getElementById(id);return e?e.value.trim():'';}
 
-async function writeRecord(r,i){
+async function writeRecord(r,i,extra){
   const communityId=val('f-comm-'+i);
   if(!communityId){ if(document.getElementById('msg-'+i))document.getElementById('msg-'+i).textContent='Pick a community.'; return false; }
   const type=val('f-type-'+i), date=val('f-date-'+i)||null;
@@ -328,6 +345,8 @@ async function writeRecord(r,i){
       if(ins.error){ await supa.storage.from('community-files').remove([path]); throw ins.error; }
       existingSf.add(r.sfId); return true;
     }
+    const cset=new Set([communityId, ...((extra&&extra.communities)||[])].filter(Boolean));
+    const conset=new Set([contactId, ...((extra&&extra.contacts)||[])].filter(Boolean));
     if(r.kind==='comm'){
       const ins=await supa.from('comms').insert({
         date, comm_type:type, subject, text:(body||subject).slice(0,400), full_body:body,
@@ -335,20 +354,20 @@ async function writeRecord(r,i){
       }).select('id');
       if(ins.error) throw ins.error;
       const id=ins.data[0].id;
-      const tags=[{comm_id:id,tag_type:'community',tag_id:communityId}];
-      if(contactId) tags.push({comm_id:id,tag_type:'contact',tag_id:contactId});
+      const tags=[...cset].map(c=>({comm_id:id,tag_type:'community',tag_id:c}))
+        .concat([...conset].map(c=>({comm_id:id,tag_type:'contact',tag_id:c})));
       await supa.from('comm_tags').insert(tags);
     } else {
-      const sensorId=val('f-sensor-'+i);
+      const sset=new Set([val('f-sensor-'+i), ...((extra&&extra.sensors)||[])].filter(s=>s && sensors.has(s)));
       const ins=await supa.from('notes').insert({
         date, type, text:subject||body, additional_info:body,
         source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||''
       }).select('id');
       if(ins.error) throw ins.error;
       const id=ins.data[0].id;
-      const tags=[{note_id:id,tag_type:'community',tag_id:communityId}];
-      if(sensorId && sensors.has(sensorId)) tags.push({note_id:id,tag_type:'sensor',tag_id:sensorId});
-      if(contactId) tags.push({note_id:id,tag_type:'contact',tag_id:contactId});
+      const tags=[...cset].map(c=>({note_id:id,tag_type:'community',tag_id:c}))
+        .concat([...sset].map(s=>({note_id:id,tag_type:'sensor',tag_id:s})))
+        .concat([...conset].map(c=>({note_id:id,tag_type:'contact',tag_id:c})));
       await supa.from('note_tags').insert(tags);
     }
     existingSf.add(r.sfId);
@@ -378,6 +397,33 @@ function skipOne(i){
 async function approveAll(){
   const list=(byCommunity.get(current)||[]).filter(r=>r.state==='pending'||r.state==='dup');
   for(const r of list){ const i=records.indexOf(r); await approveOne(i); }
+}
+
+// Merge a duplicate group into ONE record tagged to every involved party.
+async function mergeGroup(pi){
+  const primary=records[pi];
+  const members=dupIdxs(primary).map(i=>records[i]).filter(r=>r.state==='pending'||r.state==='dup');
+  if(members.length<2){ return approveOne(pi); }
+  const extra={communities:[],sensors:[],contacts:[]};
+  for(const r of members){
+    if(r===primary) continue;
+    if(r.communityId) extra.communities.push(r.communityId);
+    const sid=r.sensorId||r.sensorHint; if(sid) extra.sensors.push(sid);
+    if(r.contactId) extra.contacts.push(r.contactId);
+  }
+  const ok=await writeRecord(primary,pi,extra);
+  if(!ok) return;
+  counts.ok++;
+  for(const r of members){
+    const idx=records.indexOf(r); r.state='ok';
+    if(r!==primary) existingSf.add(r.sfId);
+    const card=document.getElementById('card-'+idx); if(card)card.classList.add('done');
+    const m=document.getElementById('msg-'+idx);
+    if(m) m.innerHTML = (r===primary)
+      ? `<span style="color:var(--green);font-weight:600">✓ Imported (merged ${members.length} into one)</span>`
+      : '<span style="color:var(--green)">✓ merged into the combined record</span>';
+  }
+  renderCommList(); renderCounts();
 }
 
 async function resetImports(){
