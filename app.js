@@ -256,6 +256,7 @@ async function loadAllData() {
         datePurchased: s.date_purchased || '',
         collocationDates: s.collocation_dates || '',
         dateInstalled: s.date_installed || '',
+        details: s.details || '',
         customFields: {},
         updated_at: s.updated_at || null,
         updated_by: s.updated_by || null,
@@ -630,6 +631,20 @@ function showSuccessToast(text) {
 }
 
 function persistSensor(s) { return db.upsertSensor(s).catch(handleSaveError); }
+
+// Persistent free-text details on a sensor (lock combos, access notes, etc.)
+function saveSensorDetails(id, value) {
+    const s = sensors.find(x => x.id === id);
+    if (!s) return;
+    s.details = value;
+    persistSensor(s);
+}
+// Persistent community details / network availability (raw rows, snake_case keys)
+function saveCommunityDetails(id, field, value) {
+    const c = COMMUNITIES.find(x => x.id === id);
+    if (c) c[field] = value;
+    db.updateCommunity(id, { [field]: value }).catch(handleSaveError);
+}
 function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
 function persistNote(n) { return db.insertNote(n).catch(handleSaveError); }
 function persistComm(c) { return db.insertComm(c).catch(handleSaveError); }
@@ -2683,6 +2698,9 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
+            <div class="info-item" style="grid-column:1/-1;border-top:1px solid var(--slate-200);padding-top:10px;margin-top:6px"><label>Notes / Details</label>
+                <textarea class="details-input" placeholder="Lock combos, access notes — anything to keep handy" onchange="saveSensorDetails('${s.id}', this.value)">${escapeHtml(s.details || '')}</textarea>
+            </div>
             ${lastEdited ? `<div class="info-item" style="grid-column:1/-1;font-size:12px;color:var(--slate-400);border-top:1px solid var(--slate-100);padding-top:8px;margin-top:4px">${lastEdited}${s.active === false ? ' · <span style="color:var(--aurora-rose);font-weight:600">ARCHIVED</span>' : ''}</div>` : ''}
             <div class="info-item" style="grid-column:1/-1;text-align:right;margin-top:4px">
                 ${s.active === false
@@ -2695,6 +2713,8 @@ function showSensorView(sensorId) {
     // Reset filter
     const filterEl = document.getElementById('sensor-history-filter');
     if (filterEl) filterEl.value = '';
+    const sHistSearch = document.getElementById('sensor-history-search');
+    if (sHistSearch) sHistSearch.value = '';
 
     filterSensorHistory();
 
@@ -2825,6 +2845,7 @@ function showCommunityView(communityId) {
     const community = COMMUNITIES.find(c => c.id === communityId);
     if (!community) return;
     currentCommunity = communityId;
+    ['community-history-search', 'comm-search'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
 
     // Build header with parent breadcrumb
     const parent = getParentCommunity(communityId);
@@ -2959,6 +2980,7 @@ function showCommunityView(communityId) {
         return n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id));
     });
     renderTimeline('community-history-timeline', commNotes);
+    filterTimelineSearch('community-history-timeline', document.getElementById('community-history-search')?.value);
 
     // Comms
     const commComms = comms.filter(c => allCommunityIds.includes(c.community) || (c.taggedCommunities && c.taggedCommunities.some(id => allCommunityIds.includes(id))));
@@ -4443,6 +4465,9 @@ function renderTimeline(containerId, items) {
         const isCommItem = !!item.commType;
         const showExpand = hasFullBody && !isCommItem;
         const expandable = showExpand ? `onclick="this.querySelector('.timeline-text-full').classList.toggle('open')" style="cursor:pointer"` : '';
+        // Drop a redundant generic title on comms (e.g. type "Phone" + title "Call").
+        const COMM_SYN = { phone: ['call', 'phone', 'phone call', 'called', 'log call', 'telephone', 'vm', 'voicemail'], email: ['email', 'emailed', 'e-mail', 'log email'], 'site visit': ['site visit', 'visit', 'onsite', 'on-site', 'log site visit'], text: ['text', 'sms', 'text message'], other: ['other'] };
+        const redundantTitle = isCommItem && (COMM_SYN[(item.commType || '').toLowerCase()] || []).includes(_shown);
 
         // Display userNotes from structured JSON additionalInfo, or raw text for legacy notes
         let additionalInfoDisplay = '';
@@ -4485,7 +4510,7 @@ function renderTimeline(containerId, items) {
                     </div>
                     ${actions}
                 </div>
-                <div class="timeline-text">${renderNoteText(stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody), isNote ? item.id : null)}${showExpand ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
+                ${redundantTitle ? '' : `<div class="timeline-text">${renderNoteText(stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody), isNote ? item.id : null)}${showExpand ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>`}
                 ${additionalInfoHtml}
                 ${hasFullBody ? `<div class="timeline-text-full${isCommItem ? ' open' : ''}">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
@@ -5540,6 +5565,7 @@ function filterSensorHistory() {
     }
 
     renderTimeline('sensor-history-timeline', sensorNotes);
+    filterTimelineSearch('sensor-history-timeline', document.getElementById('sensor-history-search')?.value);
 }
 
 // ===== TAG-CHIP INPUTS (Facebook Marketplace style) =====
@@ -10488,6 +10514,7 @@ function activateCommunityTab(tabName) {
 function renderCommunityOverview(communityId) {
     const dashboard = document.getElementById('community-overview-dashboard');
     if (!dashboard) return;
+    const community = COMMUNITIES.find(c => c.id === communityId) || {};
 
     // Include child communities in all queries
     const children = getChildCommunities(communityId);
@@ -10570,9 +10597,15 @@ function renderCommunityOverview(communityId) {
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-contacts')">Contacts <span class="ov-card-expand">&rarr;</span></h3>
                 ${contactsHtml}
             </div>
-            <div class="ov-card ov-card-wide">
+            <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-history')">Recent History <span class="ov-card-expand">&rarr;</span></h3>
                 ${historyHtml}
+            </div>
+            <div class="ov-card">
+                <h3 class="ov-card-title">Notes / Details</h3>
+                <textarea class="details-input" placeholder="Lock combos, gate codes, access notes — anything to keep handy" onchange="saveCommunityDetails('${communityId}','details',this.value)">${escapeHtml(community.details || '')}</textarea>
+                <h4 class="details-subhead">Network Availability</h4>
+                <textarea class="details-input" placeholder="Wi-Fi / cell networks available in this community" onchange="saveCommunityDetails('${communityId}','network_availability',this.value)">${escapeHtml(community.network_availability || '')}</textarea>
             </div>
             <div class="ov-card ov-card-wide">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-comms')">Recent Communications <span class="ov-card-expand">&rarr;</span></h3>

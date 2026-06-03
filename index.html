@@ -334,8 +334,9 @@
                 </div>
 
                 <div id="tab-community-history" class="tab-content">
-                    <div class="history-actions">
+                    <div class="history-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                         <button class="btn btn-primary" onclick="openAddNoteModal(currentCommunity, 'community')">+ Add Note</button>
+                        <input type="text" id="community-history-search" oninput="filterTimelineSearch('community-history-timeline', this.value)" placeholder="Search history by keyword…" style="flex:1;min-width:200px;max-width:360px;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
                     </div>
                     <div id="community-history-timeline" class="timeline"></div>
                 </div>
@@ -429,6 +430,7 @@
                             <option value="Communication">Communications</option>
                             <option value="_general">General Notes</option>
                         </select>
+                        <input type="text" id="sensor-history-search" oninput="filterTimelineSearch('sensor-history-timeline', this.value)" placeholder="Search history by keyword…" style="flex:1;min-width:200px;max-width:340px;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
                     </div>
                     <div id="sensor-history-timeline" class="timeline"></div>
                 </div>

@@ -3290,6 +3290,30 @@ tr:hover .contact-delete-btn {
 }
 .uaf-field input[readonly] { background: var(--slate-50); color: var(--slate-500); }
 
+/* Notes / Details + Network Availability boxes (sensors + communities) */
+.details-input {
+    width: 100%;
+    min-height: 70px;
+    resize: vertical;
+    padding: 8px 10px;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-sm);
+    font-family: var(--font-sans);
+    font-size: 13px;
+    color: var(--slate-700);
+    background: var(--surface, #fff);
+    line-height: 1.45;
+}
+.details-input:focus { outline: none; border-color: var(--navy-400, #45597d); }
+.details-subhead {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: var(--slate-400);
+    margin: 10px 0 4px;
+}
+
 .dqi-overview-table-wrap { overflow-x: auto; }
 table.dqi-overview-table {
     width: 100%;
