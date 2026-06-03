@@ -10904,21 +10904,18 @@ function renderAuditDqiOverview() {
         return;
     }
 
-    // Group by community, sort each group by start date ascending.
+    // Group by community, sort each group by start date — most recent first.
     const byCommunity = new Map();
     for (const a of withResults) {
         if (!byCommunity.has(a.communityId)) byCommunity.set(a.communityId, []);
         byCommunity.get(a.communityId).push(a);
     }
     for (const [, arr] of byCommunity) {
-        arr.sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+        arr.sort((a, b) => (b.startDate || '').localeCompare(a.startDate || ''));
     }
-    // Order communities by name alphabetically
-    const sortedCommunityIds = [...byCommunity.keys()].sort((a, b) => {
-        const an = COMMUNITIES.find(c => c.id === a)?.name || a;
-        const bn = COMMUNITIES.find(c => c.id === b)?.name || b;
-        return an.localeCompare(bn);
-    });
+    // Order communities by their most recent audit — newest first.
+    const mostRecent = (id) => (byCommunity.get(id) || []).reduce((m, a) => (a.startDate || '') > m ? (a.startDate || '') : m, '');
+    const sortedCommunityIds = [...byCommunity.keys()].sort((a, b) => mostRecent(b).localeCompare(mostRecent(a)));
 
     const photoFilesByAudit = {};
     let html = '';
