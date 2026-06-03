@@ -3558,6 +3558,8 @@ function showContactView(contactId) {
     // Reset contact history filter
     const contactFilterEl = document.getElementById('contact-history-filter');
     if (contactFilterEl) contactFilterEl.value = '';
+    const contactSearchEl = document.getElementById('contact-search');
+    if (contactSearchEl) contactSearchEl.value = '';
 
     // Combine notes, comms, and progress-note mentions into one list
     const contactNotes = notes.filter(n => n.taggedContacts && n.taggedContacts.includes(contactId));
@@ -3618,6 +3620,7 @@ function filterContactHistory() {
         const allItems = [...contactNotes, ...contactComms, ...progressMentions];
         renderTimeline('contact-all-timeline', allItems);
     }
+    filterContactTimeline();
 }
 
 
@@ -4403,16 +4406,18 @@ function saveComm(e) {
     refreshCurrentView();
 }
 
-// Filter the community Communications timeline by keyword (searches the full
-// visible content of each item, including the always-shown body).
-function filterCommsTimeline() {
-    const container = document.getElementById('community-comms-timeline');
+// Filter a timeline by keyword (searches the full visible content of each
+// item, including the always-shown comm body).
+function filterTimelineSearch(containerId, query) {
+    const container = document.getElementById(containerId);
     if (!container) return;
-    const q = (document.getElementById('comm-search')?.value || '').trim().toLowerCase();
+    const q = (query || '').trim().toLowerCase();
     container.querySelectorAll('.timeline-item').forEach(el => {
         el.style.display = (!q || el.textContent.toLowerCase().includes(q)) ? '' : 'none';
     });
 }
+function filterCommsTimeline() { filterTimelineSearch('community-comms-timeline', document.getElementById('comm-search')?.value); }
+function filterContactTimeline() { filterTimelineSearch('contact-all-timeline', document.getElementById('contact-search')?.value); }
 
 // ===== TIMELINE RENDERER =====
 function renderTimeline(containerId, items) {
