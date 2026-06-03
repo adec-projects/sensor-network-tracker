@@ -4434,7 +4434,7 @@ function renderTimeline(containerId, items) {
 
         const createdAt = item.createdAt || item.created_at || '';
         const attribution = item.source === 'salesforce_import'
-            ? `<div class="timeline-attribution">Created by ${item.loggedBy ? escapeHtml(item.loggedBy) : 'Unknown'} <span class="sf-import-badge" title="Imported from Salesforce">SF import</span></div>`
+            ? `<div class="timeline-attribution">Created by ${item.loggedBy ? escapeHtml(item.loggedBy) : 'Unknown'}, SF import</div>`
             : item.createdBy
                 ? `<div class="timeline-attribution">Logged by ${item.createdBy}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
                 : '';

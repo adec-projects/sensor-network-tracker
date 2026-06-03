@@ -4056,20 +4056,6 @@ table.dqi-overview-table td:last-child { text-align: center; }
     font-style: italic;
     margin-top: 6px;
 }
-.sf-import-badge {
-    display: inline-block;
-    font-style: normal;
-    font-size: 10px;
-    font-weight: 700;
-    letter-spacing: 0.3px;
-    color: var(--navy-600, #1B2A4A);
-    background: var(--gold-100, #f5ecd2);
-    border: 1px solid var(--gold, #c8a84e);
-    border-radius: 5px;
-    padding: 0 6px;
-    margin-left: 6px;
-    vertical-align: middle;
-}
 
 /* ===== SETTINGS ===== */
 .settings-section {
