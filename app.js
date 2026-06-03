@@ -227,7 +227,7 @@ async function loadAllData() {
     results.forEach((r, i) => { if (r.status === 'rejected') console.warn('Data load warning:', r.reason); });
 
     // Communities
-    COMMUNITIES = communitiesData.map(c => ({ id: c.id, name: c.name }));
+    COMMUNITIES = communitiesData.map(c => ({ id: c.id, name: c.name, details: c.details || '', network_availability: c.network_availability || '' }));
     communityParents = {};
     communitiesData.forEach(c => {
         if (c.parent_id) communityParents[c.id] = c.parent_id;
