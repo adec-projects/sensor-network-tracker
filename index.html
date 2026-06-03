@@ -347,6 +347,7 @@
                         <button class="btn" onclick="logVisitForCommunity(currentCommunity)" title="Log a site visit">&#128205; Log Site Visit</button>
                         <button class="btn" onclick="openCommModal(currentCommunity)" title="Log another type (text, video call, etc.)">Other&hellip;</button>
                     </div>
+                    <input type="text" id="comm-search" oninput="filterCommsTimeline()" placeholder="Search communications by keyword…" style="width:100%;max-width:420px;margin:12px 0;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
                     <div id="community-comms-timeline" class="timeline"></div>
                 </div>
 

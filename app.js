@@ -2966,6 +2966,7 @@ function showCommunityView(communityId) {
         ...c,
         type: c.commType || c.type,
     })));
+    filterCommsTimeline();
 
     // Files
     renderCommunityFiles(communityId);
@@ -4402,6 +4403,17 @@ function saveComm(e) {
     refreshCurrentView();
 }
 
+// Filter the community Communications timeline by keyword (searches the full
+// visible content of each item, including the always-shown body).
+function filterCommsTimeline() {
+    const container = document.getElementById('community-comms-timeline');
+    if (!container) return;
+    const q = (document.getElementById('comm-search')?.value || '').trim().toLowerCase();
+    container.querySelectorAll('.timeline-item').forEach(el => {
+        el.style.display = (!q || el.textContent.toLowerCase().includes(q)) ? '' : 'none';
+    });
+}
+
 // ===== TIMELINE RENDERER =====
 function renderTimeline(containerId, items) {
     const container = document.getElementById(containerId);
@@ -4422,7 +4434,10 @@ function renderTimeline(containerId, items) {
         const _shown = stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody)
             .replace(/\s+/g, ' ').trim().toLowerCase();
         const hasFullBody = _fb.length > 0 && !_shown.includes(_fb.toLowerCase());
-        const expandable = hasFullBody ? `onclick="this.querySelector('.timeline-text-full').classList.toggle('open')" style="cursor:pointer"` : '';
+        // Communications always show their full content (not hidden behind expand).
+        const isCommItem = !!item.commType;
+        const showExpand = hasFullBody && !isCommItem;
+        const expandable = showExpand ? `onclick="this.querySelector('.timeline-text-full').classList.toggle('open')" style="cursor:pointer"` : '';
 
         // Display userNotes from structured JSON additionalInfo, or raw text for legacy notes
         let additionalInfoDisplay = '';
@@ -4465,9 +4480,9 @@ function renderTimeline(containerId, items) {
                     </div>
                     ${actions}
                 </div>
-                <div class="timeline-text">${renderNoteText(stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody), isNote ? item.id : null)}${hasFullBody ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
+                <div class="timeline-text">${renderNoteText(stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody), isNote ? item.id : null)}${showExpand ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>
                 ${additionalInfoHtml}
-                ${hasFullBody ? `<div class="timeline-text-full">${escapeHtml(item.fullBody)}</div>` : ''}
+                ${hasFullBody ? `<div class="timeline-text-full${isCommItem ? ' open' : ''}">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
                 ${tags ? `<div class="timeline-tags">${tags}</div>` : ''}
                 ${isNote && !isProgressNote ? `<div class="timeline-add-note">
