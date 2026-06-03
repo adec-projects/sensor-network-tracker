@@ -18,3 +18,8 @@ ALTER TABLE community_files ADD COLUMN IF NOT EXISTS sf_id  text;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_comms_sf_id ON comms(sf_id) WHERE sf_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_notes_sf_id ON notes(sf_id) WHERE sf_id IS NOT NULL;
 CREATE UNIQUE INDEX IF NOT EXISTS uq_files_sf_id ON community_files(sf_id) WHERE sf_id IS NOT NULL;
+
+-- Let the importer's Reset undo a batch — scoped to imported rows only, so it
+-- can't delete normal comms/notes. (comm_tags/note_tags cascade on delete.)
+CREATE POLICY "Delete SF-imported comms" ON comms FOR DELETE TO authenticated USING (source = 'salesforce_import');
+CREATE POLICY "Delete SF-imported notes" ON notes FOR DELETE TO authenticated USING (source = 'salesforce_import');

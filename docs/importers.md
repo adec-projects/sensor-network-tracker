@@ -22,6 +22,18 @@ recomputed version (the app excludes the first 24h; the reports don't). Requires
 
 **Use when:** loading the historical Salesforce audit sheets. See `docs/sf-integration-plan.md`.
 
+### `sf-importer.html`
+Track B of the Salesforce migration: imports the classified comms + notes (from the full
+Data Export) community-by-community. Load `sf-export/sf-import-data.json` (produced by the
+preprocessor), pick a community, and review each communication / device-history note —
+editable type, date, community, contact, sensor tag — then Approve / Skip (or "Approve all
+pending here"). Writes to `comms`/`notes` with `comm_tags`/`note_tags`, tagged
+`source='salesforce_import'` + `sf_id` (skips already-imported records). A Reset button
+removes all SF-imported comms/notes. Requires the `20260603130000_sf_comms_notes_provenance.sql`
+migration. Bulk `List Email:` blasts and audit entries are excluded by the preprocessor.
+
+**Use when:** importing the Salesforce activity history. See `docs/sf-integration-plan.md`.
+
 ### `sf-contact-migrator.html`
 Migrates contacts out of the legacy Salesforce system into the `contacts` table. Handles the column-name mapping, de-dupes by email, and assigns contacts to communities.
 

@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salesforce Comms &amp; Notes Importer — Sensor Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap');
+  :root{
+    --navy:#1a2332; --navy-light:#243044; --navy-mid:#2d3d56; --gold:#d4a84b;
+    --gold-light:#e8c97a; --text:#e8ecf1; --text-dim:#8899aa;
+    --green:#4caf50; --red:#e74c3c; --orange:#f39c12; --blue:#5b8def;
+  }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:'DM Sans',sans-serif;background:var(--navy);color:var(--text);min-height:100vh;padding:22px;}
+  .wrap{max-width:1000px;margin:0 auto;}
+  h1{color:var(--gold);font-size:1.45rem;}
+  .subtitle{color:var(--text-dim);font-size:.9rem;margin-bottom:18px;}
+  input,select,textarea{font-family:inherit;}
+  .field input,.field select,.field textarea{width:100%;padding:7px 9px;border-radius:6px;border:1px solid var(--navy-mid);background:var(--navy);color:var(--text);font-size:.85rem;}
+  textarea{resize:vertical;min-height:46px;}
+  .btn{padding:8px 18px;border:none;border-radius:8px;font-family:inherit;font-weight:600;font-size:.88rem;cursor:pointer;transition:.15s;}
+  .btn:hover{transform:translateY(-1px);}
+  .btn-gold{background:var(--gold);color:var(--navy);}
+  .btn-green{background:var(--green);color:#fff;}
+  .btn-skip{background:var(--navy-mid);color:var(--text);}
+  .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--navy-mid);}
+  .btn-sm{padding:5px 12px;font-size:.8rem;}
+  #login{background:var(--navy-light);border-radius:12px;padding:28px;max-width:380px;margin:40px auto;}
+  #login h2{color:var(--gold);margin-bottom:14px;font-size:1.1rem;}
+  #login input{width:100%;padding:9px 11px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--navy);color:var(--text);margin-bottom:10px;}
+  #err{color:var(--red);font-size:.85rem;}
+  .toolbar{display:flex;gap:12px;align-items:center;flex-wrap:wrap;background:var(--navy-light);border-radius:10px;padding:14px 16px;margin-bottom:16px;}
+  .counts{display:flex;gap:14px;margin-left:auto;font-size:.82rem;}
+  .counts b{font-family:'JetBrains Mono',monospace;}
+  .layout{display:grid;grid-template-columns:230px 1fr;gap:16px;}
+  .comm-list{background:var(--navy-light);border-radius:10px;padding:8px;max-height:78vh;overflow:auto;}
+  .comm-item{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:.86rem;display:flex;justify-content:space-between;gap:8px;}
+  .comm-item:hover{background:var(--navy-mid);}
+  .comm-item.active{background:var(--gold);color:var(--navy);font-weight:600;}
+  .comm-item .pend{font-family:'JetBrains Mono',monospace;font-size:.78rem;opacity:.8;}
+  .comm-item.done .pend{color:var(--green);}
+  .records{max-height:78vh;overflow:auto;}
+  .group-head{font-size:.75rem;text-transform:uppercase;letter-spacing:.05em;color:var(--gold);margin:8px 2px 8px;display:flex;align-items:center;gap:10px;}
+  .card{background:var(--navy-light);border:1px solid var(--navy-mid);border-radius:10px;padding:14px;margin-bottom:12px;}
+  .card.done{opacity:.5;}
+  .card-top{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;}
+  .kind{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:5px;}
+  .kind.comm{background:rgba(91,141,239,.18);color:var(--blue);border:1px solid var(--blue);}
+  .kind.note{background:rgba(212,168,75,.16);color:var(--gold-light);border:1px solid var(--gold);}
+  .raw{font-size:.74rem;color:var(--text-dim);font-family:'JetBrains Mono',monospace;}
+  .author{margin-left:auto;font-size:.76rem;color:var(--text-dim);}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:9px;}
+  .field label{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin-bottom:3px;}
+  .field.full{grid-column:1/-1;}
+  .actions{display:flex;gap:8px;margin-top:4px;}
+  .msg{font-size:.78rem;margin-top:6px;}
+  .hidden{display:none;}
+  .empty{color:var(--text-dim);padding:30px;text-align:center;}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Salesforce Comms &amp; Notes Importer</h1>
+  <p class="subtitle">Community-by-community review of the classified Salesforce activity. Nothing is written until you approve it. <a style="color:var(--gold-light)" href="docs/sf-integration-plan.md">spec</a></p>
+
+  <div id="login">
+    <h2>Sign In</h2>
+    <input type="email" id="email" placeholder="Email" autocomplete="username">
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password">
+    <button class="btn btn-gold" style="width:100%" onclick="doLogin()">Sign In</button>
+    <div id="err"></div>
+  </div>
+
+  <div id="app" class="hidden">
+    <div class="toolbar">
+      <div>
+        <label style="font-size:.7rem;color:var(--text-dim);display:block;margin-bottom:4px">Load classified data (sf-export/sf-import-data.json)</label>
+        <input type="file" id="datafile" accept=".json" onchange="loadData(this.files[0])" style="font-size:.82rem">
+      </div>
+      <button class="btn btn-ghost btn-sm" onclick="resetImports()" title="Delete every comm/note previously imported from Salesforce, so you can start over">&#8635; Reset imported</button>
+      <div class="counts">
+        <span style="color:var(--text-dim)">Pending: <b id="n-pending">0</b></span>
+        <span style="color:var(--green)">Imported: <b id="n-ok">0</b></span>
+        <span style="color:var(--orange)">Skipped: <b id="n-skip">0</b></span>
+        <span style="color:var(--gold-light)">Dup: <b id="n-dup">0</b></span>
+      </div>
+    </div>
+    <div class="layout">
+      <div class="comm-list" id="comm-list"><div class="empty" style="font-size:.82rem">Load the data file to begin.</div></div>
+      <div class="records" id="records"><div class="empty">Pick a community on the left.</div></div>
+    </div>
+  </div>
+</div>
+
+<script>
+const SUPABASE_URL='https://uejryzioxogquflijgyf.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM';
+const supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+
+const COMM_TYPES=['Email','Phone','Site Visit','Text','Other'];
+const NOTE_TYPES=['Sensor Issue','Installation','General','Maintenance','Service'];
+
+let user=null, communities=[], contacts=[], sensors=[], existingSf=new Set();
+let records=[], byCommunity=new Map(), unassignedKey='__unassigned__', current=null;
+let counts={ok:0,skip:0,dup:0};
+
+const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
+
+async function doLogin(){
+  const email=document.getElementById('email').value.trim();
+  const password=document.getElementById('password').value;
+  const {data,error}=await supa.auth.signInWithPassword({email,password});
+  if(error){document.getElementById('err').textContent=error.message;return;}
+  user=data.user;
+  document.getElementById('login').classList.add('hidden');
+  document.getElementById('app').classList.remove('hidden');
+  await loadRef();
+}
+
+async function loadRef(){
+  const [c,ct,s,ec,en]=await Promise.all([
+    supa.from('communities').select('id,name'),
+    supa.from('contacts').select('id,name,community_id'),
+    supa.from('sensors').select('id'),
+    supa.from('comms').select('sf_id').not('sf_id','is',null),
+    supa.from('notes').select('sf_id').not('sf_id','is',null),
+  ]);
+  communities=(c.data||[]).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+  contacts=ct.data||[]; sensors=new Set((s.data||[]).map(r=>r.id));
+  existingSf=new Set([...(ec.data||[]),...(en.data||[])].map(r=>r.sf_id));
+}
+
+function resolveCommunity(rec){
+  if(rec.accountName){
+    const a=norm(rec.accountName);
+    let m=communities.find(c=>norm(c.name)===a);
+    if(!m) m=communities.find(c=>a.startsWith(norm(c.name))||norm(c.name).startsWith(a));
+    if(m) return m.id;
+  }
+  // fallback: a community name appears in the subject ("Installed in Bethel")
+  const subj=norm(rec.subject);
+  const hit=communities.find(c=>c.name && c.name.length>3 && subj.includes(norm(c.name)));
+  return hit?hit.id:'';
+}
+function resolveContact(rec){
+  if(!rec.contactName) return '';
+  const n=norm(rec.contactName);
+  const m=contacts.find(c=>norm(c.name)===n);
+  return m?m.id:'';
+}
+
+function loadData(file){
+  if(!file) return;
+  const r=new FileReader();
+  r.onload=e=>{
+    let parsed; try{ parsed=JSON.parse(e.target.result); }catch(err){ alert('Bad JSON: '+err.message); return; }
+    records=[];
+    for(const kind of ['comms','notes']){
+      for(const rec of (parsed[kind]||[])){
+        const dup=existingSf.has(rec.sfId);
+        records.push({...rec, kind:kind==='comms'?'comm':'note',
+          communityId:resolveCommunity(rec), contactId:resolveContact(rec),
+          sensorId:(rec.sensorHint && sensors.has(rec.sensorHint))?rec.sensorHint:'',
+          state: dup?'dup':'pending'});
+      }
+    }
+    counts={ok:0,skip:0,dup:records.filter(r=>r.state==='dup').length};
+    regroup(); renderCommList(); renderCounts();
+  };
+  r.readAsText(file);
+}
+
+function regroup(){
+  byCommunity=new Map();
+  for(const r of records){
+    const key=r.communityId||unassignedKey;
+    if(!byCommunity.has(key)) byCommunity.set(key,[]);
+    byCommunity.get(key).push(r);
+  }
+}
+function commName(id){ return id===unassignedKey?'— Unassigned —':(communities.find(c=>c.id===id)?.name||id); }
+
+function renderCommList(){
+  const el=document.getElementById('comm-list'); el.innerHTML='';
+  const keys=[...byCommunity.keys()].sort((a,b)=>{
+    if(a===unassignedKey) return -1; if(b===unassignedKey) return 1;
+    return commName(a).localeCompare(commName(b));
+  });
+  for(const k of keys){
+    const list=byCommunity.get(k);
+    const pending=list.filter(r=>r.state==='pending').length;
+    const div=document.createElement('div');
+    div.className='comm-item'+(k===current?' active':'')+(pending===0?' done':'');
+    div.onclick=()=>{ current=k; renderCommList(); renderRecords(); };
+    div.innerHTML=`<span>${commName(k)}</span><span class="pend">${pending?pending+' left':'✓'}</span>`;
+    el.appendChild(div);
+  }
+}
+
+function commOptions(sel){
+  return `<option value="">— pick —</option>`+communities.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${c.name}</option>`).join('');
+}
+function contactOptions(sel,communityId){
+  const list=contacts.filter(c=>!communityId||c.community_id===communityId||c.id===sel);
+  return `<option value="">— none —</option>`+list.map(c=>`<option value="${c.id}" ${c.id===sel?'selected':''}>${c.name}</option>`).join('');
+}
+
+function renderRecords(){
+  const root=document.getElementById('records');
+  if(!current){ root.innerHTML='<div class="empty">Pick a community on the left.</div>'; return; }
+  const list=byCommunity.get(current)||[];
+  const comms=list.filter(r=>r.kind==='comm'), notes=list.filter(r=>r.kind==='note');
+  let html=`<div class="group-head" style="font-size:.95rem;color:var(--text)">${commName(current)}
+    <button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all pending here</button></div>`;
+  const section=(title,arr)=>{
+    if(!arr.length) return '';
+    let h=`<div class="group-head">${title} (${arr.length})</div>`;
+    h+=arr.map(r=>cardHtml(r)).join('');
+    return h;
+  };
+  html+=section('Communications',comms);
+  html+=section('Notes / device history',notes);
+  root.innerHTML=html;
+}
+
+function cardHtml(r){
+  const i=records.indexOf(r);
+  const isComm=r.kind==='comm';
+  const typeOpts=(isComm?COMM_TYPES:NOTE_TYPES).map(t=>`<option ${t===r.type?'selected':''}>${t}</option>`).join('');
+  const dupTag=r.state==='dup'?'<span class="kind" style="background:rgba(212,168,75,.16);color:var(--gold-light)">already imported</span>':'';
+  const doneTag=r.state==='ok'?'<span style="color:var(--green);font-weight:600">✓ Imported</span>':r.state==='skip'?'<span style="color:var(--orange)">Skipped</span>':'';
+  const sensorField=isComm?'':`<div class="field"><label>Sensor tag</label><input id="f-sensor-${i}" value="${r.sensorId||r.sensorHint||''}" placeholder="MOD-00xxx"></div>`;
+  return `<div class="card ${r.state==='ok'||r.state==='skip'?'done':''}" id="card-${i}">
+    <div class="card-top">
+      <span class="kind ${r.kind}">${isComm?'COMM':'NOTE'}</span>
+      ${dupTag}
+      <span class="raw">SF ${r.src} · ${r.sfId.slice(0,8)} · raw: “${(r.subject||'').slice(0,48)}”</span>
+      <span class="author">logged by ${r.loggedBy||'—'}</span>
+    </div>
+    <div class="grid">
+      <div class="field"><label>Type</label><select id="f-type-${i}">${typeOpts}</select></div>
+      <div class="field"><label>Date</label><input id="f-date-${i}" type="date" value="${(r.date||'').slice(0,10)}"></div>
+      <div class="field"><label>Community</label><select id="f-comm-${i}">${commOptions(r.communityId)}</select></div>
+      <div class="field"><label>Contact</label><select id="f-contact-${i}">${contactOptions(r.contactId,r.communityId)}</select></div>
+      <div class="field full"><label>${isComm?'Subject':'Note'}</label><input id="f-subject-${i}" value="${escapeAttr(r.subject||'')}"></div>
+      <div class="field full"><label>${isComm?'Body':'Details'}</label><textarea id="f-body-${i}">${escapeHtml(r.body||'')}</textarea></div>
+      ${sensorField}
+    </div>
+    <div class="actions">
+      <button class="btn btn-green btn-sm" onclick="approveOne(${i})">${r.state==='dup'?'Import anyway':'Approve'}</button>
+      <button class="btn btn-skip btn-sm" onclick="skipOne(${i})">Skip</button>
+      <span class="msg" id="msg-${i}">${doneTag}</span>
+    </div>
+  </div>`;
+}
+
+function escapeHtml(s){return String(s).replace(/[&<>]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;'}[c]));}
+function escapeAttr(s){return String(s).replace(/"/g,'&quot;').replace(/</g,'&lt;');}
+function val(id){const e=document.getElementById(id);return e?e.value.trim():'';}
+
+async function writeRecord(r,i){
+  const communityId=val('f-comm-'+i);
+  if(!communityId){ if(document.getElementById('msg-'+i))document.getElementById('msg-'+i).textContent='Pick a community.'; return false; }
+  const type=val('f-type-'+i), date=val('f-date-'+i)||null;
+  const subject=val('f-subject-'+i), body=val('f-body-'+i);
+  const contactId=val('f-contact-'+i);
+  try{
+    if(r.kind==='comm'){
+      const ins=await supa.from('comms').insert({
+        date, comm_type:type, subject, text:(body||subject).slice(0,400), full_body:body,
+        community_id:communityId, source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||''
+      }).select('id');
+      if(ins.error) throw ins.error;
+      const id=ins.data[0].id;
+      const tags=[{comm_id:id,tag_type:'community',tag_id:communityId}];
+      if(contactId) tags.push({comm_id:id,tag_type:'contact',tag_id:contactId});
+      await supa.from('comm_tags').insert(tags);
+    } else {
+      const sensorId=val('f-sensor-'+i);
+      const ins=await supa.from('notes').insert({
+        date, type, text:subject||body, additional_info:body,
+        source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||''
+      }).select('id');
+      if(ins.error) throw ins.error;
+      const id=ins.data[0].id;
+      const tags=[{note_id:id,tag_type:'community',tag_id:communityId}];
+      if(sensorId && sensors.has(sensorId)) tags.push({note_id:id,tag_type:'sensor',tag_id:sensorId});
+      if(contactId) tags.push({note_id:id,tag_type:'contact',tag_id:contactId});
+      await supa.from('note_tags').insert(tags);
+    }
+    existingSf.add(r.sfId);
+    return true;
+  }catch(e){
+    if(document.getElementById('msg-'+i)) document.getElementById('msg-'+i).textContent='Error: '+e.message;
+    return false;
+  }
+}
+
+async function approveOne(i){
+  const r=records[i]; if(!r||r.state==='ok'||r.state==='skip')return;
+  const ok=await writeRecord(r,i);
+  if(!ok) return;
+  r.state='ok'; counts.ok++;
+  const card=document.getElementById('card-'+i); if(card)card.classList.add('done');
+  const msg=document.getElementById('msg-'+i); if(msg)msg.innerHTML='<span style="color:var(--green);font-weight:600">✓ Imported</span>';
+  renderCommList(); renderCounts();
+}
+function skipOne(i){
+  const r=records[i]; if(!r||r.state==='ok'||r.state==='skip')return;
+  r.state='skip'; counts.skip++;
+  const card=document.getElementById('card-'+i); if(card)card.classList.add('done');
+  const msg=document.getElementById('msg-'+i); if(msg)msg.innerHTML='<span style="color:var(--orange)">Skipped</span>';
+  renderCommList(); renderCounts();
+}
+async function approveAll(){
+  const list=(byCommunity.get(current)||[]).filter(r=>r.state==='pending'||r.state==='dup');
+  for(const r of list){ const i=records.indexOf(r); await approveOne(i); }
+}
+
+async function resetImports(){
+  if(!confirm('Delete ALL comms and notes previously imported from Salesforce (source = salesforce_import)? This cannot be undone.'))return;
+  const a=await supa.from('comms').delete().eq('source','salesforce_import');
+  const b=await supa.from('notes').delete().eq('source','salesforce_import');
+  if(a.error||b.error){ alert('Reset failed: '+((a.error||b.error).message)); return; }
+  existingSf=new Set();
+  records.forEach(r=>{ if(r.state==='dup') r.state='pending'; });
+  counts={ok:0,skip:0,dup:0};
+  renderCommList(); renderRecords(); renderCounts();
+  alert('Reset complete. Re-approve to re-import.');
+}
+
+function renderCounts(){
+  document.getElementById('n-pending').textContent=records.filter(r=>r.state==='pending'||r.state==='dup').length;
+  document.getElementById('n-ok').textContent=counts.ok;
+  document.getElementById('n-skip').textContent=counts.skip;
+  document.getElementById('n-dup').textContent=records.filter(r=>r.state==='dup').length;
+}
+</script>
+</body>
+</html>
