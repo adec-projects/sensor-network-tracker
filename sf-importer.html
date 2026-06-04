@@ -189,10 +189,10 @@ async function loadRef(){
   const [c,ct,s]=await Promise.all([
     supa.from('communities').select('id,name'),
     supa.from('contacts').select('id,name,community_id'),
-    supa.from('sensors').select('id'),
+    supa.from('sensors').select('id,community_id'),
   ]);
   communities=(c.data||[]).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
-  contacts=ct.data||[]; sensors=new Set((s.data||[]).map(r=>r.id));
+  contacts=ct.data||[]; sensors=new Map((s.data||[]).map(r=>[r.id, r.community_id||'']));  // id -> community
   const [ec,en,ef,mc,mn]=await Promise.all([allSfIds('comms'),allSfIds('notes'),allSfIds('community_files'),allMergedSfIds('comms'),allMergedSfIds('notes')]);
   existingSf=new Set([...ec,...en,...ef,...mc,...mn]);
 }
@@ -233,9 +233,12 @@ function loadData(file){
     for(const kind of ['comms','notes']){
       for(const rec of (parsed[kind]||[])){
         const dup=existingSf.has(rec.sfId);
+        const sensorId=(rec.sensorHint && sensors.has(rec.sensorHint))?rec.sensorHint:'';
+        // Resolve community; if none but we know the sensor, default to the sensor's community.
+        let communityId=resolveCommunity(rec);
+        if(!communityId && sensorId) communityId=sensors.get(sensorId)||'';
         records.push({...rec, kind:kind==='comms'?'comm':'note',
-          communityId:resolveCommunity(rec), contactId:resolveContact(rec),
-          sensorId:(rec.sensorHint && sensors.has(rec.sensorHint))?rec.sensorHint:'',
+          communityId, contactId:resolveContact(rec), sensorId,
           state: dup?'dup':'pending'});
       }
     }
@@ -391,7 +394,12 @@ function val(id){const e=document.getElementById(id);return e?e.value.trim():'';
 
 async function writeRecord(r,i,extra){
   const communityId=val('f-comm-'+i);
-  if(!communityId){ if(document.getElementById('msg-'+i))document.getElementById('msg-'+i).textContent='Pick a community.'; return false; }
+  // Notes can go on just a sensor — community optional if a valid sensor is set.
+  const noteSensorOk = r.kind==='note' && val('f-sensor-'+i) && sensors.has(val('f-sensor-'+i));
+  if(!communityId && !noteSensorOk){
+    if(document.getElementById('msg-'+i)) document.getElementById('msg-'+i).textContent = r.kind==='note' ? 'Pick a community or a valid sensor.' : 'Pick a community.';
+    return false;
+  }
   const type=val('f-type-'+i), date=val('f-date-'+i)||null;
   const subject=val('f-subject-'+i), body=val('f-body-'+i);
   const contactId=val('f-contact-'+i);
