@@ -658,7 +658,7 @@ async function saveSensorDetailsBtn(id) {
     try {
         await db.upsertSensor(s);
         const vEl = document.querySelector('#sensor-details-view-' + id + ' .details-text');
-        if (vEl) { vEl.textContent = val.trim() || 'Lock combos, access notes — click to add'; vEl.classList.toggle('empty', !val.trim()); }
+        if (vEl) { vEl.textContent = val.trim() || 'Click to add sensor details'; vEl.classList.toggle('empty', !val.trim()); }
         sensorDetailsEdit(id, false);
     } catch (e) {
         if (msg) { msg.textContent = 'Save failed: ' + (e?.message || e); msg.style.color = 'var(--aurora-rose)'; }
@@ -2774,10 +2774,10 @@ function showSensorView(sensorId) {
                 <label style="display:inline">Notes / Details</label>
                 <span class="details-edit-hint" onclick="sensorDetailsEdit('${s.id}',true)" style="margin-left:8px">&#9998; Edit</span>
                 <div id="sensor-details-view-${s.id}" class="details-view-block" onclick="sensorDetailsEdit('${s.id}',true)" title="Click to edit" style="margin-top:6px">
-                    <div class="details-text ${d ? '' : 'empty'}">${d ? escapeHtml(d) : 'Maintenance notes, quirks, access info — click to add'}</div>
+                    <div class="details-text ${d ? '' : 'empty'}">${d ? escapeHtml(d) : 'Click to add sensor details'}</div>
                 </div>
                 <div id="sensor-details-edit-${s.id}" style="display:none;margin-top:6px">
-                    <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Maintenance notes, quirks, access info">${escapeHtml(d)}</textarea>
+                    <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Add sensor details">${escapeHtml(d)}</textarea>
                     <div class="details-save-row">
                         <button class="btn btn-primary btn-sm" onclick="saveSensorDetailsBtn('${s.id}')">Save</button>
                         <button class="btn btn-sm" onclick="sensorDetailsEdit('${s.id}',false)">Cancel</button>
