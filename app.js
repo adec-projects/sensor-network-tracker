@@ -6587,14 +6587,6 @@ function _mapSensorRow(s) {
     };
 }
 
-// Finder that checks both pools so sensor-detail navigation, status
-// computations, etc. keep working for archived sensors without every
-// caller needing to know which array to look in.
-function findSensor(sensorId) {
-    return findSensor(sensorId)
-        || (archivedSensors || []).find(x => x.id === sensorId);
-}
-
 async function switchSensorsTab(tab) {
     sensorsListTab = tab;
     document.getElementById('sensors-tab-active').classList.toggle('active', tab === 'active');
