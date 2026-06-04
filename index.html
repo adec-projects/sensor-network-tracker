@@ -391,7 +391,7 @@
                 <div class="contact-info-card" id="contact-info-card"></div>
 
                 <div class="history-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                    <button class="btn btn-primary" onclick="openContactCommModal()">+ Log Communication</button>
+                    <button class="btn btn-primary" onclick="openNewLog('contact', currentContact)">+ New Log</button>
                     <select id="contact-history-filter" onchange="filterContactHistory()" aria-label="Filter history type">
                         <option value="">All History</option>
                         <option value="Communication">Communications</option>
@@ -418,7 +418,7 @@
 
                 <div id="tab-sensor-history" class="tab-content active">
                     <div class="history-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
-                        <button class="btn btn-primary" onclick="openAddNoteModal(currentSensor, 'sensor')">+ Add Note</button>
+                        <button class="btn btn-primary" onclick="openNewLog('sensor', currentSensor)">+ New Log</button>
                         <select id="sensor-history-filter" onchange="filterSensorHistory()" aria-label="Filter history type">
                             <option value="">All History</option>
                             <option value="_issue">Issues (incl. QuantAQ alerts)</option>

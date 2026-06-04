@@ -4177,6 +4177,10 @@ function openNewLog(contextType, contextId) {
     const wantNote = contextType === 'sensor';
     const def = chips.find(c => wantNote ? c.dataset.action === 'site-work' : c.dataset.lt === 'Phone Call') || chips[0];
     if (def) selectLogType(def);
+    if (contextType === 'contact') {
+        const ta = document.getElementById('note-text-input');
+        if (ta) setTimeout(() => { ta.focus(); const n = ta.value.length; ta.setSelectionRange(n, n); }, 0);
+    }
 }
 function selectLogType(btn) {
     document.querySelectorAll('#log-type-group .log-type-chip').forEach(c => c.classList.remove('active'));
@@ -4253,6 +4257,15 @@ function openAddNoteModal(contextId, contextType) {
         prefillChip('tag-communities-container', getCommunityName(contextId));
     } else if (contextType === 'sensor') {
         prefillChip('tag-sensors-container', contextId);
+    } else if (contextType === 'contact') {
+        // Tag the contact's community, and seed the note with "@Name — " so the
+        // contact is tagged via mention (same pattern as the old comm modal).
+        const ct = contacts.find(x => x.id === contextId);
+        if (ct) {
+            if (ct.community) prefillChip('tag-communities-container', getCommunityName(ct.community));
+            const ta = document.getElementById('note-text-input');
+            if (ta) ta.value = `@${ct.name} — `;
+        }
     }
 
     // Init tag chip inputs
