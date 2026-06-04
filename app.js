@@ -2147,7 +2147,7 @@ function renderSensors() {
 function inlineSaveSensor(el) {
     const sensorId = el.dataset.sensor;
     const field = el.dataset.field;
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
 
     if (field === 'soaTagId') {
@@ -2243,7 +2243,7 @@ function openAddSensorModal() {
 }
 
 function openEditSensorModal(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     document.getElementById('sensor-modal-title').textContent = 'Edit Sensor';
     document.getElementById('sensor-edit-id').value = s.id;
@@ -2440,7 +2440,7 @@ function completeAnnotation(additionalInfo) {
 
 // ===== INLINE STATUS CHANGE =====
 function openStatusChangeModal(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     document.getElementById('status-change-sensor-id').value = s.id;
     document.getElementById('status-change-old').value = JSON.stringify(getStatusArray(s));
@@ -2469,7 +2469,7 @@ function saveStatusChange(e) {
         return;
     }
 
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
 
     s.status = newStatuses;
@@ -2507,7 +2507,7 @@ function saveStatusChange(e) {
 
 // ===== INSTALL DATE PROMPT =====
 function promptInstallDateUpdate(sensorId, suggestedDate, reason) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     const currentDate = s.dateInstalled || 'not set';
     showConfirm('Update Install Date?',
@@ -2528,7 +2528,7 @@ function promptInstallDateUpdate(sensorId, suggestedDate, reason) {
 
 // ===== MOVE SENSOR =====
 function confirmDeleteSensor(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
 
     const sensorNotes = notes.filter(n => n.taggedSensors && n.taggedSensors.includes(sensorId));
@@ -2550,7 +2550,7 @@ function confirmDeleteSensor(sensorId) {
 }
 
 function openMoveSensorModal(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     document.getElementById('move-sensor-id').value = s.id;
     document.getElementById('move-sensor-label').textContent = s.id;
@@ -2583,7 +2583,7 @@ function moveSensor(e) {
     const moveDate = document.getElementById('move-date').value || nowDatetime();
     const newLocation = (document.getElementById('move-location-input')?.value || '').trim();
 
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
 
     const fromId = s.community;
@@ -2663,8 +2663,9 @@ function moveSensor(e) {
 }
 
 // ===== SENSOR DETAIL =====
-function showSensorDetail(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+async function showSensorDetail(sensorId) {
+    let s = findSensor(sensorId);
+    if (!s && archivedSensors === null) { await ensureArchivedSensorsLoaded(); s = findSensor(sensorId); }
     if (!s) return;
     trackRecent('sensors', sensorId, 'viewed');
     openTab('sensor', sensorId, s.id);
@@ -2765,7 +2766,7 @@ function showSensorView(sensorId) {
 }
 
 function inlineEditSensor(sensorId, field) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
 
     // SOA Tag IDs are an identity field we don't want casually changed —
@@ -2816,7 +2817,7 @@ function inlineEditSensor(sensorId, field) {
 let typeChangeSensorId = null;
 
 function inlineEditSensorType(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     typeChangeSensorId = sensorId;
 
@@ -5633,7 +5634,7 @@ function applyStatusToggle(el, status, isBecomingActive) {
 }
 
 function saveSetupSensorStatus(sensorId) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     const container = document.getElementById('setup-sensor-status-' + sensorId);
     if (!container) return;
@@ -6556,6 +6557,11 @@ let sensorTagFilter = '';
 // a sensor is archived/restored the record moves between the two arrays.
 let sensorsListTab = 'active';
 let archivedSensors = null; // null = not loaded yet; [] = loaded, empty
+// Look up a sensor in the active list, falling back to archived ones so you
+// can open an archived sensor's detail page and see its history.
+function findSensor(id) {
+    return sensors.find(x => x.id === id) || (archivedSensors || []).find(x => x.id === id) || null;
+}
 
 function _mapSensorRow(s) {
     return {
@@ -6574,7 +6580,7 @@ function _mapSensorRow(s) {
 // computations, etc. keep working for archived sensors without every
 // caller needing to know which array to look in.
 function findSensor(sensorId) {
-    return sensors.find(x => x.id === sensorId)
+    return findSensor(sensorId)
         || (archivedSensors || []).find(x => x.id === sensorId);
 }
 
@@ -6582,16 +6588,19 @@ async function switchSensorsTab(tab) {
     sensorsListTab = tab;
     document.getElementById('sensors-tab-active').classList.toggle('active', tab === 'active');
     document.getElementById('sensors-tab-archived').classList.toggle('active', tab === 'archived');
-    if (tab === 'archived' && archivedSensors === null) {
-        try {
-            const rows = await db.getSensors({ includeArchived: true });
-            archivedSensors = (rows || []).filter(s => s.active === false).map(_mapSensorRow);
-        } catch (err) {
-            console.error('[archived sensors] load failed:', err);
-            archivedSensors = [];
-        }
-    }
+    if (tab === 'archived') await ensureArchivedSensorsLoaded();
     renderSensors();
+}
+// Load the archived sensors once (so they're available for detail pages/links).
+async function ensureArchivedSensorsLoaded() {
+    if (archivedSensors !== null) return;
+    try {
+        const rows = await db.getSensors({ includeArchived: true });
+        archivedSensors = (rows || []).filter(s => s.active === false).map(_mapSensorRow);
+    } catch (err) {
+        console.error('[archived sensors] load failed:', err);
+        archivedSensors = [];
+    }
 }
 
 function updateSensorsTabCounts() {
@@ -7017,7 +7026,7 @@ function saveCollocation(e) {
     if (!sensorId || !location || !startDate || !endDate) return;
     if (new Date(endDate) < new Date(startDate)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
 
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     const communityId = s?.community || '';
     // Create note with structured additionalInfo for getMostRecentCollocation
     const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.`;
@@ -7596,7 +7605,7 @@ function wizardDiscard() {
 }
 
 function editCustomField(sensorId, fieldKey) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     const cf = customSensorFields.find(f => f.key === fieldKey);
     const currentVal = (s.customFields || {})[fieldKey] || '';
@@ -7610,7 +7619,7 @@ function editCustomField(sensorId, fieldKey) {
 }
 
 function editCustomFieldInline(sensorId, fieldKey, value) {
-    const s = sensors.find(x => x.id === sensorId);
+    const s = findSensor(sensorId);
     if (!s) return;
     if (!s.customFields) s.customFields = {};
     s.customFields[fieldKey] = value.trim();
