@@ -173,6 +173,18 @@ async function allSfIds(table){
   }
   return all;
 }
+// Absorbed-sibling ids from merged records (tolerant if the column is absent).
+async function allMergedSfIds(table){
+  let all=[], from=0, size=1000;
+  while(true){
+    const {data,error}=await supa.from(table).select('merged_sf_ids').not('merged_sf_ids','is',null).range(from, from+size-1);
+    if(error||!data||!data.length) break;
+    for(const r of data){ if(Array.isArray(r.merged_sf_ids)) all.push(...r.merged_sf_ids); }
+    if(data.length<size) break;
+    from+=size;
+  }
+  return all;
+}
 async function loadRef(){
   const [c,ct,s]=await Promise.all([
     supa.from('communities').select('id,name'),
@@ -181,8 +193,8 @@ async function loadRef(){
   ]);
   communities=(c.data||[]).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   contacts=ct.data||[]; sensors=new Set((s.data||[]).map(r=>r.id));
-  const [ec,en,ef]=await Promise.all([allSfIds('comms'),allSfIds('notes'),allSfIds('community_files')]);
-  existingSf=new Set([...ec,...en,...ef]);
+  const [ec,en,ef,mc,mn]=await Promise.all([allSfIds('comms'),allSfIds('notes'),allSfIds('community_files'),allMergedSfIds('comms'),allMergedSfIds('notes')]);
+  existingSf=new Set([...ec,...en,...ef,...mc,...mn]);
 }
 
 const ORG_WORDS=new Set(['village','traditional','council','tribal','tribe','native','association','corporation','school','elementary','city','borough','center','health','district','community','company','services','department','office','island','high','middle','public','consortium','regional','area']);
@@ -400,10 +412,11 @@ async function writeRecord(r,i,extra){
     }
     const cset=new Set([communityId, ...((extra&&extra.communities)||[])].filter(Boolean));
     const conset=new Set([contactId, ...((extra&&extra.contacts)||[])].filter(Boolean));
+    const mergedExtra=(extra&&extra.mergedSfIds&&extra.mergedSfIds.length)?{merged_sf_ids:extra.mergedSfIds}:{};
     if(r.kind==='comm'){
       const ins=await supa.from('comms').insert({
         date, comm_type:type, subject, text:(subject||body).slice(0,400), full_body:body,
-        community_id:communityId, source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||''
+        community_id:communityId, source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||'', ...mergedExtra
       }).select('id');
       if(ins.error) throw ins.error;
       const id=ins.data[0].id;
@@ -414,7 +427,7 @@ async function writeRecord(r,i,extra){
       const sset=new Set([val('f-sensor-'+i), ...((extra&&extra.sensors)||[])].filter(s=>s && sensors.has(s)));
       const ins=await supa.from('notes').insert({
         date, type, text:subject||body, additional_info:body,
-        source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||''
+        source:'salesforce_import', sf_id:r.sfId, logged_by:r.loggedBy||'', ...mergedExtra
       }).select('id');
       if(ins.error) throw ins.error;
       const id=ins.data[0].id;
@@ -455,12 +468,13 @@ async function mergeGroup(pi){
   const primary=records[pi];
   const members=dupIdxs(primary).map(i=>records[i]).filter(r=>r.state==='pending'||r.state==='dup');
   if(members.length<2){ return approveOne(pi); }
-  const extra={communities:[],sensors:[],contacts:[]};
+  const extra={communities:[],sensors:[],contacts:[],mergedSfIds:[]};
   for(const r of members){
     if(r===primary) continue;
     if(r.communityId) extra.communities.push(r.communityId);
     const sid=r.sensorId||r.sensorHint; if(sid) extra.sensors.push(sid);
     if(r.contactId) extra.contacts.push(r.contactId);
+    extra.mergedSfIds.push(r.sfId);   // remember absorbed siblings so they don't resurface
   }
   const ok=await writeRecord(primary,pi,extra);
   if(!ok) return;
