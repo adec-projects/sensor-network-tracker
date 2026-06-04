@@ -162,18 +162,27 @@ async function doLogin(){
   await loadRef();
 }
 
+async function allSfIds(table){
+  let all=[], from=0, size=1000;
+  while(true){
+    const {data,error}=await supa.from(table).select('sf_id').not('sf_id','is',null).range(from, from+size-1);
+    if(error||!data||!data.length) break;
+    all.push(...data.map(r=>r.sf_id));
+    if(data.length<size) break;
+    from+=size;
+  }
+  return all;
+}
 async function loadRef(){
-  const [c,ct,s,ec,en]=await Promise.all([
+  const [c,ct,s]=await Promise.all([
     supa.from('communities').select('id,name'),
     supa.from('contacts').select('id,name,community_id'),
     supa.from('sensors').select('id'),
-    supa.from('comms').select('sf_id').not('sf_id','is',null),
-    supa.from('notes').select('sf_id').not('sf_id','is',null),
   ]);
   communities=(c.data||[]).sort((a,b)=>(a.name||'').localeCompare(b.name||''));
   contacts=ct.data||[]; sensors=new Set((s.data||[]).map(r=>r.id));
-  const ef=await supa.from('community_files').select('sf_id').not('sf_id','is',null);
-  existingSf=new Set([...(ec.data||[]),...(en.data||[]),...(ef.data||[])].map(r=>r.sf_id));
+  const [ec,en,ef]=await Promise.all([allSfIds('comms'),allSfIds('notes'),allSfIds('community_files')]);
+  existingSf=new Set([...ec,...en,...ef]);
 }
 
 const ORG_WORDS=new Set(['village','traditional','council','tribal','tribe','native','association','corporation','school','elementary','city','borough','center','health','district','community','company','services','department','office','island','high','middle','public','consortium','regional','area']);
@@ -248,8 +257,11 @@ function commName(id){ return id===unassignedKey?'— Unassigned —':(communiti
 
 function renderCommList(){
   const el=document.getElementById('comm-list'); el.innerHTML='';
+  const pendingOf=k=>byCommunity.get(k).filter(r=>r.state==='pending').length;
   const keys=[...byCommunity.keys()].sort((a,b)=>{
     if(a===unassignedKey) return -1; if(b===unassignedKey) return 1;
+    const da=pendingOf(a)===0?1:0, db=pendingOf(b)===0?1:0;   // done communities sink to the bottom
+    if(da!==db) return da-db;
     return commName(a).localeCompare(commName(b));
   });
   for(const k of keys){
@@ -275,19 +287,26 @@ function renderRecords(){
   const root=document.getElementById('records');
   if(!current){ root.innerHTML='<div class="empty">Pick a community on the left.</div>'; return; }
   const list=byCommunity.get(current)||[];
-  const comms=list.filter(r=>r.kind==='comm'), notes=list.filter(r=>r.kind==='note');
+  // Only show records still to do. Already imported (dup or approved this
+  // session) and skipped records drop out so you see exactly where you left off.
+  const todo=list.filter(r=>r.state==='pending');
+  const imported=list.filter(r=>r.state==='ok'||r.state==='dup').length;
+  const skipped=list.filter(r=>r.state==='skip').length;
+  const comms=todo.filter(r=>r.kind==='comm'), notes=todo.filter(r=>r.kind==='note'), files=todo.filter(r=>r.kind==='file');
   let html=`<div class="group-head" style="font-size:.95rem;color:var(--text)">${commName(current)}
-    <button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all pending here</button></div>`;
+    ${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all ${todo.length} here</button>`:''}</div>`;
+  if(imported||skipped){
+    html+=`<div style="font-size:.78rem;color:var(--text-dim);margin:0 2px 10px">${imported?`<span style="color:var(--green)">&#10003; ${imported} already imported</span>`:''}${imported&&skipped?' · ':''}${skipped?`${skipped} skipped`:''} &middot; hidden</div>`;
+  }
   const section=(title,arr)=>{
     if(!arr.length) return '';
-    let h=`<div class="group-head">${title} (${arr.length})</div>`;
-    h+=arr.map(r=>cardHtml(r)).join('');
-    return h;
+    return `<div class="group-head">${title} (${arr.length})</div>`+arr.map(r=>cardHtml(r)).join('');
   };
-  const files=list.filter(r=>r.kind==='file');
-  html+=section('Communications',comms);
-  html+=section('Notes / device history',notes);
-  html+=section('Files / photos',files);
+  if(!todo.length){
+    html+=`<div class="empty" style="padding:24px">All records for this community are handled. &#10003;</div>`;
+  } else {
+    html+=section('Communications',comms)+section('Notes / device history',notes)+section('Files / photos',files);
+  }
   root.innerHTML=html;
 }
 
@@ -412,25 +431,23 @@ async function writeRecord(r,i,extra){
   }
 }
 
-async function approveOne(i){
+async function approveOne(i, skipRender){
   const r=records[i]; if(!r||r.state==='ok'||r.state==='skip')return;
   const ok=await writeRecord(r,i);
   if(!ok) return;
   r.state='ok'; counts.ok++;
-  const card=document.getElementById('card-'+i); if(card)card.classList.add('done');
-  const msg=document.getElementById('msg-'+i); if(msg)msg.innerHTML='<span style="color:var(--green);font-weight:600">✓ Imported</span>';
   renderCommList(); renderCounts();
+  if(!skipRender) renderRecords();   // handled record drops out of view
 }
 function skipOne(i){
   const r=records[i]; if(!r||r.state==='ok'||r.state==='skip')return;
   r.state='skip'; counts.skip++;
-  const card=document.getElementById('card-'+i); if(card)card.classList.add('done');
-  const msg=document.getElementById('msg-'+i); if(msg)msg.innerHTML='<span style="color:var(--orange)">Skipped</span>';
-  renderCommList(); renderCounts();
+  renderCommList(); renderCounts(); renderRecords();
 }
 async function approveAll(){
-  const list=(byCommunity.get(current)||[]).filter(r=>r.state==='pending'||r.state==='dup');
-  for(const r of list){ const i=records.indexOf(r); await approveOne(i); }
+  const list=(byCommunity.get(current)||[]).filter(r=>r.state==='pending');
+  for(const r of list){ const i=records.indexOf(r); await approveOne(i, true); }
+  renderRecords();
 }
 
 // Merge a duplicate group into ONE record tagged to every involved party.
@@ -457,7 +474,7 @@ async function mergeGroup(pi){
       ? `<span style="color:var(--green);font-weight:600">✓ Imported (merged ${members.length} into one)</span>`
       : '<span style="color:var(--green)">✓ merged into the combined record</span>';
   }
-  renderCommList(); renderCounts();
+  renderCommList(); renderCounts(); renderRecords();
 }
 
 async function resetImports(){
