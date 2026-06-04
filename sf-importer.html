@@ -111,6 +111,10 @@ let user=null, communities=[], contacts=[], sensors=[], existingSf=new Set(), fi
 let records=[], byCommunity=new Map(), unassignedKey='__unassigned__', current=null;
 let counts={ok:0,skip:0,dup:0};
 let dupGroups=new Map();
+// Skipped records persist across refreshes (per-browser review decisions).
+let skippedSf=new Set(JSON.parse(localStorage.getItem('sf_skipped')||'[]'));
+function persistSkips(){ localStorage.setItem('sf_skipped', JSON.stringify([...skippedSf])); }
+function initialState(sfId){ return existingSf.has(sfId)?'dup':(skippedSf.has(sfId)?'skip':'pending'); }
 
 const norm=s=>String(s||'').toLowerCase().replace(/[^a-z0-9]/g,'');
 const KW_STOP=new Set(['the','and','for','with','was','were','from','that','this','have','has','had','will','you','your','our','out','about','into','over','under','call','called','email','emailed','sent','update','note','left','message','voicemail','spoke','talked','phone']);
@@ -232,20 +236,18 @@ function loadData(file){
     records=[];
     for(const kind of ['comms','notes']){
       for(const rec of (parsed[kind]||[])){
-        const dup=existingSf.has(rec.sfId);
         const sensorId=(rec.sensorHint && sensors.has(rec.sensorHint))?rec.sensorHint:'';
         // Resolve community; if none but we know the sensor, default to the sensor's community.
         let communityId=resolveCommunity(rec);
         if(!communityId && sensorId) communityId=sensors.get(sensorId)||'';
         records.push({...rec, kind:kind==='comms'?'comm':'note',
           communityId, contactId:resolveContact(rec), sensorId,
-          state: dup?'dup':'pending'});
+          state: initialState(rec.sfId)});
       }
     }
     for(const f of (parsed.files||[])){
-      const dup=existingSf.has(f.sfId);
       records.push({...f, kind:'file', subject:f.title, body:'', communityId:resolveCommunity(f),
-        fileName:(f.file||'').split('/').pop(), state: dup?'dup':'pending'});
+        fileName:(f.file||'').split('/').pop(), state: initialState(f.sfId)});
     }
     computeDupGroups();
     counts={ok:0,skip:0,dup:records.filter(r=>r.state==='dup').length};
@@ -311,7 +313,7 @@ function renderRecords(){
   let html=`<div class="group-head" style="font-size:.95rem;color:var(--text)">${commName(current)}
     ${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all ${todo.length} here</button>`:''}</div>`;
   if(imported||skipped){
-    html+=`<div style="font-size:.78rem;color:var(--text-dim);margin:0 2px 10px">${imported?`<span style="color:var(--green)">&#10003; ${imported} already imported</span>`:''}${imported&&skipped?' · ':''}${skipped?`${skipped} skipped`:''} &middot; hidden</div>`;
+    html+=`<div style="font-size:.78rem;color:var(--text-dim);margin:0 2px 10px">${imported?`<span style="color:var(--green)">&#10003; ${imported} already imported</span>`:''}${imported&&skipped?' · ':''}${skipped?`<a onclick="unskipCurrent()" style="cursor:pointer;text-decoration:underline" title="Bring skipped records back">${skipped} skipped &#8634;</a>`:''} &middot; hidden</div>`;
   }
   const section=(title,arr)=>{
     if(!arr.length) return '';
@@ -469,9 +471,14 @@ function reclassify(i){
   else { r.kind='comm'; r.type='Email'; }
   renderRecords();
 }
+function unskipCurrent(){
+  (byCommunity.get(current)||[]).forEach(r=>{ if(r.state==='skip'){ r.state='pending'; skippedSf.delete(r.sfId); } });
+  persistSkips(); renderCommList(); renderCounts(); renderRecords();
+}
 function skipOne(i){
   const r=records[i]; if(!r||r.state==='ok'||r.state==='skip')return;
   r.state='skip'; counts.skip++;
+  skippedSf.add(r.sfId); persistSkips();   // remember across refreshes
   renderCommList(); renderCounts(); renderRecords();
 }
 async function approveAll(){
@@ -525,10 +532,11 @@ async function resetImports(){
 }
 
 function renderCounts(){
-  document.getElementById('n-pending').textContent=records.filter(r=>r.state==='pending'||r.state==='dup').length;
-  document.getElementById('n-ok').textContent=counts.ok;
-  document.getElementById('n-skip').textContent=counts.skip;
-  document.getElementById('n-dup').textContent=records.filter(r=>r.state==='dup').length;
+  const c=k=>records.filter(r=>r.state===k).length;
+  document.getElementById('n-pending').textContent=c('pending');
+  document.getElementById('n-ok').textContent=c('ok');
+  document.getElementById('n-skip').textContent=c('skip');
+  document.getElementById('n-dup').textContent=c('dup');
 }
 </script>
 </body>
