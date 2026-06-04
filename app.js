@@ -8415,8 +8415,8 @@ function openAuditDetail(auditId) {
     }).join('');
 
     const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
-        ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>Result</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td><td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`; }).join('')}
+        ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th></tr></thead><tbody>
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
@@ -8654,9 +8654,9 @@ function renderAuditExcelForm() {
             const d = checkDQI(r);
             const mc = (ok) => dqiCellStyle(ok);
             const cell = (v, ok) => `<td style="${v == null ? '' : mc(ok)}">${v == null ? '—' : v}</td>`;
-            rows += `<tr><td>${p.label} (${p.unit})</td>${cell(r.r2, d.r2)}${cell(r.slope, d.slope)}${cell(r.intercept, d.intercept)}${cell(r.sd, d.sd)}${cell(r.rmse, d.rmse)}<td>${d.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td></tr>`;
+            rows += `<tr><td>${p.label} (${p.unit})</td>${cell(r.r2, d.r2)}${cell(r.slope, d.slope)}${cell(r.intercept, d.intercept)}${cell(r.sd, d.sd)}${cell(r.rmse, d.rmse)}</tr>`;
         }
-        table = `<table class="analysis-results-table" style="margin-top:14px"><thead><tr><th>Parameter</th><th>R²</th><th>Slope</th><th>Intercept</th><th>SD</th><th>RMSE</th><th>Result</th></tr></thead><tbody>${rows}</tbody></table>`;
+        table = `<table class="analysis-results-table" style="margin-top:14px"><thead><tr><th>Parameter</th><th>R²</th><th>Slope</th><th>Intercept</th><th>SD</th><th>RMSE</th></tr></thead><tbody>${rows}</tbody></table>`;
     } else {
         table = '<div style="padding:10px 0;color:var(--aurora-rose);font-size:13px">No DQI analysis table found in this file. You can still create the audit, but it will have no results.</div>';
     }
@@ -9063,7 +9063,6 @@ function dqiTableHeader() {
         ${sub('SD', 'sd')}
         ${sub('RMSE', 'rmse')}
         <th>n</th>
-        <th>Result</th>
     </tr></thead>`;
 }
 
@@ -10316,7 +10315,7 @@ function renderSavedAnalysisView(auditId) {
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
+                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="6" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqi-cell-pass' : 'dqi-cell-fail';
                     return `<tr>
@@ -10327,7 +10326,6 @@ function renderSavedAnalysisView(auditId) {
                         <td class="${cls(d.sd)}">${r.sd}</td>
                         <td class="${cls(d.rmse)}">${r.rmse}</td>
                         <td style="text-align:center">${r.n || '\u2014'}</td>
-                        <td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td>
                     </tr>`;
                 }).join('')}
             </tbody>
@@ -10351,7 +10349,7 @@ function renderDQISection(results, overallPass) {
             <tbody>
                 ${AUDIT_PARAMETERS.map(p => {
                     const r = results[p.key];
-                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
+                    if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="6" style="color:var(--slate-400);font-family:var(--font-sans)">No data</td></tr>`;
                     const d = r.dqo || {};
                     const cls = (pass) => pass ? 'dqi-cell-pass' : 'dqi-cell-fail';
                     return `<tr>
@@ -10362,7 +10360,6 @@ function renderDQISection(results, overallPass) {
                         <td class="${cls(d.sd)}">${r.sd}</td>
                         <td class="${cls(d.rmse)}">${r.rmse}</td>
                         <td style="text-align:center">${r.n || '\u2014'}</td>
-                        <td>${r.pass ? '<span class="dqi-pass">PASS</span>' : '<span class="dqi-fail">FAIL</span>'}</td>
                     </tr>`;
                 }).join('')}
             </tbody>
@@ -10937,7 +10934,7 @@ function generateAuditReport(auditId) {
     const boxStyle = (pass) => `color:#111;background:${pass ? DQI_PASS_BG : DQI_FAIL_BG};outline:2px solid ${pass ? DQI_PASS_FG : DQI_FAIL_FG};outline-offset:-2px;border-radius:3px;padding:1px 6px;font-weight:600`;
     const dqiRows = AUDIT_PARAMETERS.map(p => {
         const r = results[p.key];
-        if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="7" style="color:#64748b">No data</td></tr>`;
+        if (!r) return `<tr><td>${p.labelHtml} (${p.unit})</td><td colspan="6" style="color:#64748b">No data</td></tr>`;
         const d = r.dqo || {};
         const cls = (pass) => boxStyle(pass);
         return `<tr>
@@ -10948,9 +10945,6 @@ function generateAuditReport(auditId) {
             <td style="${cls(d.sd)}">${r.sd}</td>
             <td style="${cls(d.rmse)}">${r.rmse}</td>
             <td style="text-align:center">${r.n || '\u2014'}</td>
-            <td style="text-align:center">${r.pass
-                ? `<span style="background:${DQI_PASS_BG};color:#111;border:1.5px solid ${DQI_PASS_FG};padding:1px 9px;border-radius:6px;font-size:11px;font-weight:700">PASS</span>`
-                : `<span style="background:${DQI_FAIL_BG};color:#111;border:1.5px solid ${DQI_FAIL_FG};padding:1px 9px;border-radius:6px;font-size:11px;font-weight:700">FAIL</span>`}</td>
         </tr>`;
     }).join('');
 
@@ -10964,7 +10958,6 @@ function generateAuditReport(auditId) {
         ${reportDqoHeaderCell('SD', 'sd')}
         ${reportDqoHeaderCell('RMSE', 'rmse')}
         <th>n</th>
-        <th>Result</th>
     </tr></thead>`;
 
     // Data summary
@@ -11377,9 +11370,6 @@ function _renderAuditDqiTable(audit) {
         }
         const d = r.dqo || {};
         const cell = (v, pass) => `<td style="${_audDqoCellColor(pass, v == null)}">${v == null || v === '' ? '—' : v}</td>`;
-        const passCell = r.pass
-            ? '<td style="color:#0f7a4a;font-weight:700">PASS</td>'
-            : '<td style="color:#b03a2e;font-weight:700">FAIL</td>';
         return `<tr>
             <td>${p.label} (${p.unit})</td>
             ${cell(r.r2, d.r2)}
@@ -11388,7 +11378,6 @@ function _renderAuditDqiTable(audit) {
             ${cell(r.sd, d.sd)}
             ${cell(r.rmse, d.rmse)}
             <td>${r.n ?? '—'}</td>
-            ${passCell}
         </tr>`;
     }).join('');
     return `<table class="dqi-overview-table">
@@ -11400,7 +11389,6 @@ function _renderAuditDqiTable(audit) {
             <th>SD<div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.sd}</div></th>
             <th>RMSE<div class="dqi-overview-th-sub">${DQI_RANGE_LABELS.rmse}</div></th>
             <th>n</th>
-            <th>Result</th>
         </tr></thead>
         <tbody>${rows}</tbody>
     </table>`;
@@ -11549,12 +11537,11 @@ async function exportAuditDqiOverviewHtml() {
                 if (!r) return `<tr><td>${p.label} (${p.unit})</td><td colspan="6" style="color:#94a3b8;text-align:center;font-style:italic">no data</td></tr>`;
                 const d = r.dqo || {};
                 const cell = (v, pass) => `<td style="${_audDqoCellColor(pass, v == null)}">${v == null || v === '' ? '—' : v}</td>`;
-                const passCell = r.pass ? '<td style="color:#0f7a4a;font-weight:700">PASS</td>' : '<td style="color:#b03a2e;font-weight:700">FAIL</td>';
                 return `<tr>
                     <td>${p.label} (${p.unit})</td>
                     ${cell(r.r2, d.r2)}${cell(r.slope, d.slope)}${cell(r.intercept, d.intercept)}
                     ${cell(r.sd, d.sd)}${cell(r.rmse, d.rmse)}
-                    <td>${r.n ?? '—'}</td>${passCell}
+                    <td>${r.n ?? '—'}</td>
                 </tr>`;
             }).join('');
             return `<table class="dqi-table">
@@ -11565,7 +11552,7 @@ async function exportAuditDqiOverviewHtml() {
                     <th>Intercept<div class="thsub">${DQI_RANGE_LABELS.intercept}</div></th>
                     <th>SD<div class="thsub">${DQI_RANGE_LABELS.sd}</div></th>
                     <th>RMSE<div class="thsub">${DQI_RANGE_LABELS.rmse}</div></th>
-                    <th>n</th><th>Result</th>
+                    <th>n</th>
                 </tr></thead>
                 <tbody>${rows}</tbody>
             </table>`;
