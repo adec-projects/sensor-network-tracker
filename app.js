@@ -2758,7 +2758,9 @@ function showSensorView(sensorId) {
         `;
     } else {
         const lastEdited = formatLastUpdated(s);
+        const d = s.details || '';
         document.getElementById('sensor-info-card').innerHTML = `
+            ${(lastEdited || s.active === false) ? `<div class="info-item" style="grid-column:1/-1;text-align:right;font-size:11px;color:var(--slate-400);margin-bottom:-6px">${lastEdited || ''}${s.active === false ? `${lastEdited ? ' · ' : ''}<span style="color:var(--aurora-rose);font-weight:600">RETIRED</span>` : ''}</div>` : ''}
             <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
@@ -2768,8 +2770,22 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
-            ${lastEdited ? `<div class="info-item" style="grid-column:1/-1;font-size:12px;color:var(--slate-400);border-top:1px solid var(--slate-100);padding-top:8px;margin-top:4px">${lastEdited}${s.active === false ? ' · <span style="color:var(--aurora-rose);font-weight:600">ARCHIVED</span>' : ''}</div>` : ''}
-            <div class="info-item" style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;margin-top:8px;border-top:1px solid var(--slate-100);padding-top:12px">
+            <div class="info-item" style="grid-column:1/-1;border-top:1px solid var(--slate-100);padding-top:14px;margin-top:6px">
+                <label style="display:inline">Notes / Details</label>
+                <span class="details-edit-hint" onclick="sensorDetailsEdit('${s.id}',true)" style="margin-left:8px">&#9998; Edit</span>
+                <div id="sensor-details-view-${s.id}" class="details-view-block" onclick="sensorDetailsEdit('${s.id}',true)" title="Click to edit" style="margin-top:6px">
+                    <div class="details-text ${d ? '' : 'empty'}">${d ? escapeHtml(d) : 'Maintenance notes, quirks, access info — click to add'}</div>
+                </div>
+                <div id="sensor-details-edit-${s.id}" style="display:none;margin-top:6px">
+                    <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Maintenance notes, quirks, access info">${escapeHtml(d)}</textarea>
+                    <div class="details-save-row">
+                        <button class="btn btn-primary btn-sm" onclick="saveSensorDetailsBtn('${s.id}')">Save</button>
+                        <button class="btn btn-sm" onclick="sensorDetailsEdit('${s.id}',false)">Cancel</button>
+                        <span id="sensor-details-msg-${s.id}" class="details-save-msg"></span>
+                    </div>
+                </div>
+            </div>
+            <div class="info-item" style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
                 ${s.active === false
                     ? `<button class="btn btn-sm" onclick="restoreSensorFromArchive('${s.id}')">Restore from archive</button>`
                     : `<button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move Sensor</button>
@@ -2777,30 +2793,9 @@ function showSensorView(sensorId) {
             </div>
         `;
     }
-    // Notes / Details box (hover-to-edit), mirroring the community page.
+    // The standalone details card is now folded into the info card above.
     const detailsCard = document.getElementById('sensor-details-card');
-    if (detailsCard) {
-        if (setupMode) {
-            detailsCard.innerHTML = '';
-        } else {
-            const d = s.details || '';
-            detailsCard.innerHTML = `
-                <div class="ov-card details-card" style="margin-top:16px">
-                    <h3 class="ov-card-title">Notes / Details <span class="details-edit-hint" onclick="sensorDetailsEdit('${s.id}',true)">&#9998; Edit</span></h3>
-                    <div id="sensor-details-view-${s.id}" class="details-view-block" onclick="sensorDetailsEdit('${s.id}',true)" title="Click to edit">
-                        <div class="details-text ${d ? '' : 'empty'}">${d ? escapeHtml(d) : 'Maintenance notes, quirks, access info — click to add'}</div>
-                    </div>
-                    <div id="sensor-details-edit-${s.id}" style="display:none">
-                        <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Maintenance notes, quirks, access info">${escapeHtml(d)}</textarea>
-                        <div class="details-save-row">
-                            <button class="btn btn-primary btn-sm" onclick="saveSensorDetailsBtn('${s.id}')">Save</button>
-                            <button class="btn btn-sm" onclick="sensorDetailsEdit('${s.id}',false)">Cancel</button>
-                            <span id="sensor-details-msg-${s.id}" class="details-save-msg"></span>
-                        </div>
-                    </div>
-                </div>`;
-        }
-    }
+    if (detailsCard) detailsCard.innerHTML = '';
 
     // Reset filter
     const filterEl = document.getElementById('sensor-history-filter');
