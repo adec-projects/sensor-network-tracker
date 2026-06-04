@@ -649,7 +649,7 @@ function commDetailsEdit(id, on) {
     if (on) { const ta = document.getElementById('comm-details-' + id); if (ta) ta.focus(); }
 }
 async function saveSensorDetailsBtn(id) {
-    const s = sensors.find(x => x.id === id);
+    const s = findSensor(id);
     if (!s) return;
     const val = document.getElementById('sensor-details-' + id)?.value || '';
     const msg = document.getElementById('sensor-details-msg-' + id);
@@ -2234,6 +2234,22 @@ function inlineSaveContact(el) {
     }
 }
 
+// Quant vs Other LCS picker on the Add/Edit Sensor modal. Quant = the MOD
+// Modulair pods (Community/Permanent/Audit). Other LCS = legacy low-cost
+// sensors (AQMesh, PurpleAir, AirSENCE) — these get type 'Other LCS' so they
+// land in the Other LCS tab instead of the Active Quants list.
+function setSensorClass(cls) {
+    document.getElementById('sensor-class-input').value = cls;
+    document.getElementById('sensor-class-quant').classList.toggle('active', cls === 'quant');
+    document.getElementById('sensor-class-lcs').classList.toggle('active', cls === 'lcs');
+    const typeGroup = document.getElementById('sensor-type-group');
+    if (typeGroup) typeGroup.style.display = cls === 'lcs' ? 'none' : '';
+    const idLabel = document.getElementById('sensor-id-label');
+    if (idLabel) idLabel.textContent = cls === 'lcs'
+        ? 'Sensor ID / Name (e.g. AQMesh, PurpleAir-1234, AirSENCE)'
+        : 'Sensor ID (e.g. MOD-00660 or MOD-X-PM-01657)';
+}
+
 function openAddSensorModal() {
     document.getElementById('sensor-modal-title').textContent = 'Add New Sensor';
     document.getElementById('sensor-form').reset();
@@ -2241,6 +2257,7 @@ function openAddSensorModal() {
     const idInput = document.getElementById('sensor-id-input');
     idInput.readOnly = false;
     idInput.removeAttribute('title');
+    setSensorClass('quant');
     populateGroupedCommunitySelect('sensor-community-input');
     renderStatusToggleList('sensor-status-input', []);
     openModal('modal-add-sensor');
@@ -2259,6 +2276,7 @@ function openEditSensorModal(sensorId) {
     // Admins can still change IDs inline via the table in Setup Mode.
     idInput.readOnly = true;
     idInput.title = 'Sensor ID is not editable here. Use Setup Mode on the sensor table to rename.';
+    setSensorClass(s.type === 'Other LCS' ? 'lcs' : 'quant');
     document.getElementById('sensor-soa-input').value = s.soaTagId || '';
     document.getElementById('sensor-type-input').value = s.type;
     renderStatusToggleList('sensor-status-input', getStatusArray(s));
@@ -2277,10 +2295,13 @@ let currentAnnotationSensorId = null;
 function saveSensor(e) {
     e.preventDefault();
     const editId = document.getElementById('sensor-edit-id').value;
+    const sensorClass = document.getElementById('sensor-class-input')?.value || 'quant';
     const data = {
         id: document.getElementById('sensor-id-input').value.trim(),
         soaTagId: document.getElementById('sensor-soa-input').value.trim(),
-        type: document.getElementById('sensor-type-input').value,
+        // Other-LCS sensors always carry type 'Other LCS' (the Type dropdown is
+        // hidden for them) so they group under the Other LCS tab.
+        type: sensorClass === 'lcs' ? 'Other LCS' : document.getElementById('sensor-type-input').value,
         status: getSelectedStatuses('sensor-status-input'),
         community: document.getElementById('sensor-community-input').value,
         location: document.getElementById('sensor-location-input').value.trim(),
@@ -2748,12 +2769,37 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
             ${lastEdited ? `<div class="info-item" style="grid-column:1/-1;font-size:12px;color:var(--slate-400);border-top:1px solid var(--slate-100);padding-top:8px;margin-top:4px">${lastEdited}${s.active === false ? ' · <span style="color:var(--aurora-rose);font-weight:600">ARCHIVED</span>' : ''}</div>` : ''}
-            <div class="info-item" style="grid-column:1/-1;text-align:right;margin-top:4px">
+            <div class="info-item" style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;margin-top:8px;border-top:1px solid var(--slate-100);padding-top:12px">
                 ${s.active === false
                     ? `<button class="btn btn-sm" onclick="restoreSensorFromArchive('${s.id}')">Restore from archive</button>`
-                    : `<a class="move-sensor-link" style="font-size:12px;color:var(--slate-400)" onclick="archiveSensor('${s.id}')">Archive this sensor</a>`}
+                    : `<button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move Sensor</button>
+                       <button class="btn btn-sm btn-retire" onclick="archiveSensor('${s.id}')">Retire Sensor</button>`}
             </div>
         `;
+    }
+    // Notes / Details box (hover-to-edit), mirroring the community page.
+    const detailsCard = document.getElementById('sensor-details-card');
+    if (detailsCard) {
+        if (setupMode) {
+            detailsCard.innerHTML = '';
+        } else {
+            const d = s.details || '';
+            detailsCard.innerHTML = `
+                <div class="ov-card details-card" style="margin-top:16px">
+                    <h3 class="ov-card-title">Notes / Details <span class="details-edit-hint" onclick="sensorDetailsEdit('${s.id}',true)">&#9998; Edit</span></h3>
+                    <div id="sensor-details-view-${s.id}" class="details-view-block" onclick="sensorDetailsEdit('${s.id}',true)" title="Click to edit">
+                        <div class="details-text ${d ? '' : 'empty'}">${d ? escapeHtml(d) : 'Maintenance notes, quirks, access info — click to add'}</div>
+                    </div>
+                    <div id="sensor-details-edit-${s.id}" style="display:none">
+                        <textarea id="sensor-details-${s.id}" class="details-input" placeholder="Maintenance notes, quirks, access info">${escapeHtml(d)}</textarea>
+                        <div class="details-save-row">
+                            <button class="btn btn-primary btn-sm" onclick="saveSensorDetailsBtn('${s.id}')">Save</button>
+                            <button class="btn btn-sm" onclick="sensorDetailsEdit('${s.id}',false)">Cancel</button>
+                            <span id="sensor-details-msg-${s.id}" class="details-save-msg"></span>
+                        </div>
+                    </div>
+                </div>`;
+        }
     }
 
     // Reset filter
@@ -7206,15 +7252,15 @@ async function archiveSensor(sensorId) {
     // archived (e.g. "Pulled from Seward, shipped back for refurb") so
     // the reason ends up on the sensor's history.
     const modal = document.getElementById('modal-confirm');
-    document.getElementById('modal-confirm-title').textContent = 'Archive Sensor';
+    document.getElementById('modal-confirm-title').textContent = 'Retire Sensor';
     document.getElementById('modal-confirm-body').innerHTML = `
         <p style="margin:0 0 10px;font-size:13px;color:var(--slate-600)">
-            Archive <strong>${escapeHtml(s.id)}</strong>?
+            Retire <strong>${escapeHtml(s.id)}</strong>?
         </p>
         <p style="margin:0 0 12px;font-size:13px;color:var(--slate-500)">
             Removes it from the active list but preserves its full history. You can restore it later. Use this when a sensor is decommissioned or permanently retired.
         </p>
-        <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Reason for archiving (optional)</label>
+        <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Reason for retiring (optional)</label>
         <div style="position:relative;margin-top:4px">
             <textarea id="archive-sensor-reason" class="mention-textarea" rows="3" placeholder="e.g. Retired after 4-year deployment. Shipped back to Quant. Type @ to tag a contact." style="width:100%;font-size:13px;padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
             <div id="archive-sensor-reason-mention-dropdown" class="mention-dropdown" style="left:0;width:100%"></div>
@@ -7222,7 +7268,7 @@ async function archiveSensor(sensorId) {
     `;
     const okBtn = document.getElementById('modal-confirm-ok');
     const cancelBtn = document.getElementById('modal-confirm-cancel');
-    okBtn.textContent = 'Archive';
+    okBtn.textContent = 'Retire';
     okBtn.className = 'btn btn-confirm-danger';
     cancelBtn.style.display = '';
     cancelBtn.textContent = 'Cancel';
@@ -7240,7 +7286,7 @@ async function archiveSensor(sensorId) {
             // Log the archive as a Status Change note tagged to the sensor
             // so it shows up on the sensor's History timeline. Body = the
             // reason if given, otherwise just the "archived" summary.
-            const summary = `${s.id} archived.`;
+            const summary = `${s.id} retired.`;
             const noteText = reason ? `${summary} ${reason}` : summary;
             createNote('Status Change', noteText, {
                 sensors: [sensorId],
@@ -7250,7 +7296,7 @@ async function archiveSensor(sensorId) {
             buildSensorSidebar();
             if (typeof renderSensors === 'function') renderSensors();
             showSensorView(sensorId);
-            showSuccessToast('Sensor archived');
+            showSuccessToast('Sensor retired');
         } catch (err) { handleSaveError(err); }
     };
     _confirmDismissCallback = null;

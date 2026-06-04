@@ -409,6 +409,7 @@
                     <h1 id="sensor-detail-title"></h1>
                 </div>
                 <div class="sensor-info-card" id="sensor-info-card"></div>
+                <div id="sensor-details-card"></div>
 
                 <div class="tabs">
                     <button class="tab active" data-tab="sensor-history">Device History</button>
@@ -559,15 +560,23 @@
             </div>
             <form id="sensor-form" onsubmit="saveSensor(event)">
                 <input type="hidden" id="sensor-edit-id">
-                <div class="form-group">
-                    <label>Sensor ID (e.g. MOD-00660 or MOD-X-PM-01657)</label>
-                    <input type="text" id="sensor-id-input" required>
+                <input type="hidden" id="sensor-class-input" value="quant">
+                <div class="form-group" id="sensor-class-group">
+                    <label>Sensor Class</label>
+                    <div class="sensor-class-toggle">
+                        <button type="button" id="sensor-class-quant" class="class-btn active" onclick="setSensorClass('quant')">Quant (MOD)</button>
+                        <button type="button" id="sensor-class-lcs" class="class-btn" onclick="setSensorClass('lcs')">Other LCS</button>
+                    </div>
                 </div>
                 <div class="form-group">
+                    <label id="sensor-id-label">Sensor ID (e.g. MOD-00660 or MOD-X-PM-01657)</label>
+                    <input type="text" id="sensor-id-input" required>
+                </div>
+                <div class="form-group" id="sensor-soa-group">
                     <label>SOA Tag ID</label>
                     <input type="text" id="sensor-soa-input" placeholder="e.g. SOA-12345">
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="sensor-type-group">
                     <label>Type</label>
                     <select id="sensor-type-input">
                         <option value="Community Pod">Community Pod</option>

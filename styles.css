@@ -1409,12 +1409,49 @@ tr:last-child td {
     border-radius: 5px;
 }
 
+/* Quant / Other LCS class picker on the Add Sensor modal */
+.sensor-class-toggle {
+    display: flex;
+    gap: 8px;
+}
+.class-btn {
+    flex: 1;
+    padding: 9px 12px;
+    font-size: 14px;
+    font-weight: 600;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-sm);
+    background: #fff;
+    color: var(--slate-600);
+    cursor: pointer;
+    transition: all 0.12s ease;
+}
+.class-btn:hover {
+    border-color: var(--navy-300);
+}
+.class-btn.active {
+    background: linear-gradient(135deg, var(--navy-500), var(--navy-600));
+    border-color: var(--navy-600);
+    color: #fff;
+}
+
 .btn-danger {
     color: var(--aurora-rose);
     border-color: rgba(244, 63, 94, 0.25);
 }
 
 .btn-danger:hover {
+    background: var(--aurora-rose);
+    color: #fff;
+    border-color: var(--aurora-rose);
+}
+
+/* Retire (archive) action on the sensor page — muted until hovered */
+.btn-retire {
+    color: var(--slate-600);
+    border-color: rgba(244, 63, 94, 0.25);
+}
+.btn-retire:hover {
     background: var(--aurora-rose);
     color: #fff;
     border-color: var(--aurora-rose);
