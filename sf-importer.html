@@ -356,6 +356,7 @@ function cardHtml(r){
       <button class="btn btn-green btn-sm" onclick="approveOne(${i})">${r.state==='dup'?'Import anyway':'Approve'}</button>
       ${mergeBtn}
       <button class="btn btn-skip btn-sm" onclick="skipOne(${i})">Skip</button>
+      <button class="btn btn-sm" style="background:var(--navy-mid);color:var(--text)" title="Wrong type? Switch between a communication and a sensor/device note" onclick="reclassify(${i})">${isComm?'→ Make it a Note':'→ Make it a Comm'}</button>
       <span class="msg" id="msg-${i}">${doneTag}</span>
     </div>
   </div>`;
@@ -459,6 +460,14 @@ async function approveOne(i, skipRender){
   r.state='ok'; counts.ok++;
   renderCommList(); renderCounts();
   if(!skipRender) renderRecords();   // handled record drops out of view
+}
+// Flip a record between communication and sensor/device note when the
+// auto-classifier got it wrong. Keeps the sensor so it can be tagged as a note.
+function reclassify(i){
+  const r=records[i]; if(!r||r.kind==='file'||r.state==='ok'||r.state==='skip') return;
+  if(r.kind==='comm'){ r.kind='note'; r.type = r.sensorHint?'Sensor Issue':'General'; }
+  else { r.kind='comm'; r.type='Email'; }
+  renderRecords();
 }
 function skipOne(i){
   const r=records[i]; if(!r||r.state==='ok'||r.state==='skip')return;
