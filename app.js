@@ -4164,12 +4164,79 @@ function openMassActionNote() {
     }
 }
 
+// ===== UNIFIED "NEW LOG" =====
+// One entry point on community/sensor pages: opens the note modal with the
+// type picker on. Communication types route to a comm on save; everything
+// else is a note (with its existing actions). Cross-tags via the chip fields.
+function openNewLog(contextType, contextId) {
+    openAddNoteModal(contextId, contextType);
+    document.getElementById('modal-add-note-title').textContent = 'New Log';
+    document.getElementById('log-type-group').style.display = '';
+    const chips = [...document.querySelectorAll('#log-type-group .log-type-chip')];
+    // Default type by where you launched it
+    const wantNote = contextType === 'sensor';
+    const def = chips.find(c => wantNote ? c.dataset.action === 'site-work' : c.dataset.lt === 'Phone Call') || chips[0];
+    if (def) selectLogType(def);
+}
+function selectLogType(btn) {
+    document.querySelectorAll('#log-type-group .log-type-chip').forEach(c => c.classList.remove('active'));
+    btn.classList.add('active');
+    const kind = btn.dataset.kind;
+    document.getElementById('log-kind').value = kind;
+    document.getElementById('log-commtype').value = kind === 'comm' ? (btn.dataset.lt || '') : '';
+    const sensorGroup = document.getElementById('tag-sensors-container')?.closest('.form-group');
+    const actionsGroup = document.getElementById('note-actions-group');
+    const acts = ['move', 'status', 'troubleshooting', 'site-work'];
+    if (kind === 'comm') {
+        // Comms can't carry sensor tags (schema) and have no work-actions.
+        if (sensorGroup) sensorGroup.style.display = 'none';
+        if (actionsGroup) actionsGroup.style.display = 'none';
+        acts.forEach(a => { const cb = document.getElementById('note-action-' + a); if (cb) cb.checked = false; });
+        onNoteActionsChange();
+    } else {
+        if (sensorGroup) sensorGroup.style.display = '';
+        if (actionsGroup) actionsGroup.style.display = '';
+        acts.forEach(a => { const cb = document.getElementById('note-action-' + a); if (cb) cb.checked = (a === btn.dataset.action); });
+        onNoteActionsChange();
+    }
+    const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
+}
+// New Log communication types save as a comm (reuses insertComm + tags).
+function saveLogAsComm() {
+    const text = document.getElementById('note-text-input').value.trim();
+    if (!text) { document.getElementById('note-text-input').focus(); return; }
+    const commType = document.getElementById('log-commtype').value || 'Phone Call';
+    const date = document.getElementById('note-date-input').value || nowDatetime();
+    const ctxId = document.getElementById('note-context-id').value;
+    const ctxType = document.getElementById('note-context-type').value;
+    const commNames = getChipValues('tag-communities-container');
+    let communityIds = commNames.map(n => (COMMUNITIES.find(c => c.name.toLowerCase() === String(n).toLowerCase()) || {}).id).filter(Boolean);
+    if (!communityIds.length && ctxType === 'community') communityIds = [ctxId];
+    if (!communityIds.length && ctxType === 'contact') { const ct = contacts.find(c => c.id === ctxId); if (ct?.community) communityIds = [ct.community]; }
+    const taggedContacts = parseMentionedContacts(text);
+    const comm = {
+        id: generateId('comm'), date, type: 'Communication', commType, text,
+        createdBy: getCurrentUserName(), createdById: currentUserId,
+        community: communityIds[0] || null, taggedContacts, taggedCommunities: communityIds,
+    };
+    comms.push(comm);
+    db.insertComm(comm).then(saved => { if (saved?.id) comm.id = saved.id; }).catch(handleSaveError);
+    closeModal('modal-add-note');
+    showSuccessToast('Communication logged');
+    refreshCurrentView();
+}
+
 function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-form').reset();
     document.getElementById('note-context-id').value = contextId;
     document.getElementById('note-context-type').value = contextType;
     document.getElementById('note-edit-id').value = '';
     document.getElementById('note-date-input').value = nowDatetime();
+    // Default to plain-note mode; openNewLog() turns on the type picker.
+    document.getElementById('log-kind').value = 'note';
+    document.getElementById('log-commtype').value = '';
+    const ltg = document.getElementById('log-type-group'); if (ltg) ltg.style.display = 'none';
+    const sg0 = document.getElementById('tag-sensors-container')?.closest('.form-group'); if (sg0) sg0.style.display = '';
     // Reset modal chrome to "Add Note" mode (in case it was just used for an edit).
     const titleEl = document.getElementById('modal-add-note-title');
     if (titleEl) titleEl.textContent = 'Add Note';
@@ -4264,6 +4331,8 @@ function getNoteActionsType() {
 
 function saveNote(e) {
     e.preventDefault();
+    // New Log: communication types go to a comm instead of a note.
+    if (document.getElementById('log-kind')?.value === 'comm') { saveLogAsComm(); return; }
 
     const text = document.getElementById('note-text-input').value.trim();
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();

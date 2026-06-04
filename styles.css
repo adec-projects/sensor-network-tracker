@@ -3313,6 +3313,27 @@ tr:hover .contact-delete-btn {
     color: var(--slate-400);
     margin: 10px 0 4px;
 }
+/* New Log type picker */
+.log-type-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 4px; }
+.log-type-chip {
+    padding: 8px 14px;
+    border: 1px solid var(--slate-200);
+    background: var(--surface, #fff);
+    border-radius: 999px;
+    font-size: 13px;
+    font-family: var(--font-sans);
+    color: var(--slate-600);
+    cursor: pointer;
+    transition: all 0.12s;
+}
+.log-type-chip:hover { border-color: var(--navy-400, #45597d); }
+.log-type-chip.active {
+    background: var(--navy-500, #1B2A4A);
+    color: #fff;
+    border-color: var(--navy-500, #1B2A4A);
+    font-weight: 600;
+}
+
 .details-save-row { display: flex; align-items: center; gap: 10px; margin-top: 8px; }
 .details-save-msg { font-size: 12px; font-weight: 600; }
 
