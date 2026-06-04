@@ -2675,6 +2675,9 @@ async function showSensorDetail(sensorId) {
         try {
             const rows = await db.getSensors({ includeArchived: true });
             archivedSensors = (rows || []).filter(r => r.active === false).map(_mapSensorRow);
+            // Also add any active sensor we don't already have (e.g. just un-archived).
+            const have = new Set([...sensors, ...archivedSensors].map(x => x.id));
+            (rows || []).forEach(r => { if (r.active !== false && !have.has(r.id)) sensors.push(_mapSensorRow(r)); });
         } catch (e) { console.error('[sensor detail] fresh load failed:', e); }
         s = findSensor(sensorId);
     }
@@ -2759,16 +2762,11 @@ function showSensorView(sensorId) {
     const sHistSearch = document.getElementById('sensor-history-search');
     if (sHistSearch) sHistSearch.value = '';
 
-    filterSensorHistory();
-
-    // Service Tickets
-    renderSensorTickets(sensorId);
-
-    // Audits
-    renderSensorAudits(sensorId);
-
-    // Collocations
-    renderSensorCollocations(sensorId);
+    // A panel render error must not block opening the page.
+    try { filterSensorHistory(); } catch (e) { console.error('[sensor view] history:', e); }
+    try { renderSensorTickets(sensorId); } catch (e) { console.error('[sensor view] tickets:', e); }
+    try { renderSensorAudits(sensorId); } catch (e) { console.error('[sensor view] audits:', e); }
+    try { renderSensorCollocations(sensorId); } catch (e) { console.error('[sensor view] collocations:', e); }
 
     resetTabs(document.getElementById('view-sensor-detail'));
 
@@ -6581,6 +6579,7 @@ function _mapSensorRow(s) {
         status: s.status || [], community: s.community_id || '',
         location: s.location || '', datePurchased: s.date_purchased || '',
         collocationDates: s.collocation_dates || '', dateInstalled: s.date_installed || '',
+        details: s.details || '',
         customFields: {},
         updated_at: s.updated_at || null, updated_by: s.updated_by || null,
         active: s.active !== false,
