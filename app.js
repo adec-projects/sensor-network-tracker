@@ -2788,8 +2788,7 @@ function showSensorView(sensorId) {
             <div class="info-item" style="grid-column:1/-1;display:flex;gap:8px;justify-content:flex-end;margin-top:4px">
                 ${s.active === false
                     ? `<button class="btn btn-sm" onclick="restoreSensorFromArchive('${s.id}')">Restore from archive</button>`
-                    : `<button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move Sensor</button>
-                       <button class="btn btn-sm btn-retire" onclick="archiveSensor('${s.id}')">Retire Sensor</button>`}
+                    : `<button class="btn btn-sm btn-retire" onclick="archiveSensor('${s.id}')">Retire Sensor</button>`}
             </div>
         `;
     }
