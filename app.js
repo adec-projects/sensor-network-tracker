@@ -2669,7 +2669,15 @@ function moveSensor(e) {
 // ===== SENSOR DETAIL =====
 async function showSensorDetail(sensorId) {
     let s = findSensor(sensorId);
-    if (!s && archivedSensors === null) { await ensureArchivedSensorsLoaded(); s = findSensor(sensorId); }
+    if (!s) {
+        // Not in memory (archived list stale/unloaded, or just-categorized) —
+        // pull a fresh full list and retry so any sensor can be opened.
+        try {
+            const rows = await db.getSensors({ includeArchived: true });
+            archivedSensors = (rows || []).filter(r => r.active === false).map(_mapSensorRow);
+        } catch (e) { console.error('[sensor detail] fresh load failed:', e); }
+        s = findSensor(sensorId);
+    }
     if (!s) return;
     trackRecent('sensors', sensorId, 'viewed');
     openTab('sensor', sensorId, s.id);
