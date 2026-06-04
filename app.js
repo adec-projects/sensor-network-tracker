@@ -8416,7 +8416,7 @@ function openAuditDetail(auditId) {
 
     const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
         ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return ''; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td></tr>`; }).join('')}
+            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return `<tr><td>${p.label} (${p.unit})</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td></tr>`; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
