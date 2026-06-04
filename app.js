@@ -2091,9 +2091,13 @@ function renderSensors() {
     const search = (document.getElementById('sensor-search')?.value || '').toLowerCase();
     const statusFilter = document.getElementById('sensor-status-filter')?.value || '';
 
-    // Pool = active sensors from the main array, or archived ones when the
-    // Archived tab is selected.
-    const pool = sensorsListTab === 'archived' ? (archivedSensors || []) : sensors;
+    // Tabs: Active Quants (active MODs), Retired Quants (archived MODs),
+    // Other LCS (legacy low-cost sensors — AQMesh / PurpleAir / AirSENCE).
+    const isLCS = s => s.type === 'Other LCS';
+    let pool;
+    if (sensorsListTab === 'otherlcs') pool = [...sensors, ...(archivedSensors || [])].filter(isLCS);
+    else if (sensorsListTab === 'archived') pool = (archivedSensors || []).filter(s => !isLCS(s));
+    else pool = sensors.filter(s => !isLCS(s));
     updateSensorsTabCounts();
 
     let filtered = pool.filter(s => {
@@ -6588,7 +6592,8 @@ async function switchSensorsTab(tab) {
     sensorsListTab = tab;
     document.getElementById('sensors-tab-active').classList.toggle('active', tab === 'active');
     document.getElementById('sensors-tab-archived').classList.toggle('active', tab === 'archived');
-    if (tab === 'archived') await ensureArchivedSensorsLoaded();
+    document.getElementById('sensors-tab-otherlcs')?.classList.toggle('active', tab === 'otherlcs');
+    if (tab === 'archived' || tab === 'otherlcs') await ensureArchivedSensorsLoaded();
     renderSensors();
 }
 // Load the archived sensors once (so they're available for detail pages/links).
@@ -6604,10 +6609,13 @@ async function ensureArchivedSensorsLoaded() {
 }
 
 function updateSensorsTabCounts() {
+    const isLCS = s => s.type === 'Other LCS';
     const activeEl = document.getElementById('sensors-active-count');
     const archivedEl = document.getElementById('sensors-archived-count');
-    if (activeEl) activeEl.textContent = `(${sensors.length})`;
-    if (archivedEl && archivedSensors !== null) archivedEl.textContent = `(${archivedSensors.length})`;
+    const lcsEl = document.getElementById('sensors-otherlcs-count');
+    if (activeEl) activeEl.textContent = `(${sensors.filter(s => !isLCS(s)).length})`;
+    if (lcsEl) lcsEl.textContent = `(${[...sensors, ...(archivedSensors || [])].filter(isLCS).length})`;
+    if (archivedEl && archivedSensors !== null) archivedEl.textContent = `(${archivedSensors.filter(s => !isLCS(s)).length})`;
 }
 
 function buildSensorSidebar() {
