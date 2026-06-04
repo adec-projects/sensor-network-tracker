@@ -283,5 +283,12 @@ The migration splits into two independent tracks:
   - **Community linkage is partial** (e.g. 667 events have no account) → the review tool must let
     the reviewer assign/confirm the community per record, defaulting from account → subject text →
     contact.
+  - **Most activities link to an Asset, not text.** **660 of 910 events** (and a few tasks) have
+    `WhatId` = an **Asset** (the sensor), so the sensor reference lives in the relationship, not
+    the subject. Salesforce Assets name the QuantAQ pods **`QuantAQ_00466`** → app sensor
+    **`MOD-00466`** (AQMesh/PurpleAir assets are older, not in the app). The preprocessor maps each
+    activity's Asset → sensor (and the Asset's `AccountId` → community), lifting notes-with-sensor
+    from ~54 (subject text only) to **373**. The regeneration script is
+    `sf-export/build-import-data.py` (local; reads the export CSVs + live Asset/ContentNote pulls).
   - **Migration:** `20260603130000_sf_comms_notes_provenance.sql` (source / sf_id / logged_by on
     comms + notes + files, with sf_id unique indexes for safe re-runs).
