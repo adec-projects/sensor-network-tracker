@@ -799,20 +799,6 @@ const db = {
         if (error) throw error;
     },
 
-    // --- QuantAQ Alerts ---
-    // Writes from quantaq.js (acknowledge, dismiss, delete, promote, follow-up)
-    // go through these helpers so (a) errors actually throw instead of silently
-    // failing RLS, and (b) sandbox mode intercepts them correctly.
-    async updateQuantAQAlert(id, updates) {
-        const { error } = await supa.from('quantaq_alerts').update(updates).eq('id', id);
-        if (error) throw error;
-    },
-
-    async deleteQuantAQAlert(id) {
-        const { error } = await supa.from('quantaq_alerts').delete().eq('id', id);
-        if (error) throw error;
-    },
-
     // --- Community Files (rename) ---
     async renameCommunityFile(id, newName) {
         const { error } = await supa

@@ -5,7 +5,6 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>ADEC Community Sensor Network Tracker</title>
     <link rel="stylesheet" href="styles.css">
-    <link rel="stylesheet" href="quantaq.css">
 </head>
 <body>
     <a href="#main-content" class="skip-nav">Skip to main content</a>
@@ -159,14 +158,9 @@
                 <div id="dashboard-header" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
                     <div>
                         <h1 style="font-size:22px;color:var(--navy-500);margin-bottom:2px">Dashboard</h1>
-                        <p id="dashboard-last-check" style="font-size:12px;color:var(--slate-400)"></p>
-                        <p id="dashboard-next-check" style="font-size:12px;color:var(--slate-400)"></p>
                     </div>
-                    <a class="import-link" onclick="runQuantAQCheck()" id="dashboard-check-btn" style="cursor:pointer">Run Check Now</a>
                 </div>
                 <div class="dashboard-summary" id="dashboard-summary"></div>
-                <span id="quantaq-status" style="font-size:12px;color:var(--slate-400);display:block;margin:8px 0"></span>
-                <div id="dashboard-alerts-section"></div>
             </div>
 
             <!-- All Sensors View -->
@@ -423,7 +417,7 @@
                         <button class="btn btn-primary" onclick="openNewLog('sensor', currentSensor)">+ New Log</button>
                         <select id="sensor-history-filter" onchange="filterSensorHistory()" aria-label="Filter history type">
                             <option value="">All History</option>
-                            <option value="_issue">Issues (incl. QuantAQ alerts)</option>
+                            <option value="_issue">Issues</option>
                             <option value="_movement">Sensor Movement</option>
                             <option value="_status">Status Changes</option>
                             <option value="Communication">Communications</option>
@@ -1383,7 +1377,6 @@
     <script src="https://cdn.jsdelivr.net/npm/chartjs-plugin-annotation@3/dist/chartjs-plugin-annotation.min.js"></script>
     <script src="supabase-client.js"></script>
     <script src="app.js"></script>
-    <script src="quantaq.js"></script>
     <script>
     // Safety net: if nothing is visible after 30 seconds, show login with error
     setTimeout(function() {

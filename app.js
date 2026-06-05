@@ -1095,12 +1095,6 @@ async function enterApp() {
 
     await loadAllData();
 
-    // Load QuantAQ alerts from database (wrapped in try/catch so a QuantAQ
-    // failure never prevents the main app from loading)
-    if (typeof initQuantAQ === 'function') {
-        try { await initQuantAQ(); } catch (e) { console.error('[QuantAQ] Init failed, continuing without alerts:', e); }
-    }
-
     document.getElementById('login-loading').style.display = 'none';
     document.getElementById('loading-overlay').style.display = 'none';
     document.getElementById('login-screen').style.display = 'none';
@@ -1533,11 +1527,6 @@ function renderDashboard() {
     const activeTickets = getActiveTicketCount();
     const activeAudits = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress').length;
 
-    // Render last-check / next-check lines using the live cron info fetched from DB
-    renderQuantAQCronLines();
-    // Refresh the cron info in the background (in case it's stale or not yet loaded)
-    loadQuantAQCronInfo();
-
     // Compact stat bar
     document.getElementById('dashboard-summary').innerHTML = `
         <div class="dash-stat-bar">
@@ -1567,125 +1556,6 @@ function renderDashboard() {
             </div>
         </div>
     `;
-
-    // Render QuantAQ alerts section
-    if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
-}
-
-// ===== QUANTAQ CRON INFO (pulled live from cron.* via RPC) =====
-// Cached in memory; loadQuantAQCronInfo() refreshes it.
-let quantaqCronInfo = null;
-
-async function loadQuantAQCronInfo() {
-    try {
-        const { data, error } = await supa.rpc('get_quantaq_cron_info');
-        if (error) throw error;
-        quantaqCronInfo = data?.[0] || null;
-    } catch (err) {
-        console.warn('[QuantAQ] Failed to load cron info:', err);
-        quantaqCronInfo = null;
-    }
-    // Re-render dashboard if it's visible
-    const lastCheckEl = document.getElementById('dashboard-last-check');
-    if (lastCheckEl) renderQuantAQCronLines();
-}
-
-function renderQuantAQCronLines() {
-    const lastEl = document.getElementById('dashboard-last-check');
-    const nextEl = document.getElementById('dashboard-next-check');
-    if (!lastEl || !nextEl) return;
-
-    // "Last check" — authoritative scan completion timestamp from app_settings
-    if (typeof quantaqLastCheck !== 'undefined' && quantaqLastCheck) {
-        lastEl.textContent = 'Last QuantAQ check: ' + new Date(quantaqLastCheck).toLocaleString('en-US', {
-            weekday: 'short', month: 'short', day: 'numeric', year: 'numeric',
-            hour: 'numeric', minute: '2-digit', timeZone: AK_TZ,
-        });
-    } else {
-        lastEl.textContent = 'No QuantAQ check has been run yet';
-    }
-
-    // "Next scheduled" — parsed from the live cron.job.schedule in the DB
-    if (quantaqCronInfo && quantaqCronInfo.schedule) {
-        const next = nextCronRun(quantaqCronInfo.schedule, new Date());
-        if (next) {
-            nextEl.textContent = 'Next scheduled check: ' + next.toLocaleString('en-US', {
-                weekday: 'short', month: 'short', day: 'numeric',
-                hour: 'numeric', minute: '2-digit', timeZone: AK_TZ,
-            }) + ' AK';
-        } else {
-            nextEl.textContent = 'Next scheduled check: (unsupported schedule ' + quantaqCronInfo.schedule + ')';
-        }
-    } else {
-        nextEl.textContent = 'Next scheduled check: (cron info unavailable)';
-    }
-}
-
-// Parse a pg_cron expression (5 fields: minute hour day-of-month month day-of-week)
-// and compute the next fire time after `fromDate`. Supports N, *, and N-M ranges
-// (with comma lists) in each field. Returns a Date or null if it can't parse.
-function nextCronRun(schedule, fromDate) {
-    const parts = String(schedule).trim().split(/\s+/);
-    if (parts.length !== 5) return null;
-    const [mStr, hStr, domStr, monStr, dowStr] = parts;
-
-    const parseField = (str, min, max) => {
-        // Each comma-separated piece can be one of:
-        //   *           every value in [min, max]
-        //   N           single value
-        //   A-B         inclusive range
-        //   */N         every Nth value across the full range
-        //   A-B/N       every Nth value across the given range
-        const set = new Set();
-        for (const piece of str.split(',')) {
-            const [body, stepStr] = piece.split('/');
-            const step = stepStr === undefined ? 1 : Number(stepStr);
-            if (isNaN(step) || step < 1) return null;
-            let lo, hi;
-            if (body === '*') {
-                lo = min; hi = max;
-            } else if (body.includes('-')) {
-                const [a, b] = body.split('-').map(Number);
-                if (isNaN(a) || isNaN(b)) return null;
-                lo = a; hi = b;
-            } else {
-                const n = Number(body);
-                if (isNaN(n)) return null;
-                if (step === 1) { set.add(n); continue; }
-                // A bare value with a step like "5/15" is unusual but pg_cron
-                // treats it as "starting at 5, every 15 up to max".
-                lo = n; hi = max;
-            }
-            for (let i = lo; i <= hi; i += step) set.add(i);
-        }
-        return set;
-    };
-
-    const minutes = parseField(mStr, 0, 59);
-    const hours = parseField(hStr, 0, 23);
-    const doms = parseField(domStr, 1, 31);
-    const months = parseField(monStr, 1, 12);
-    const dows = parseField(dowStr, 0, 6);
-    if (!minutes || !hours || !doms || !months || !dows) return null;
-
-    // Walk forward minute by minute until we find a match. Cap at 2 weeks.
-    const d = new Date(fromDate);
-    d.setUTCSeconds(0, 0);
-    d.setUTCMinutes(d.getUTCMinutes() + 1);
-    const maxIters = 60 * 24 * 14;
-    for (let i = 0; i < maxIters; i++) {
-        if (
-            minutes.has(d.getUTCMinutes()) &&
-            hours.has(d.getUTCHours()) &&
-            doms.has(d.getUTCDate()) &&
-            months.has(d.getUTCMonth() + 1) &&
-            dows.has(d.getUTCDay())
-        ) {
-            return d;
-        }
-        d.setUTCMinutes(d.getUTCMinutes() + 1);
-    }
-    return null;
 }
 
 // ===== COMMUNITIES LIST VIEW =====
@@ -4731,7 +4601,6 @@ function editFollowUp(noteId, followUpIdx) {
         }
         db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
         refreshCurrentView();
-        if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
     }, { multiline: true, mention: true });
 }
 
@@ -4751,7 +4620,6 @@ function deleteFollowUp(noteId, followUpIdx) {
 
     note.text = [...mainLines, ...followUps].join('\n');
     refreshCurrentView();
-    if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts();
     db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
 }
 
@@ -5009,7 +4877,7 @@ function refreshCurrentView() {
     // Only re-render the currently active view — not all views with non-null state.
     const activeView = document.querySelector('.view.active');
     const activeViewId = activeView?.id;
-    if (activeViewId === 'view-dashboard') { if (typeof renderDashboardAlerts === 'function') renderDashboardAlerts(); }
+    if (activeViewId === 'view-dashboard') { renderDashboard(); }
     else if (activeViewId === 'view-all-sensors') { renderSensors(); }
     else if (activeViewId === 'view-contacts') { renderContacts(); }
     else if (activeViewId === 'view-communities') { renderCommunitiesList(); }

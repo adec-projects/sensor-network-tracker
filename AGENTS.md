@@ -15,7 +15,7 @@ Both modes point at the same Supabase project, so local edits read/write product
 Three-piece stack:
 1. **Static frontend** (this repo) — served by GitHub Pages or opened locally.
 2. **Supabase** — Postgres database, auth, storage, edge functions, and cron. All data lives here.
-3. **QuantAQ API** — sensor manufacturer's API. The app never calls it directly from the browser; the `quantaq-check` edge function is the only thing holding the API key.
+3. **QuantAQ** — the sensor manufacturer (the hardware is QuantAQ Modulairs). There is no longer any automatic integration: the app does not call the QuantAQ API, and sensor issues are noticed and logged manually.
 
 Data flow: browser → `supabase-client.js` (`db` helpers) → Supabase. The app has no custom backend server.
 
@@ -28,15 +28,12 @@ See `ARCHITECTURE.md` for the data-flow diagram and `docs/data-model.md` for tab
 - **`styles.css`** — full styling, "Arctic Observatory" theme, design tokens in `:root`.
 - **`app.js`** (~11k lines) — main app logic: rendering, sensors, communities, contacts, notes, comms, files, auth UI.
 - **`supabase-client.js`** — Supabase JS client setup and the `db` helper object (all CRUD, auth, RPC calls go through here). Keys are the public anon key — RLS enforces security.
-- **`quantaq.js`** — QuantAQ alerts UI: loads/renders alerts from the `quantaq_alerts` table, handles filtering, acknowledging, and linking alerts to history notes. The actual scan runs in the edge function, not here.
-- **`quantaq.css`** — QuantAQ-specific styles.
 
 ### Supabase project
 - **`supabase/config.toml`** — local Supabase CLI config.
 - **`supabase/migrations/`** — SQL migrations, timestamped. Run via `supabase db push`.
-- **`supabase/functions/quantaq-check/`** — the edge function that runs the full QuantAQ sensor scan server-side on a cron schedule. It decodes flag bitmasks, applies grace periods (6h for gas flags, 2h for lost connections), and writes alerts to `quantaq_alerts`.
 - **`supabase-schema.sql`** — original full schema dump. Historical reference; prefer `supabase/migrations/` going forward.
-- **`seed-data.sql`**, **`seed-data-clean.sql`**, **`quantaq-setup.sql`**, **`collocation-schema.sql`** — one-shot SQL scripts used during initial setup. Don't rerun blindly.
+- **`seed-data.sql`**, **`seed-data-clean.sql`**, **`collocation-schema.sql`** — one-shot SQL scripts used during initial setup. Don't rerun blindly.
 
 ### One-off importer tools (standalone HTML pages)
 Each is a self-contained page that reads a CSV/paste and writes to Supabase. Open them directly in a browser when needed; they are not linked from the main app. See `docs/importers.md`.
@@ -49,9 +46,6 @@ Each is a self-contained page that reads a CSV/paste and writes to Supabase. Ope
 - `user-guide.html` — the rendered user guide shipped to ADEC staff.
 - `user-guide-editor.html` — in-browser editor for the guide.
 
-### Scratch / experiments
-- `quantaq-test/` — local Python test servers for QuantAQ API experiments. Not part of the deployed app.
-
 ## Key Concepts
 - **~40 communities** across Alaska, each typically has 1 sensor at a gathering place (school, tribal office, library). Communities list lives in the `communities` table, not hardcoded.
 - **3 regulatory sites** (Anchorage, Fairbanks, Juneau) with permanent pods.
@@ -60,7 +54,6 @@ Each is a self-contained page that reads a CSV/paste and writes to Supabase. Ope
 - **Cross-tagging**: notes and comms can be tagged to multiple sensors, communities, and contacts via `note_tags` / `comm_tags` — a single record appears in the history of everything it's tagged to.
 - **Auto-generated movement notes** when a sensor is moved between communities.
 - **Community tags** (e.g. "Regulatory Site", "Interior Network") are customizable per community.
-- **Grace periods** on QuantAQ alerts prevent false alarms from routine power cycles and sensor warmups.
 
 ## Sensor Statuses
 Online, Offline, In Transit, Service at Quant, Collocation, Auditing a Community, Lab Storage, Needs Repair, Ready for Deployment, PM Sensor Issue, Gaseous Sensor Issue, SD Card Issue.
@@ -83,4 +76,3 @@ Status is a `text[]` array — a sensor can be simultaneously "Online" and "PM S
 - `persist()` from the localStorage era is gone; writes go through `db.*` helpers in `supabase-client.js`.
 - Views are toggled by adding/removing the `.active` class; modals use `.open`.
 - When changing schema, add a new file under `supabase/migrations/` — don't edit old ones.
-- See `docs/quantaq-integration.md` before touching the cron/edge function.

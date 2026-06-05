@@ -118,27 +118,9 @@ Metadata rows. Actual file bytes live in the Supabase Storage bucket `community-
 
 ---
 
-## QuantAQ alerts
-
-### `quantaq_alerts`
-Written by the `quantaq-check` edge function, read by `quantaq.js`. See [`quantaq-integration.md`](quantaq-integration.md) for the full lifecycle.
-
-| Column | Purpose |
-|---|---|
-| `sensor_sn`, `sensor_model` | Which sensor |
-| `community_name` | Denormalized for display |
-| `issue_type` | `Lost Connection`, `PM Sensor Issue`, `Gaseous Sensor Issue`, `SD Card Issue` |
-| `detail` | Human-readable explanation (decoded flag names, etc.) |
-| `status` | `pending`, `active`, `resolved`, `acknowledged` |
-| `severity` | `critical` / `warning` / `info` |
-| `grace_expires_at` | When a pending alert becomes active, or resolves-to-nothing if it clears first |
-| `is_new` | UI flag for "you haven't seen this yet" |
-| `detected_at`, `resolved_at`, `last_checked` | Timestamps |
-| `acknowledged_by` | Profile reference |
-| `notes` | JSONB array — free-form notes, including the linked `noteId` from the `notes` table if the alert was escalated to history |
-
-### `app_settings`
-Misc key/value scratch space. Used for things like `quantaq_last_check`.
+## `app_settings`
+Misc key/value scratch space (e.g. `mfa_required`). The old `quantaq_alerts`
+table and automatic scan have been removed — sensor issues are logged manually.
 
 ---
 
@@ -148,7 +130,7 @@ Valid values for `sensors.status[]`:
 
 Online, Offline, In Transit, Service at Quant, Collocation, Auditing a Community, Lab Storage, Needs Repair, Ready for Deployment, PM Sensor Issue, Gaseous Sensor Issue, SD Card Issue.
 
-The last three are "issue" statuses added and removed by the QuantAQ scan; the rest are set manually from the sensor detail view.
+All statuses are set manually from the sensor detail view.
 
 ---
 
