@@ -1533,6 +1533,15 @@ function showView(viewName) {
 // A global "+ New Log" with no preset context — user picks who/what to tag.
 function openGlobalNewLog() { openNewLog('', ''); }
 
+// Open the All Sensors view pre-filtered to a status (e.g. '_issues' = all
+// issue statuses). Used by the dashboard "needs attention" card.
+function showSensorsByStatus(value) {
+    sensorTagFilter = '';
+    showView('all-sensors');
+    const f = document.getElementById('sensor-status-filter');
+    if (f) { f.value = value; renderSensors(); }
+}
+
 function renderDashboard() {
     const totalSensors = sensors.length;
     const onlineCount = sensors.filter(s => getStatusArray(s).includes('Online')).length;
@@ -1560,7 +1569,7 @@ function renderDashboard() {
             return attnItem(
                 `<span class="mono">${escapeHtml(s.id)}</span> ${statuses.map(st => `<span class="badge ${getStatusBadgeClass(st)}">${st}</span>`).join(' ')}`,
                 `showSensorDetail('${s.id}')`);
-        }).join('') + (issueSensors.length > 6 ? `<div class="dash-attn-more" onclick="showView('all-sensors')">+ ${issueSensors.length - 6} more →</div>` : '')
+        }).join('') + (issueSensors.length > 6 ? `<div class="dash-attn-more" onclick="showSensorsByStatus('_issues')">+ ${issueSensors.length - 6} more →</div>` : '')
         : cardEmpty('No sensors flagged. 🎉');
 
     const ticketsCard = openTickets.length
@@ -1807,13 +1816,11 @@ function getStatusBadgeClass(status) {
     const map = {
         'Online': 'badge-online',
         'Offline': 'badge-offline',
-        'In Transit Between Audits': 'badge-transit',
         'Service at Quant': 'badge-service-quant',
         'Collocation': 'badge-collocation',
         'Auditing a Community': 'badge-auditing',
         'Lab Storage': 'badge-lab-storage',
         'Needs Repair': 'badge-needs-repair',
-        'Ready for Deployment': 'badge-ready',
         'PM Sensor Issue': 'badge-issue-orange',
         'Gaseous Sensor Issue': 'badge-issue-orange',
         'SD Card Issue': 'badge-issue-yellow',
@@ -2059,7 +2066,8 @@ function renderSensors() {
 
     let filtered = pool.filter(s => {
         if (search && !s.id.toLowerCase().includes(search) && !getCommunityName(s.community).toLowerCase().includes(search) && !(s.soaTagId || '').toLowerCase().includes(search)) return false;
-        if (statusFilter && !getStatusArray(s).includes(statusFilter)) return false;
+        if (statusFilter === '_issues') { if (!getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st))) return false; }
+        else if (statusFilter && !getStatusArray(s).includes(statusFilter)) return false;
         if (sensorTagFilter) {
             if (sensorTagFilter === 'Issue Sensors') {
                 if (!isIssueSensor(s)) return false;
@@ -2712,10 +2720,6 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Address/Coordinates</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${s.location || ''}" placeholder="Address or GPS coordinates" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
-            <div class="info-item"><label>Install Date</label>
-                <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${s.dateInstalled || ''}" onblur="inlineSaveSensor(this)">
-            </div>
-
             <div class="info-item"><label>SOA Tag ID</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
@@ -2735,7 +2739,6 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)}</p></div>
             <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
-            <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'}</p></div>
 
             <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
             <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
@@ -5720,8 +5723,8 @@ function addCustomTag() {
 
 // ===== STATUS TOGGLE LIST =====
 const MANUAL_STATUSES = [
-    'Online', 'Offline', 'Lost Connection', 'In Transit Between Audits',
-    'Lab Storage', 'Ready for Deployment', 'Needs Repair',
+    'Online', 'Offline', 'Lost Connection',
+    'Lab Storage', 'Needs Repair',
     'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue',
     'Possible Auto Shutoff Firmware Issue'
 ];
@@ -9003,10 +9006,8 @@ function showAuditPodStatusPicker(audit, onConfirm) {
             current Online / deployment tags so it reads accurately.
         </p>
         <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:12px">
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="In Transit Between Audits" checked> In Transit Between Audits</label>
+            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Lab Storage" checked> Lab Storage</label>
             <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Offline"> Offline</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Lab Storage"> Lab Storage</label>
-            <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Ready for Deployment"> Ready for Deployment</label>
             <label style="display:flex;align-items:center;gap:8px;font-size:14px;cursor:pointer"><input type="checkbox" class="pod-status-choice" value="Needs Repair"> Needs Repair</label>
         </div>
         <p style="font-size:11px;color:var(--slate-400);margin:-4px 0 10px">Leave every box unchecked to leave the pod's status as-is.</p>
@@ -10782,36 +10783,25 @@ function renderCommunityOverview(communityId) {
         </div>`).join('')
         : '<p class="ov-empty">No sensors assigned</p>';
 
-    // Recent history (3 items) — only notes explicitly tagged to this community
-    const commNotes = notes.filter(n => {
-        return n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id));
-    }).sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')).slice(0, 3);
-    const historyHtml = commNotes.length > 0
-        ? commNotes.map(n => `<div class="ov-timeline-item">
-            <span class="ov-timeline-type">${n.type}</span>
-            <span class="ov-timeline-text">${escapeHtml((n.text || '').substring(0, 100))}${(n.text || '').length > 100 ? '...' : ''}</span>
-            <span class="ov-timeline-date">${formatDate(n.date || n.createdAt)}</span>
-        </div>`).join('')
-        : '<p class="ov-empty">No history yet</p>';
-
-    // Recent comms (3 items)
-    const commComms = comms.filter(c => allCommunityIds.includes(c.community) || (c.taggedCommunities && c.taggedCommunities.some(id => allCommunityIds.includes(id))))
-        .sort((a, b) => (b.date || b.createdAt || '').localeCompare(a.date || a.createdAt || '')).slice(0, 3);
+    // Recent log (top 4) — notes + communications merged, newest first.
     const _commGeneric = ['call', 'phone', 'phone call', 'called', 'email', 'emailed', 'site visit', 'visit', 'text', 'sms', 'other', 'log call'];
-    const commsHtml = commComms.length > 0
-        ? commComms.map(c => {
-            // Prefer the actual content; fall back to the title unless it's a
-            // generic echo of the type ("Call"), which we'd rather not repeat.
-            const body = (c.fullBody || '').trim();
-            const txt = (c.text || '').trim();
-            const preview = body || (_commGeneric.includes(txt.toLowerCase()) ? '' : txt);
-            return `<div class="ov-timeline-item">
-            <span class="ov-timeline-type">${c.commType || c.type}</span>
-            <span class="ov-timeline-text">${preview ? escapeHtml(preview.substring(0, 100)) + (preview.length > 100 ? '…' : '') : '<span style="color:var(--slate-300)">—</span>'}</span>
-            <span class="ov-timeline-date">${formatDate(c.date || c.createdAt)}</span>
-        </div>`;
-        }).join('')
-        : '<p class="ov-empty">No communications yet</p>';
+    const recentLog = [
+        ...notes.filter(n => n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id)))
+            .map(n => ({ type: n.type, text: n.text || '', date: n.date || n.createdAt })),
+        ...comms.filter(c => allCommunityIds.includes(c.community) || (c.taggedCommunities && c.taggedCommunities.some(id => allCommunityIds.includes(id))))
+            .map(c => {
+                const body = (c.fullBody || '').trim();
+                const txt = (c.text || '').trim();
+                return { type: c.commType || c.type, text: body || (_commGeneric.includes(txt.toLowerCase()) ? '' : txt), date: c.date || c.createdAt };
+            }),
+    ].sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 4);
+    const historyHtml = recentLog.length > 0
+        ? recentLog.map(it => `<div class="ov-timeline-item">
+            <span class="ov-timeline-type">${escapeHtml(it.type || 'Note')}</span>
+            <span class="ov-timeline-text">${it.text ? escapeHtml(it.text.substring(0, 100)) + (it.text.length > 100 ? '…' : '') : '<span style="color:var(--slate-300)">—</span>'}</span>
+            <span class="ov-timeline-date">${formatDate(it.date)}</span>
+        </div>`).join('')
+        : '<p class="ov-empty">No log entries yet</p>';
 
     // Top contacts (2) — primary contacts first, then alphabetical
     const commContacts = contacts.filter(c => ((c.communities || []).some(id => allCommunityIds.includes(id)) || allCommunityIds.includes(c.community)) && c.active !== false)
@@ -10862,11 +10852,11 @@ function renderCommunityOverview(communityId) {
                 ${contactsHtml}
             </div>
             <div class="ov-card">
-                <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-install-history')">Install History <span class="ov-card-expand">&rarr;</span></h3>
+                <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-sensors')">Install History <span class="ov-card-expand">&rarr;</span></h3>
                 ${installOverviewHtml}
             </div>
             <div class="ov-card">
-                <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('all')">Recent History <span class="ov-card-expand">&rarr;</span></h3>
+                <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('all')">Log History <span class="ov-card-expand">&rarr;</span></h3>
                 ${historyHtml}
             </div>
             <div class="ov-card details-card">
@@ -10886,10 +10876,6 @@ function renderCommunityOverview(communityId) {
                         <span id="comm-details-msg-${communityId}" class="details-save-msg"></span>
                     </div>
                 </div>
-            </div>
-            <div class="ov-card ov-card-wide">
-                <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('comms')">Recent Communications <span class="ov-card-expand">&rarr;</span></h3>
-                ${commsHtml}
             </div>
             <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-audits')">Most Recent Audit <span class="ov-card-expand">&rarr;</span></h3>

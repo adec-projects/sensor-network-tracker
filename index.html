@@ -185,17 +185,10 @@
                     <select id="sensor-status-filter" onchange="renderSensors()" aria-label="Filter by status">
                         <option value="">All Statuses</option>
                         <option value="Online">Online</option>
-                        <option value="Offline">Offline</option>
-                        <option value="In Transit Between Audits">In Transit Between Audits</option>
+                        <option value="_issues">All Issues</option>
+                        <option value="Lab Storage">Lab Storage</option>
                         <option value="Service at Quant">Service at Quant</option>
                         <option value="Collocation">Collocation</option>
-                        <option value="Auditing a Community">Auditing a Community</option>
-                        <option value="Lab Storage">Lab Storage</option>
-                        <option value="Needs Repair">Needs Repair</option>
-                        <option value="Ready for Deployment">Ready for Deployment</option>
-                        <option value="PM Sensor Issue">PM Sensor Issue</option>
-                        <option value="Gaseous Sensor Issue">Gaseous Sensor Issue</option>
-                        <option value="SD Card Issue">SD Card Issue</option>
                     </select>
                 </div>
                 <div class="table-container">
@@ -310,7 +303,6 @@
                 <div class="tabs">
                     <button class="tab active" data-tab="community-overview">Overview</button>
                     <button class="tab" data-tab="community-sensors">Sensors</button>
-                    <button class="tab" data-tab="community-install-history">Install History</button>
                     <button class="tab" data-tab="community-contacts">Contacts</button>
                     <button class="tab" data-tab="community-history">Log History</button>
                     <button class="tab" data-tab="community-files">Files</button>
@@ -323,9 +315,7 @@
 
                 <div id="tab-community-sensors" class="tab-content">
                     <div id="community-sensors-section"></div>
-                </div>
-
-                <div id="tab-community-install-history" class="tab-content">
+                    <h3 class="community-install-subhead">Install History</h3>
                     <div id="community-install-history-section"></div>
                 </div>
 
