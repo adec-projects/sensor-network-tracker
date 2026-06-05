@@ -1833,6 +1833,29 @@ function getStatusBadgeClass(status) {
     return 'badge-offline';
 }
 
+// Solid dot color per status — used for the compact multi-status dots on the
+// pod install reference sheet (mirrors the ::before dot colors of each badge).
+function getStatusDotColor(status) {
+    const map = {
+        'Online': '#22c55e',
+        'Offline': '#94a3b8',
+        'Service at Quant': '#8b5cf6',
+        'Quant Ticket in Progress': '#8b5cf6',
+        'Collocation': '#3b82f6',
+        'Auditing a Community': '#8b5cf6',
+        'Lab Storage': '#334155',
+        'Needs Repair': '#f97316',
+        'PM Sensor Issue': '#f97316',
+        'Gaseous Sensor Issue': '#f97316',
+        'SD Card Issue': '#eab308',
+        'Possible Auto Shutoff Firmware Issue': '#eab308',
+        'Lost Connection': '#ef4444',
+    };
+    if (map[status]) return map[status];
+    if (status?.startsWith('Audit: ')) return '#8b5cf6';
+    return '#94a3b8';
+}
+
 const SENSOR_TYPES = ['Community Pod', 'Permanent Pod', 'Audit Pod', 'Not Assigned'];
 
 // Get status as array (handles old single-string data and new array data)
@@ -3109,12 +3132,14 @@ function renderInstallReferenceTable() {
         .sort((a, b) => a.id.localeCompare(b.id));
     const renderRow = s => {
         const st = getStatusArray(s);
-        const statusBadge = st.length ? `<span class="badge ${getStatusBadgeClass(st[0])}">${escapeHtml(st[0])}</span>` : '';
+        const dots = st.length
+            ? `<span class="status-dots" title="${escapeHtml(st.join(', '))}">${st.map(x => `<span class="status-dot" style="background:${getStatusDotColor(x)}" title="${escapeHtml(x)}"></span>`).join('')}</span>`
+            : '<span class="field-placeholder">—</span>';
         return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
                 <td class="mono">${escapeHtml(s.id)}</td>
                 <td>${s.community ? escapeHtml(getCommunityName(s.community)) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${s.dateInstalled ? formatDate(s.dateInstalled) : '<span class="field-placeholder">—</span>'}</td>
-                <td>${statusBadge}</td>
+                <td>${dots}</td>
             </tr>`;
     };
     const tableFor = list => `<table class="install-ref-table"><thead><tr><th>Pod</th><th>Location</th><th>Installed</th><th>Status</th></tr></thead><tbody>

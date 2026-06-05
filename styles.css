@@ -1591,10 +1591,21 @@ tr:last-child td {
 .install-ref-cols {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 0 20px;
+    gap: 0;
     align-items: start;
 }
-@media (max-width: 760px) { .install-ref-cols { grid-template-columns: 1fr; } }
+.install-ref-cols > .install-ref-table:first-child {
+    border-right: 1px solid var(--slate-200);
+    padding-right: 16px;
+}
+.install-ref-cols > .install-ref-table:last-child { padding-left: 16px; }
+@media (max-width: 760px) {
+    .install-ref-cols { grid-template-columns: 1fr; }
+    .install-ref-cols > .install-ref-table:first-child { border-right: none; padding-right: 0; }
+    .install-ref-cols > .install-ref-table:last-child { padding-left: 0; }
+}
+.status-dots { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
+.status-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; }
 .install-ref-table {
     width: 100%;
     border-collapse: collapse;
