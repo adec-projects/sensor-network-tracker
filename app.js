@@ -4224,43 +4224,47 @@ function openNewLog(contextType, contextId) {
     document.getElementById('modal-add-note-title').textContent = 'New Log';
     document.getElementById('log-type-group').style.display = '';
     const chips = [...document.querySelectorAll('#log-type-group .log-type-chip')];
-    // Default type by where you launched it
-    const wantNote = contextType === 'sensor';
-    const def = chips.find(c => wantNote ? c.dataset.action === 'site-work' : c.dataset.lt === 'Phone Call') || chips[0];
-    if (def) selectLogType(def);
+    chips.forEach(c => c.classList.remove('active'));
+    // Default by where you launched it: sensor → General Note, otherwise → Call.
+    const def = contextType === 'sensor'
+        ? chips.find(c => c.dataset.type === 'General')
+        : chips.find(c => c.dataset.commtype === 'Phone Call');
+    if (def) def.classList.add('active');
+    updateLogTypeUI();
     if (contextType === 'contact') {
         const ta = document.getElementById('note-text-input');
         if (ta) setTimeout(() => { ta.focus(); const n = ta.value.length; ta.setSelectionRange(n, n); }, 0);
     }
 }
+function getActiveLogChips() {
+    return [...document.querySelectorAll('#log-type-group .log-type-chip.active')];
+}
+// Chips are multi-select: clicking toggles. The selection drives which
+// expandable sections (status list / move dropdown) and the sensor-tag field
+// are shown.
 function selectLogType(btn) {
-    document.querySelectorAll('#log-type-group .log-type-chip').forEach(c => c.classList.remove('active'));
-    btn.classList.add('active');
-    const kind = btn.dataset.kind;
-    document.getElementById('log-kind').value = kind;
-    document.getElementById('log-commtype').value = kind === 'comm' ? (btn.dataset.lt || '') : '';
+    btn.classList.toggle('active');
+    updateLogTypeUI();
+}
+function updateLogTypeUI() {
+    const active = getActiveLogChips();
+    const hasNoteAction = active.some(c => c.dataset.kind === 'note');
+    const wantStatus = active.some(c => c.dataset.expand === 'status');
+    const wantMove = active.some(c => c.dataset.expand === 'move');
+    // Sensor tags only apply to note-type logs (comms can't carry sensors).
     const sensorGroup = document.getElementById('tag-sensors-container')?.closest('.form-group');
-    const actionsGroup = document.getElementById('note-actions-group');
-    const acts = ['move', 'status', 'troubleshooting', 'site-work'];
-    if (kind === 'comm') {
-        // Comms can't carry sensor tags (schema) and have no work-actions.
-        if (sensorGroup) sensorGroup.style.display = 'none';
-        if (actionsGroup) actionsGroup.style.display = 'none';
-        acts.forEach(a => { const cb = document.getElementById('note-action-' + a); if (cb) cb.checked = false; });
-        onNoteActionsChange();
-    } else {
-        if (sensorGroup) sensorGroup.style.display = '';
-        if (actionsGroup) actionsGroup.style.display = '';
-        acts.forEach(a => { const cb = document.getElementById('note-action-' + a); if (cb) cb.checked = (a === btn.dataset.action); });
-        onNoteActionsChange();
-    }
+    if (sensorGroup) sensorGroup.style.display = hasNoteAction ? '' : 'none';
+    const statusGroup = document.getElementById('note-status-change-group');
+    if (statusGroup) statusGroup.style.display = wantStatus ? '' : 'none';
+    const moveGroup = document.getElementById('note-move-group');
+    if (moveGroup) moveGroup.style.display = wantMove ? '' : 'none';
     const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
-function saveLogAsComm() {
+function saveLogAsComm(commType) {
     const text = document.getElementById('note-text-input').value.trim();
     if (!text) { document.getElementById('note-text-input').focus(); return; }
-    const commType = document.getElementById('log-commtype').value || 'Phone Call';
+    commType = commType || getActiveLogChips().find(c => c.dataset.kind === 'comm')?.dataset.commtype || 'Phone Call';
     const date = document.getElementById('note-date-input').value || nowDatetime();
     const ctxId = document.getElementById('note-context-id').value;
     const ctxType = document.getElementById('note-context-type').value;
@@ -4287,9 +4291,7 @@ function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-context-type').value = contextType;
     document.getElementById('note-edit-id').value = '';
     document.getElementById('note-date-input').value = nowDatetime();
-    // Default to plain-note mode; openNewLog() turns on the type picker.
-    document.getElementById('log-kind').value = 'note';
-    document.getElementById('log-commtype').value = '';
+    // Default to plain-note mode; openNewLog() turns on the action chips.
     const ltg = document.getElementById('log-type-group'); if (ltg) ltg.style.display = 'none';
     const sg0 = document.getElementById('tag-sensors-container')?.closest('.form-group'); if (sg0) sg0.style.display = '';
     // Reset modal chrome to "Add Note" mode (in case it was just used for an edit).
@@ -4297,8 +4299,8 @@ function openAddNoteModal(contextId, contextType) {
     if (titleEl) titleEl.textContent = 'Add Note';
     const submitBtn = document.getElementById('modal-add-note-submit');
     if (submitBtn) submitBtn.textContent = 'Save Note';
-    const actionsGroup = document.getElementById('note-actions-group');
-    if (actionsGroup) actionsGroup.style.display = '';
+    // Reset the New-Log action chips (multi-select).
+    document.querySelectorAll('#log-type-group .log-type-chip').forEach(c => c.classList.remove('active'));
 
     // Clear all chip containers
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
@@ -4331,15 +4333,10 @@ function openAddNoteModal(contextId, contextType) {
     // Tag-contacts chip was removed — contacts are tagged via @mentions in
     // the note body now. Keep sensor + community chips.
 
-    // Reset all action checkboxes
-    document.querySelectorAll('#note-actions-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    // Hide the expandable action panels until their chip is selected.
     document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
-    document.getElementById('note-move-target-group').style.display = 'none';
-
-    // Singularize the Move action label when adding a note from a single sensor
-    const moveLabel = document.getElementById('note-action-move-label');
-    if (moveLabel) moveLabel.textContent = contextType === 'sensor' ? 'Move Sensor' : 'Move Sensors';
+    document.getElementById('note-move-group').style.display = 'none';
 
     // Pre-populate status list with current sensor's statuses if available
     if (contextType === 'sensor') {
@@ -4364,39 +4361,30 @@ function openAddNoteModal(contextId, contextType) {
     openModal('modal-add-note');
 }
 
-function onNoteActionsChange() {
-    const statusChecked = document.getElementById('note-action-status').checked;
-    const moveChecked = document.getElementById('note-action-move').checked;
-
-    // Show/hide status toggle list
-    const statusGroup = document.getElementById('note-status-change-group');
-    if (statusGroup) statusGroup.style.display = statusChecked ? '' : 'none';
-
-    // Show/hide move target dropdown
-    const moveTargetGroup = document.getElementById('note-move-target-group');
-    if (moveTargetGroup) moveTargetGroup.style.display = moveChecked ? '' : 'none';
-
-    // Render status toggle list when status checkbox is checked (use full ALL_STATUSES list)
-    if (statusChecked) {
-        renderStatusToggleList('note-status-list', []);
-    }
-}
-
+// Build the note's type string from the active action chips. A pure
+// communication is handled separately (saved as a comm); this only runs when
+// at least one note-type chip is selected.
 function getNoteActionsType() {
-    const actions = [];
-    if (document.getElementById('note-action-move').checked) actions.push('Movement');
-    if (document.getElementById('note-action-troubleshooting').checked) actions.push('Troubleshooting');
-    if (document.getElementById('note-action-site-work').checked) actions.push('Site Work');
-    if (document.getElementById('note-action-status').checked) actions.push('Status Change');
-    if (actions.length === 0) return 'General';
-    if (actions.length === 1) return actions[0];
-    return actions.join(' + ');
+    const active = getActiveLogChips();
+    const types = [];
+    // Include a comm label first if one is combined with note actions.
+    const commChip = active.find(c => c.dataset.kind === 'comm');
+    if (commChip) types.push(commChip.dataset.commtype);
+    active.filter(c => c.dataset.kind === 'note').forEach(c => types.push(c.dataset.type));
+    const unique = [...new Set(types)].filter(Boolean);
+    return unique.length ? unique.join(' + ') : 'General';
 }
 
 function saveNote(e) {
     e.preventDefault();
-    // New Log: communication types go to a comm instead of a note.
-    if (document.getElementById('log-kind')?.value === 'comm') { saveLogAsComm(); return; }
+    // New Log: a pure communication (comm chip with no note actions) saves as a
+    // comm. Anything involving a note action saves as a note (which can also
+    // carry the comm label in its type).
+    const activeChips = getActiveLogChips();
+    const hasNoteAction = activeChips.some(c => c.dataset.kind === 'note');
+    const commChip = activeChips.find(c => c.dataset.kind === 'comm');
+    const editingNow = !!(document.getElementById('note-edit-id')?.value);
+    if (!editingNow && commChip && !hasNoteAction) { saveLogAsComm(commChip.dataset.commtype); return; }
 
     const text = document.getElementById('note-text-input').value.trim();
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();
@@ -4449,9 +4437,9 @@ function saveNote(e) {
 
     notes.push(note); persistNote(note);
 
-    // Move tagged sensors if Move Sensors action is checked
+    // Move tagged sensors if the Sensor Movement chip is selected
     let movedCount = 0;
-    if (document.getElementById('note-action-move')?.checked) {
+    if (activeChips.some(c => c.dataset.expand === 'move')) {
         const targetCommunityId = document.getElementById('note-move-target-community')?.value || '';
         if (targetCommunityId && sensorTags.length > 0) {
             const targetName = getCommunityName(targetCommunityId);
@@ -4474,7 +4462,7 @@ function saveNote(e) {
     // Apply status change to all tagged sensors if Status Change action is checked
     // ADDS the selected statuses to existing ones, doesn't replace
     let statusChangedCount = 0;
-    if (document.getElementById('note-action-status')?.checked) {
+    if (activeChips.some(c => c.dataset.expand === 'status')) {
         const newStatuses = getSelectedStatuses('note-status-list');
         if (newStatuses.length > 0 && sensorTags.length > 0) {
             sensorTags.forEach(sId => {
@@ -4873,19 +4861,17 @@ function openEditNoteModal(noteId) {
     // wiring for chip inputs, mention autocomplete, status list).
     openAddNoteModal('', '');
 
-    // Switch to edit mode: title, submit text, hidden id, and hide the
-    // creation-time Action checkboxes (Move/Status Change/Troubleshooting/
-    // Site Work). Re-running those on edit would re-apply movements or
-    // re-merge statuses, which isn't what "edit" should do.
+    // Switch to edit mode: title, submit text, hidden id, and keep the
+    // action chips/panels hidden. Re-running move/status actions on edit would
+    // re-apply movements or re-merge statuses, which isn't what "edit" means.
     document.getElementById('note-edit-id').value = noteId;
     const titleEl = document.getElementById('modal-add-note-title');
     if (titleEl) titleEl.textContent = 'Edit Note';
     const submitBtn = document.getElementById('modal-add-note-submit');
     if (submitBtn) submitBtn.textContent = 'Save Changes';
-    const actionsGroup = document.getElementById('note-actions-group');
-    if (actionsGroup) actionsGroup.style.display = 'none';
+    document.getElementById('log-type-group').style.display = 'none';
     document.getElementById('note-status-change-group').style.display = 'none';
-    document.getElementById('note-move-target-group').style.display = 'none';
+    document.getElementById('note-move-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
 
     // Pre-fill text + date.
