@@ -2625,7 +2625,7 @@ function showSensorView(sensorId) {
                     ${'<option value="">— None —</option>' + [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).map(c => `<option value="${c.id}" ${s.community === c.id ? 'selected' : ''}>${escapeHtml(c.name)}</option>`).join('')}
                 </select>
             </div>
-            <div class="info-item"><label>Location</label>
+            <div class="info-item"><label>Address/Coordinates</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${s.location || ''}" placeholder="Address or GPS coordinates" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item"><label>Install Date</label>
@@ -2650,7 +2650,7 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
-            <div class="info-item"><label>Location</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
+            <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
             <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'}</p></div>
 
             <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
@@ -2812,7 +2812,8 @@ function showCommunityView(communityId) {
     const community = COMMUNITIES.find(c => c.id === communityId);
     if (!community) return;
     currentCommunity = communityId;
-    ['community-history-search', 'comm-search'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    ['community-history-search'].forEach(id => { const el = document.getElementById(id); if (el) el.value = ''; });
+    const _logFilter = document.getElementById('community-log-filter'); if (_logFilter) _logFilter.value = 'all';
 
     // Build header with parent breadcrumb
     const parent = getParentCommunity(communityId);
@@ -2946,16 +2947,13 @@ function showCommunityView(communityId) {
     const commNotes = notes.filter(n => {
         return n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id));
     });
-    renderTimeline('community-history-timeline', commNotes);
-    filterTimelineSearch('community-history-timeline', document.getElementById('community-history-search')?.value);
-
-    // Comms
+    // Comms — merged into the same "Log History" timeline as notes.
     const commComms = comms.filter(c => allCommunityIds.includes(c.community) || (c.taggedCommunities && c.taggedCommunities.some(id => allCommunityIds.includes(id))));
-    renderTimeline('community-comms-timeline', commComms.map(c => ({
-        ...c,
-        type: c.commType || c.type,
-    })));
-    filterCommsTimeline();
+    _communityLog = [
+        ...commNotes,
+        ...commComms.map(c => ({ ...c, type: c.commType || c.type })),
+    ];
+    filterCommunityLog();
 
     // Files
     renderCommunityFiles(communityId);
@@ -4406,7 +4404,25 @@ function filterTimelineSearch(containerId, query) {
         el.style.display = (!q || el.textContent.toLowerCase().includes(q)) ? '' : 'none';
     });
 }
-function filterCommsTimeline() { filterTimelineSearch('community-comms-timeline', document.getElementById('comm-search')?.value); }
+// The community "Log History" tab merges notes + communications into one
+// timeline; this holds the current community's combined list so the
+// type filter (All / Communications / Notes) can re-render without refetching.
+let _communityLog = [];
+function filterCommunityLog() {
+    const f = document.getElementById('community-log-filter')?.value || 'all';
+    let items = _communityLog;
+    if (f === 'comms') items = items.filter(i => !!i.commType);
+    else if (f === 'notes') items = items.filter(i => !i.commType);
+    renderTimeline('community-history-timeline', items);
+    filterTimelineSearch('community-history-timeline', document.getElementById('community-history-search')?.value);
+}
+// Open the merged Log History tab with a preset type filter (used by the
+// overview "Recent History" / "Recent Communications" cards).
+function openCommunityLog(filter) {
+    activateCommunityTab('community-history');
+    const f = document.getElementById('community-log-filter');
+    if (f) { f.value = filter || 'all'; filterCommunityLog(); }
+}
 function filterContactTimeline() { filterTimelineSearch('contact-all-timeline', document.getElementById('contact-search')?.value); }
 
 // ===== TIMELINE RENDERER =====
@@ -5422,10 +5438,9 @@ const AUTO_STATUS_WARNINGS = {
     'Collocation': '<strong>Collocation</strong> is typically applied automatically when you start a collocation. Consider using the Collocation tool instead.<br><br>Apply this status manually anyway?',
     'Auditing a Community': '<strong>Auditing a Community</strong> is typically applied automatically when an audit begins. Consider starting the audit from the Collocation tool instead.<br><br>Apply this status manually anyway?',
     'Service at Quant': '<strong>Service at Quant</strong> is typically applied automatically by Quant service ticket progression. Consider opening or advancing a Quant ticket instead.<br><br>Apply this status manually anyway?',
-    'Quant Ticket in Progress': '<strong>Quant Ticket in Progress</strong> is typically applied automatically when a Quant service ticket is opened. Consider creating a ticket from the Service section instead.<br><br>Apply this status manually anyway?',
-    'PM Sensor Issue': '<strong>PM Sensor Issue</strong> is typically applied automatically from sensor data QA/audit results. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?',
-    'Gaseous Sensor Issue': '<strong>Gaseous Sensor Issue</strong> is typically applied automatically from sensor data QA/audit results. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?',
-    'SD Card Issue': '<strong>SD Card Issue</strong> is typically applied automatically when SD card problems are detected. Consider logging the issue through the audit or service workflow instead.<br><br>Apply this status manually anyway?'
+    'Quant Ticket in Progress': '<strong>Quant Ticket in Progress</strong> is typically applied automatically when a Quant service ticket is opened. Consider creating a ticket from the Service section instead.<br><br>Apply this status manually anyway?'
+    // PM/Gaseous/SD Card Issue are intentionally NOT warned — they're set
+    // manually now (the automatic QuantAQ detector was removed).
 };
 
 // Combined list preserved for legacy call sites (selects, filters, etc.)
@@ -10529,7 +10544,7 @@ function renderCommunityOverview(communityId) {
                 ${contactsHtml}
             </div>
             <div class="ov-card">
-                <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-history')">Recent History <span class="ov-card-expand">&rarr;</span></h3>
+                <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('all')">Recent History <span class="ov-card-expand">&rarr;</span></h3>
                 ${historyHtml}
             </div>
             <div class="ov-card details-card">
@@ -10551,7 +10566,7 @@ function renderCommunityOverview(communityId) {
                 </div>
             </div>
             <div class="ov-card ov-card-wide">
-                <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-comms')">Recent Communications <span class="ov-card-expand">&rarr;</span></h3>
+                <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('comms')">Recent Communications <span class="ov-card-expand">&rarr;</span></h3>
                 ${commsHtml}
             </div>
             <div class="ov-card">

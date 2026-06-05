@@ -295,6 +295,7 @@
                         <div class="community-tags-container" id="community-type-badge"></div>
                     </div>
                     <div class="community-detail-toolbar">
+                        <button class="btn btn-sm btn-primary" onclick="openNewLog('community', currentCommunity)">+ New Log</button>
                         <button class="btn btn-sm" id="pin-community-btn" onclick="togglePinCommunity(currentCommunity)"><span id="pin-icon">&#9733;</span> <span id="pin-label">Pin</span></button>
                         <button class="btn btn-sm" id="add-sub-community-btn" onclick="openAddSubCommunityModal(currentCommunity)">+ Sub-Community</button>
                         <button class="btn btn-sm" id="change-parent-btn" onclick="openChangeParentModal(currentCommunity)">Change Parent</button>
@@ -307,8 +308,7 @@
                     <button class="tab active" data-tab="community-overview">Overview</button>
                     <button class="tab" data-tab="community-sensors">Sensors</button>
                     <button class="tab" data-tab="community-contacts">Contacts</button>
-                    <button class="tab" data-tab="community-history">History</button>
-                    <button class="tab" data-tab="community-comms">Communications</button>
+                    <button class="tab" data-tab="community-history">Log History</button>
                     <button class="tab" data-tab="community-files">Files</button>
                     <button class="tab" data-tab="community-audits">Audits</button>
                 </div>
@@ -331,17 +331,14 @@
                 <div id="tab-community-history" class="tab-content">
                     <div class="history-actions" style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
                         <button class="btn btn-primary" onclick="openNewLog('community', currentCommunity)">+ New Log</button>
-                        <input type="text" id="community-history-search" oninput="filterTimelineSearch('community-history-timeline', this.value)" placeholder="Search history by keyword…" style="flex:1;min-width:200px;max-width:360px;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
+                        <select id="community-log-filter" onchange="filterCommunityLog()" aria-label="Filter log entries" style="padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
+                            <option value="all">All entries</option>
+                            <option value="comms">Communications only</option>
+                            <option value="notes">Notes &amp; activity only</option>
+                        </select>
+                        <input type="text" id="community-history-search" oninput="filterTimelineSearch('community-history-timeline', this.value)" placeholder="Search by keyword…" style="flex:1;min-width:200px;max-width:340px;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
                     </div>
                     <div id="community-history-timeline" class="timeline"></div>
-                </div>
-
-                <div id="tab-community-comms" class="tab-content">
-                    <div class="history-actions" style="display:flex;gap:8px;flex-wrap:wrap">
-                        <button class="btn btn-primary" onclick="openNewLog('community', currentCommunity)">+ New Log</button>
-                    </div>
-                    <input type="text" id="comm-search" oninput="filterCommsTimeline()" placeholder="Search communications by keyword…" style="width:100%;max-width:420px;margin:12px 0;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
-                    <div id="community-comms-timeline" class="timeline"></div>
                 </div>
 
                 <div id="tab-community-files" class="tab-content">
@@ -406,7 +403,7 @@
                 <div id="sensor-details-card"></div>
 
                 <div class="tabs">
-                    <button class="tab active" data-tab="sensor-history">Device History</button>
+                    <button class="tab active" data-tab="sensor-history">Log History</button>
                     <button class="tab" data-tab="sensor-tickets">Service Tickets</button>
                     <button class="tab" data-tab="sensor-audits">Audits</button>
                     <button class="tab" data-tab="sensor-collocations">Collocations</button>
@@ -594,7 +591,7 @@
                     <p style="font-size:14px;color:var(--slate-600);margin:0"><span id="sensor-community-readonly-name"></span> <span style="color:var(--slate-400);font-size:12px">— use the Move → link on the sensor page to relocate it</span></p>
                 </div>
                 <div class="form-group">
-                    <label>Location (address or coordinates)</label>
+                    <label>Address/Coordinates</label>
                     <input type="text" id="sensor-location-input">
                 </div>
                 <div class="form-group">
@@ -629,7 +626,7 @@
                     <select id="move-to-community" required></select>
                 </div>
                 <div class="form-group" id="move-location-group">
-                    <label>Location <span style="font-weight:400;color:var(--slate-400);font-size:12px">(address, site name, or GPS — edit if deploying somewhere new)</span></label>
+                    <label>Address/Coordinates <span style="font-weight:400;color:var(--slate-400);font-size:12px">(address, site name, or GPS — edit if deploying somewhere new)</span></label>
                     <input type="text" id="move-location-input" placeholder="e.g. Burn monitoring at school">
                 </div>
                 <div class="form-group" id="move-date-group">
