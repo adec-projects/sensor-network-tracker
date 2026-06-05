@@ -3057,11 +3057,13 @@ function getCommunityInstallStays(communityId) {
     const stays = installHistory
         .filter(r => ids.has(r.communityId))
         .map(r => ({ sensorId: r.sensorId, install: r.installedDate || null, removed: r.removedDate || null }));
-    // Pods currently assigned here that don't already have an open stay — seed
-    // one from the sensor's own install date.
+    // Pods currently assigned here that have NO recorded stay at all — seed one
+    // from the sensor's install date. (Pods that already have a record, open or
+    // closed, are left alone so a previous occupant can't show as "current".)
     const hereNow = new Set(sensors.filter(s => ids.has(s.community)).map(s => s.id));
     sensors.filter(s => ids.has(s.community)).forEach(s => {
-        if (!stays.some(st => st.sensorId === s.id && !st.removed)) {
+        const hasAnyRecord = installHistory.some(r => ids.has(r.communityId) && r.sensorId === s.id);
+        if (!hasAnyRecord) {
             stays.push({ sensorId: s.id, install: s.dateInstalled || null, removed: null });
         }
     });
