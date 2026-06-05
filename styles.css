@@ -1627,7 +1627,7 @@ tr:last-child td {
 }
 /* Fixed column widths + single-line rows so the two side-by-side tables stay
    row-aligned (otherwise wrapping dates / long names offset the right column). */
-.install-ref-table col.col-pod { width: 82px; }
+.install-ref-table col.col-pod { width: 52px; }
 .install-ref-table col.col-installed { width: 86px; }
 .install-ref-table col.col-status { width: 76px; }
 .install-ref-table .status-dots { flex-wrap: nowrap; gap: 3px; }

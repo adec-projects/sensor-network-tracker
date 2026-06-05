@@ -3136,8 +3136,10 @@ function renderInstallReferenceTable() {
             ? `<span class="status-dots" data-tip="${escapeHtml(st.join(', '))}">${st.map(x => `<span class="status-dot" style="background:${getStatusDotColor(x)}"></span>`).join('')}</span>`
             : '<span class="field-placeholder">—</span>';
         const locName = s.community ? getCommunityName(s.community) : '';
+        const lastSeg = (s.id.split('-').pop() || s.id);
+        const shortId = lastSeg.replace(/^0+/, '') || lastSeg;
         return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
-                <td class="mono">${escapeHtml(s.id)}</td>
+                <td class="mono" data-tip="${escapeHtml(s.id)}">${escapeHtml(shortId)}</td>
                 <td${locName ? ` data-tip="${escapeHtml(locName)}"` : ''}>${locName ? escapeHtml(locName) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${s.dateInstalled ? formatDate(s.dateInstalled) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${dots}</td>
