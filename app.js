@@ -1462,12 +1462,21 @@ document.querySelectorAll('.menu-item[data-view]').forEach(item => {
 });
 
 // ===== VIEW MANAGEMENT =====
+// Per-tab, not shared. localStorage is shared across every browser tab on the
+// site, so storing the "current view" there meant all open tabs overwrote one
+// shared value — refreshing any tab bounced it to whatever was last opened in
+// ANY tab. sessionStorage is unique per tab and survives refresh, so each tab
+// now keeps its own sensor/community/view open independently.
 function saveLastView(type, id) {
-    saveData('lastView', { type, id });
+    try { sessionStorage.setItem('snt_lastView', JSON.stringify({ type, id })); } catch (_) {}
 }
 
 function restoreLastView() {
-    const last = loadData('lastView', null);
+    let last = null;
+    try { last = JSON.parse(sessionStorage.getItem('snt_lastView') || 'null'); } catch (_) {}
+    // One-time fallback: a tab opened before this change may only have the old
+    // shared localStorage value. Use it so nobody loses their place once.
+    if (!last) last = loadData('lastView', null);
     if (!last) { showView('dashboard'); return; }
 
     if (last.type === 'community' && last.id) {
