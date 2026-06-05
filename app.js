@@ -1563,25 +1563,25 @@ function renderDashboard() {
     const cardEmpty = msg => `<div class="dash-attn-empty">${msg}</div>`;
 
     const issuesCard = issueSensors.length
-        ? issueSensors.slice(0, 6).map(s => {
+        ? issueSensors.slice(0, 3).map(s => {
             const statuses = getStatusArray(s).filter(st => SENSOR_ISSUE_STATUSES.includes(st))
                 .sort((x, y) => (LOW_PRIORITY_ISSUE_STATUSES.includes(x) ? 1 : 0) - (LOW_PRIORITY_ISSUE_STATUSES.includes(y) ? 1 : 0));
             return attnItem(
                 `<span class="mono">${escapeHtml(s.id)}</span> ${statuses.map(st => `<span class="badge ${getStatusBadgeClass(st)}">${st}</span>`).join(' ')}`,
                 `showSensorDetail('${s.id}')`);
-        }).join('') + (issueSensors.length > 6 ? `<div class="dash-attn-more" onclick="showSensorsByStatus('_issues')">+ ${issueSensors.length - 6} more →</div>` : '')
+        }).join('') + (issueSensors.length > 3 ? `<div class="dash-attn-more" onclick="showSensorsByStatus('_issues')">+ ${issueSensors.length - 3} more →</div>` : '')
         : cardEmpty('No sensors flagged. 🎉');
 
     const ticketsCard = openTickets.length
-        ? openTickets.slice(0, 6).map(t => attnItem(
+        ? openTickets.slice(0, 3).map(t => attnItem(
             `<div class="dash-attn-title">${escapeHtml(t.issueDescription || t.ticketType || 'Service ticket')}</div><div class="dash-attn-sub">${escapeHtml(t.status || '')}</div>`,
-            `openTicketDetail('${t.id}')`)).join('')
+            `openTicketDetail('${t.id}')`)).join('') + (openTickets.length > 3 ? `<div class="dash-attn-more" onclick="showView('service')">+ ${openTickets.length - 3} more →</div>` : '')
         : cardEmpty('No open service tickets.');
 
     const auditsCard = liveAudits.length
-        ? liveAudits.slice(0, 6).map(a => attnItem(
+        ? liveAudits.slice(0, 3).map(a => attnItem(
             `<div class="dash-attn-title">${escapeHtml(COMMUNITIES.find(c => c.id === a.communityId)?.name || a.communityId || 'Audit')}</div><div class="dash-attn-sub">${escapeHtml(a.status || '')}${a.startDate ? ' · ' + formatDate(a.startDate) : ''}</div>`,
-            `openAuditDetail('${a.id}')`)).join('')
+            `openAuditDetail('${a.id}')`)).join('') + (liveAudits.length > 3 ? `<div class="dash-attn-more" onclick="showView('audits')">+ ${liveAudits.length - 3} more →</div>` : '')
         : cardEmpty('No audits scheduled or in progress.');
 
     // --- Recent activity (notes + comms, newest first) ---
