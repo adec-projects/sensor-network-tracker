@@ -1627,8 +1627,8 @@ tr:last-child td {
 }
 /* Fixed column widths + single-line rows so the two side-by-side tables stay
    row-aligned (otherwise wrapping dates / long names offset the right column). */
-.install-ref-table col.col-pod { width: 52px; }
-.install-ref-table col.col-installed { width: 58px; }
+.install-ref-table col.col-pod { width: 40px; }
+.install-ref-table col.col-installed { width: 72px; }
 .install-ref-table col.col-status { width: 76px; }
 /* Fill the whole status cell so the hover/tooltip target is the same size on
    every row, even ones with a single dot. */
@@ -1648,7 +1648,7 @@ tr:last-child td {
     z-index: 1;
 }
 .install-ref-table td {
-    padding: 0 10px;
+    padding: 0 6px;
     height: 38px;
     border-bottom: 1px solid var(--slate-100);
     color: var(--slate-700);
@@ -1656,6 +1656,9 @@ tr:last-child td {
     overflow: hidden;
     text-overflow: ellipsis;
 }
+/* Tighten the gap between the short pod ID and the location. */
+.install-ref-table td:first-child,
+.install-ref-table th:first-child { padding-right: 2px; }
 .install-ref-table tbody tr { cursor: pointer; }
 .install-ref-table tbody tr:hover { background: #f5f8fd; }
 .install-ref-table .mono { font-family: var(--font-mono); font-size: 12px; }
