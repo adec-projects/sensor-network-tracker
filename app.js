@@ -2258,6 +2258,10 @@ function openAddSensorModal() {
     idInput.readOnly = false;
     idInput.removeAttribute('title');
     setSensorClass('quant');
+    // New sensor: status + community are set here (no "move"/status workflow yet).
+    document.getElementById('sensor-status-group').style.display = '';
+    document.getElementById('sensor-community-group').style.display = '';
+    document.getElementById('sensor-community-readonly').style.display = 'none';
     populateGroupedCommunitySelect('sensor-community-input');
     renderStatusToggleList('sensor-status-input', []);
     openModal('modal-add-sensor');
@@ -2279,6 +2283,13 @@ function openEditSensorModal(sensorId) {
     setSensorClass(s.type === 'Other LCS' ? 'lcs' : 'quant');
     document.getElementById('sensor-soa-input').value = s.soaTagId || '';
     document.getElementById('sensor-type-input').value = s.type;
+    // Editing must not double as a status change or a move — those each have a
+    // single dedicated path (click the status badge; use the Move → link) that
+    // writes proper history. Hide them here and show community read-only.
+    document.getElementById('sensor-status-group').style.display = 'none';
+    document.getElementById('sensor-community-group').style.display = 'none';
+    document.getElementById('sensor-community-readonly').style.display = '';
+    document.getElementById('sensor-community-readonly-name').textContent = getCommunityName(s.community) || '— None —';
     renderStatusToggleList('sensor-status-input', getStatusArray(s));
     populateGroupedCommunitySelect('sensor-community-input');
     document.getElementById('sensor-community-input').value = s.community;
@@ -2330,10 +2341,15 @@ function saveSensor(e) {
             return;
         }
 
+        // Status and community are NOT editable here — each has one dedicated
+        // path that writes proper history (status badge click; Move → link).
+        // Preserve the existing values so a save can't silently change them.
+        data.status = oldSensor.status;
+        data.community = oldSensor.community;
+
         // Detect changes
         const fieldLabels = {
-            soaTagId: 'SOA Tag ID', type: 'Type', status: 'Status',
-            community: 'Community', location: 'Location',
+            soaTagId: 'SOA Tag ID', type: 'Type', location: 'Location',
             datePurchased: 'Purchase Date'
         };
 
@@ -4231,14 +4247,11 @@ function updateLogTypeUI() {
     const active = getActiveLogChips();
     const hasNoteAction = active.some(c => c.dataset.kind === 'note');
     const wantStatus = active.some(c => c.dataset.expand === 'status');
-    const wantMove = active.some(c => c.dataset.expand === 'move');
     // Sensor tags only apply to note-type logs (comms can't carry sensors).
     const sensorGroup = document.getElementById('tag-sensors-container')?.closest('.form-group');
     if (sensorGroup) sensorGroup.style.display = hasNoteAction ? '' : 'none';
     const statusGroup = document.getElementById('note-status-change-group');
     if (statusGroup) statusGroup.style.display = wantStatus ? '' : 'none';
-    const moveGroup = document.getElementById('note-move-group');
-    if (moveGroup) moveGroup.style.display = wantMove ? '' : 'none';
     const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
@@ -4317,7 +4330,6 @@ function openAddNoteModal(contextId, contextType) {
     // Hide the expandable action panels until their chip is selected.
     document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
-    document.getElementById('note-move-group').style.display = 'none';
 
     // Pre-populate status list with current sensor's statuses if available
     if (contextType === 'sensor') {
@@ -4325,18 +4337,6 @@ function openAddNoteModal(contextId, contextType) {
         renderStatusToggleList('note-status-list', s ? getStatusArray(s) : []);
     } else {
         renderStatusToggleList('note-status-list', []);
-    }
-
-    // Populate the move sensors dropdown
-    const moveTargetSelect = document.getElementById('note-move-target-community');
-    if (moveTargetSelect) {
-        // Sort: regulatory sites first, then alphabetical
-        const regulatoryIds = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
-        const reg = COMMUNITIES.filter(c => regulatoryIds.includes(c.id));
-        const others = COMMUNITIES.filter(c => !regulatoryIds.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name));
-        moveTargetSelect.innerHTML = '<option value="">— Select destination community —</option>' +
-            (reg.length > 0 ? `<optgroup label="Regulatory Sites">${reg.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>` : '') +
-            `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`;
     }
 
     openModal('modal-add-note');
@@ -4418,30 +4418,9 @@ function saveNote(e) {
 
     notes.push(note); persistNote(note);
 
-    // Move tagged sensors if the Sensor Movement chip is selected
-    let movedCount = 0;
-    if (activeChips.some(c => c.dataset.expand === 'move')) {
-        const targetCommunityId = document.getElementById('note-move-target-community')?.value || '';
-        if (targetCommunityId && sensorTags.length > 0) {
-            const targetName = getCommunityName(targetCommunityId);
-            sensorTags.forEach(sId => {
-                const s = sensors.find(x => x.id === sId);
-                if (!s) return;
-                const fromName = getCommunityName(s.community);
-                if (s.community === targetCommunityId) return; // already there
-                s.community = targetCommunityId;
-                persistSensor(s);
-                movedCount++;
-            });
-            buildSensorSidebar();
-            // Add the move details to the note text
-            note.text = note.text + `\nMoved ${movedCount} sensor${movedCount === 1 ? '' : 's'} to ${targetName}.`;
-            db.updateNote(note.id, { text: note.text }).catch(() => {});
-        }
-    }
-
-    // Apply status change to all tagged sensors if Status Change action is checked
-    // ADDS the selected statuses to existing ones, doesn't replace
+    // Apply status change to all tagged sensors if the Status Change chip is on.
+    // REPLACES the status (consistent with the status-badge modal and every
+    // other status path in the app).
     let statusChangedCount = 0;
     if (activeChips.some(c => c.dataset.expand === 'status')) {
         const newStatuses = getSelectedStatuses('note-status-list');
@@ -4449,28 +4428,19 @@ function saveNote(e) {
             sensorTags.forEach(sId => {
                 const s = sensors.find(x => x.id === sId);
                 if (!s) return;
-                const existing = getStatusArray(s);
-                // Merge new statuses with existing, preserving Online/Offline mutual exclusion
-                let merged = [...existing];
-                newStatuses.forEach(st => {
-                    // If adding Online, remove Offline (and vice versa)
-                    if (st === 'Online') merged = merged.filter(x => x !== 'Offline');
-                    if (st === 'Offline') merged = merged.filter(x => x !== 'Online');
-                    if (!merged.includes(st)) merged.push(st);
-                });
-                s.status = merged;
+                const oldStatuses = getStatusArray(s);
+                s.status = newStatuses;
                 persistSensor(s);
+                note.text = note.text + `\n${sId} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
                 statusChangedCount++;
             });
             buildSensorSidebar();
-            note.text = note.text + `\nAdded status "${newStatuses.join(', ')}" to ${statusChangedCount} sensor${statusChangedCount === 1 ? '' : 's'}.`;
             db.updateNote(note.id, { text: note.text }).catch(() => {});
         }
     }
 
     closeModal('modal-add-note');
     let toastMsg = 'Note added';
-    if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
     if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
     showSuccessToast(toastMsg);
     refreshCurrentView();
@@ -4848,7 +4818,6 @@ function openEditNoteModal(noteId) {
     if (submitBtn) submitBtn.textContent = 'Save Changes';
     document.getElementById('log-type-group').style.display = 'none';
     document.getElementById('note-status-change-group').style.display = 'none';
-    document.getElementById('note-move-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
 
     // Pre-fill text + date.

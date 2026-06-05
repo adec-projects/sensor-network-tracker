@@ -585,15 +585,19 @@
                         <option value="Not Assigned">Not Assigned</option>
                     </select>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="sensor-status-group">
                     <label>Status (click to toggle)</label>
                     <div id="sensor-status-input" class="status-toggle-list"></div>
                 </div>
-                <div class="form-group">
+                <div class="form-group" id="sensor-community-group">
                     <label>Current Community</label>
                     <select id="sensor-community-input">
                         <option value="">— None —</option>
                     </select>
+                </div>
+                <div class="form-group" id="sensor-community-readonly" style="display:none">
+                    <label>Community</label>
+                    <p style="font-size:14px;color:var(--slate-600);margin:0"><span id="sensor-community-readonly-name"></span> <span style="color:var(--slate-400);font-size:12px">— use the Move → link on the sensor page to relocate it</span></p>
                 </div>
                 <div class="form-group">
                     <label>Location (address or coordinates)</label>
@@ -773,16 +777,10 @@
                         <button type="button" class="log-type-chip" data-kind="comm" data-commtype="Phone Call" onclick="selectLogType(this)">&#128222; Call</button>
                         <button type="button" class="log-type-chip" data-kind="comm" data-commtype="Email" onclick="selectLogType(this)">&#9993;&#65039; Email</button>
                         <button type="button" class="log-type-chip" data-kind="comm" data-commtype="Site Visit" onclick="selectLogType(this)">&#128205; Site Visit</button>
-                        <button type="button" class="log-type-chip" data-kind="note" data-type="Issue" onclick="selectLogType(this)">&#9888;&#65039; Sensor Issue</button>
-                        <button type="button" class="log-type-chip" data-kind="note" data-type="Troubleshooting" onclick="selectLogType(this)">&#128295; Sensor Work/Troubleshooting</button>
+                        <button type="button" class="log-type-chip" data-kind="note" data-type="Troubleshooting" onclick="selectLogType(this)">&#128295; Sensor Issue / Troubleshooting</button>
                         <button type="button" class="log-type-chip" data-kind="note" data-type="Status Change" data-expand="status" onclick="selectLogType(this)">&#128260; Status Change</button>
-                        <button type="button" class="log-type-chip" data-kind="note" data-type="Movement" data-expand="move" onclick="selectLogType(this)">&#10145;&#65039; Sensor Movement</button>
                         <button type="button" class="log-type-chip" data-kind="note" data-type="General" onclick="selectLogType(this)">&#128221; General Note</button>
                     </div>
-                </div>
-                <div class="form-group" id="note-move-group" style="display:none">
-                    <label>Move tagged sensors to</label>
-                    <select id="note-move-target-community" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)"><option value="">— Select destination community —</option></select>
                 </div>
                 <div id="note-audit-link-group" style="display:none;margin-bottom:8px">
                     <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px">Link to audit</label>
