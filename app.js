@@ -4469,11 +4469,12 @@ function addMoveRow(prefill) {
     row.innerHTML = `
         <select class="move-row-sensor" onchange="onMoveSensorChange(this)">${moveSensorOptions(prefill.sensor)}</select>
         <span class="move-row-word">removed from</span>
-        <select class="move-row-from">${moveCommunityOptions(prefill.from)}</select>
+        <select class="move-row-from" onchange="syncMoveRowTags(this.closest('.move-row'))">${moveCommunityOptions(prefill.from)}</select>
         <span class="move-row-word">and installed in</span>
-        <select class="move-row-to">${moveCommunityOptions(prefill.to)}</select>
+        <select class="move-row-to" onchange="syncMoveRowTags(this.closest('.move-row'))">${moveCommunityOptions(prefill.to)}</select>
         <button type="button" class="move-row-remove" onclick="this.closest('.move-row').remove()" title="Remove this row">&times;</button>`;
     cont.appendChild(row);
+    syncMoveRowTags(row);
 }
 // When a row's sensor is picked, auto-fill its "removed from" to that sensor's
 // current community so the user doesn't have to look it up.
@@ -4482,6 +4483,18 @@ function onMoveSensorChange(sel) {
     const s = sensors.find(x => x.id === sel.value);
     const fromSel = row?.querySelector('.move-row-from');
     if (fromSel && s && s.community) fromSel.value = s.community;
+    syncMoveRowTags(row);
+}
+// Mirror a row's sensor + both communities into the Tag sensors / Tag
+// communities chip boxes so the user doesn't think they must add them by hand.
+function syncMoveRowTags(row) {
+    if (!row) return;
+    const sId = row.querySelector('.move-row-sensor')?.value;
+    if (sId) addChip('tag-sensors-container', sId);
+    ['.move-row-from', '.move-row-to'].forEach(sel => {
+        const cid = row.querySelector(sel)?.value;
+        if (cid) { const name = getCommunityName(cid); if (name) addChip('tag-communities-container', name); }
+    });
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
 function saveLogAsComm(commType) {
