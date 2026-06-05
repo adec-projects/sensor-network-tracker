@@ -1538,7 +1538,10 @@ function renderDashboard() {
     const activeAudits = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress').length;
 
     // --- Needs attention ---
-    const issueSensors = sensors.filter(s => getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st)));
+    // Sensors with a genuine issue first; "informational" ones (SD card) last.
+    const isRealIssue = st => SENSOR_ISSUE_STATUSES.includes(st) && !LOW_PRIORITY_ISSUE_STATUSES.includes(st);
+    const issueSensors = sensors.filter(s => getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st)))
+        .sort((a, b) => (getStatusArray(a).some(isRealIssue) ? 0 : 1) - (getStatusArray(b).some(isRealIssue) ? 0 : 1));
     const openTickets = serviceTickets.filter(t => t.status !== 'Closed')
         .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     const liveAudits = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress')
@@ -1548,9 +1551,13 @@ function renderDashboard() {
     const cardEmpty = msg => `<div class="dash-attn-empty">${msg}</div>`;
 
     const issuesCard = issueSensors.length
-        ? issueSensors.slice(0, 6).map(s => attnItem(
-            `<span class="mono">${escapeHtml(s.id)}</span> ${getStatusArray(s).filter(st => SENSOR_ISSUE_STATUSES.includes(st)).map(st => `<span class="badge ${getStatusBadgeClass(st)}">${st}</span>`).join(' ')}`,
-            `showSensorDetail('${s.id}')`)).join('') + (issueSensors.length > 6 ? `<div class="dash-attn-more" onclick="showView('all-sensors')">+ ${issueSensors.length - 6} more →</div>` : '')
+        ? issueSensors.slice(0, 6).map(s => {
+            const statuses = getStatusArray(s).filter(st => SENSOR_ISSUE_STATUSES.includes(st))
+                .sort((x, y) => (LOW_PRIORITY_ISSUE_STATUSES.includes(x) ? 1 : 0) - (LOW_PRIORITY_ISSUE_STATUSES.includes(y) ? 1 : 0));
+            return attnItem(
+                `<span class="mono">${escapeHtml(s.id)}</span> ${statuses.map(st => `<span class="badge ${getStatusBadgeClass(st)}">${st}</span>`).join(' ')}`,
+                `showSensorDetail('${s.id}')`);
+        }).join('') + (issueSensors.length > 6 ? `<div class="dash-attn-more" onclick="showView('all-sensors')">+ ${issueSensors.length - 6} more →</div>` : '')
         : cardEmpty('No sensors flagged. 🎉');
 
     const ticketsCard = openTickets.length
@@ -1577,66 +1584,54 @@ function renderDashboard() {
             : (item.taggedSensors && item.taggedSensors[0]) ? item.taggedSensors[0] : '';
         const go = (item.taggedCommunities && item.taggedCommunities[0]) ? `showCommunity('${item.taggedCommunities[0]}')`
             : (item.taggedSensors && item.taggedSensors[0]) ? `showSensorDetail('${item.taggedSensors[0]}')` : '';
-        const snippet = (item.text || '').split('\n')[0].slice(0, 110);
+        const snippet = (item.text || '').split('\n')[0].slice(0, 100);
         return `<div class="dash-feed-item" ${go ? `onclick="${go}" style="cursor:pointer"` : ''}>
-            <div class="dash-feed-meta"><span class="badge ${isComm ? 'type-comm' : getTimelineTypeClass(item.type) || ''} dash-feed-type">${escapeHtml(item.type || 'Note')}</span><span class="dash-feed-date">${formatDate(item.date)}</span></div>
-            <div class="dash-feed-text">${escapeHtml(snippet)}${(item.text || '').length > 110 ? '…' : ''}</div>
+            <div class="dash-feed-meta"><span class="dash-feed-dot ${isComm ? 'comm' : (getTimelineTypeClass(item.type) || 'note')}"></span><span class="dash-feed-type">${escapeHtml(item.type || 'Note')}</span><span class="dash-feed-date">${formatDate(item.date)}</span></div>
+            <div class="dash-feed-text">${escapeHtml(snippet)}${(item.text || '').length > 100 ? '…' : ''}</div>
             ${where ? `<div class="dash-feed-where">${escapeHtml(where)}</div>` : ''}
         </div>`;
     }).join('') : cardEmpty('No activity logged yet.');
 
+    // KPI tiles
+    const kpi = (value, label, onclick, accent) =>
+        `<button class="dash-kpi" style="--kpi-accent:${accent}" onclick="${onclick}">
+            <span class="dash-kpi-value">${value}</span>
+            <span class="dash-kpi-label">${label}</span>
+        </button>`;
+
     document.getElementById('dashboard-summary').innerHTML = `
-        <div class="dash-actions">
-            <button class="btn btn-primary" onclick="openGlobalNewLog()">+ New Log</button>
-            <button class="btn btn-service" onclick="openNewTicketModal()">+ Service Ticket</button>
-            <button class="btn" onclick="openAddSensorModal()">+ Add Sensor</button>
-        </div>
+        <div class="dash">
+            <div class="dash-main">
+                <div class="dash-kpis">
+                    ${kpi(totalSensors, 'Sensors', "showView('all-sensors')", 'var(--navy-500)')}
+                    ${kpi(`<span style="color:#16a34a">${onlineCount}</span>`, 'Online', "sensorTagFilter=''; showView('all-sensors')", '#16a34a')}
+                    ${kpi(communityCount, 'Communities', "showView('communities')", 'var(--navy-400)')}
+                    ${kpi(activeTickets, 'Service Tickets', "showView('service')", 'var(--gold-500)')}
+                    ${kpi(activeAudits, 'Active Audits', "showView('audits')", 'var(--navy-300)')}
+                </div>
 
-        <div class="dash-grid">
-            <div class="dash-attn-card">
-                <h3 class="dash-attn-head"><span>Sensors needing attention</span><span class="dash-attn-count ${issueSensors.length ? 'warn' : ''}">${issueSensors.length}</span></h3>
-                ${issuesCard}
+                <div class="dash-attn-row">
+                    <div class="dash-attn-card accent-rose">
+                        <h3 class="dash-attn-head"><span>Sensors needing attention</span><span class="dash-attn-count ${issueSensors.length ? 'warn' : ''}">${issueSensors.length}</span></h3>
+                        ${issuesCard}
+                    </div>
+                    <div class="dash-attn-card accent-gold">
+                        <h3 class="dash-attn-head ov-card-clickable" onclick="showView('service')"><span>Open service tickets</span><span class="dash-attn-count ${openTickets.length ? 'warn' : ''}">${openTickets.length}</span></h3>
+                        ${ticketsCard}
+                    </div>
+                    <div class="dash-attn-card accent-navy">
+                        <h3 class="dash-attn-head ov-card-clickable" onclick="showView('audits')"><span>Audits in progress</span><span class="dash-attn-count">${liveAudits.length}</span></h3>
+                        ${auditsCard}
+                    </div>
+                </div>
             </div>
-            <div class="dash-attn-card">
-                <h3 class="dash-attn-head ov-card-clickable" onclick="showView('service')"><span>Open service tickets</span><span class="dash-attn-count ${openTickets.length ? 'warn' : ''}">${openTickets.length}</span></h3>
-                ${ticketsCard}
-            </div>
-            <div class="dash-attn-card">
-                <h3 class="dash-attn-head ov-card-clickable" onclick="showView('audits')"><span>Audits in progress</span><span class="dash-attn-count">${liveAudits.length}</span></h3>
-                ${auditsCard}
-            </div>
-        </div>
 
-        <div class="dash-feed-card">
-            <h3 class="dash-attn-head"><span>Recent activity</span></h3>
-            ${feedHtml}
-        </div>
-
-        <div class="dash-stat-bar">
-            <div class="dash-stat-bar-item" onclick="showView('all-sensors')">
-                <span class="dash-stat-bar-value">${totalSensors}</span>
-                <span class="dash-stat-bar-label">Sensors</span>
-            </div>
-            <div class="dash-stat-bar-divider"></div>
-            <div class="dash-stat-bar-item" onclick="sensorTagFilter=''; showView('all-sensors')">
-                <span class="dash-stat-bar-value" style="color:#16a34a">${onlineCount}</span>
-                <span class="dash-stat-bar-label">Online</span>
-            </div>
-            <div class="dash-stat-bar-divider"></div>
-            <div class="dash-stat-bar-item" onclick="showView('communities')">
-                <span class="dash-stat-bar-value">${communityCount}</span>
-                <span class="dash-stat-bar-label">Communities</span>
-            </div>
-            <div class="dash-stat-bar-divider"></div>
-            <div class="dash-stat-bar-item" onclick="showView('service')">
-                <span class="dash-stat-bar-value">${activeTickets}</span>
-                <span class="dash-stat-bar-label">Service Tickets</span>
-            </div>
-            <div class="dash-stat-bar-divider"></div>
-            <div class="dash-stat-bar-item" onclick="showView('audits')">
-                <span class="dash-stat-bar-value">${activeAudits}</span>
-                <span class="dash-stat-bar-label">Active Audits</span>
-            </div>
+            <aside class="dash-rail">
+                <div class="dash-rail-card">
+                    <h3 class="dash-attn-head"><span>Recent activity</span></h3>
+                    <div class="dash-feed">${feedHtml}</div>
+                </div>
+            </aside>
         </div>
     `;
 }
@@ -1814,6 +1809,7 @@ function getStatusBadgeClass(status) {
         'PM Sensor Issue': 'badge-issue-orange',
         'Gaseous Sensor Issue': 'badge-issue-orange',
         'SD Card Issue': 'badge-issue-yellow',
+        'Possible Auto Shutoff Firmware Issue': 'badge-issue-yellow',
         'Lost Connection': 'badge-issue-red',
         'Quant Ticket in Progress': 'badge-service-quant',
     };
@@ -5571,7 +5567,8 @@ function addCustomTag() {
 // ===== STATUS TOGGLE LIST =====
 const MANUAL_STATUSES = [
     'Online', 'Offline', 'Lost Connection', 'In Transit Between Audits',
-    'Lab Storage', 'Ready for Deployment', 'Needs Repair'
+    'Lab Storage', 'Ready for Deployment', 'Needs Repair',
+    'Possible Auto Shutoff Firmware Issue'
 ];
 
 // Statuses that are normally managed by workflows (collocation tool, audit workflow, Quant service tickets,
@@ -6543,7 +6540,10 @@ async function adminResetMfa(email) {
 }
 
 // ===== SENSOR TAGS & SIDEBAR =====
-const SENSOR_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Lost Connection'];
+const SENSOR_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Lost Connection', 'Possible Auto Shutoff Firmware Issue'];
+// "Informational" issue statuses — surfaced so we know about them, but they
+// aren't urgent, so they sort to the bottom of the dashboard attention list.
+const LOW_PRIORITY_ISSUE_STATUSES = ['SD Card Issue'];
 
 function isIssueSensor(s) {
     if (getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st))) return true;

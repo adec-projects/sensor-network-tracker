@@ -155,9 +155,12 @@
             <div id="back-button" class="back-button" style="display:none" onclick="goBack()" role="button" aria-label="Go back">&#8592; Back</div>
             <!-- Dashboard View -->
             <div id="view-dashboard" class="view active">
-                <div id="dashboard-header" style="display:flex;justify-content:space-between;align-items:flex-start;margin-bottom:16px">
-                    <div>
-                        <h1 style="font-size:22px;color:var(--navy-500);margin-bottom:2px">Dashboard</h1>
+                <div id="dashboard-header">
+                    <h1>Dashboard</h1>
+                    <div class="dash-actions">
+                        <button class="btn btn-primary" onclick="openGlobalNewLog()">+ New Log</button>
+                        <button class="btn btn-service" onclick="openNewTicketModal()">+ Service Ticket</button>
+                        <button class="btn" onclick="openAddSensorModal()">+ Add Sensor</button>
                     </div>
                 </div>
                 <div class="dashboard-summary" id="dashboard-summary"></div>
