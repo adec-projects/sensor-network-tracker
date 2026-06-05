@@ -223,6 +223,28 @@ const db = {
         return data || [];
     },
 
+    // --- Install history (per-community pod install/removal records) ---
+    async getInstallHistory() {
+        const { data, error } = await supa.from('install_history').select('*').order('installed_date', { ascending: false });
+        if (error) { console.warn('[install_history] not available:', error.message); return []; }
+        return (data || []).map(r => ({
+            id: r.id, communityId: r.community_id, sensorId: r.sensor_id,
+            installedDate: r.installed_date || '', removedDate: r.removed_date || '',
+        }));
+    },
+    async insertInstallRecord(rec) {
+        const { data, error } = await supa.from('install_history').insert({
+            community_id: rec.communityId || null, sensor_id: rec.sensorId,
+            installed_date: rec.installedDate || null, removed_date: rec.removedDate || null,
+        }).select();
+        if (error) throw error;
+        return data?.[0];
+    },
+    async updateInstallRecord(id, updates) {
+        const { error } = await supa.from('install_history').update(updates).eq('id', id);
+        if (error) throw error;
+    },
+
     async upsertContact(contact) {
         const row = {
             name: contact.name,

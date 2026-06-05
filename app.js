@@ -10,6 +10,7 @@ let comms = [];
 let communityFiles = {};
 let communityTags = {};
 let serviceTickets = [];
+let installHistory = [];   // per-community pod install/removal records
 let audits = [];
 let collocations = [];
 let communityParents = {}; // childId -> parentId
@@ -211,9 +212,11 @@ async function loadAllData() {
         db.getAudits(),
         db.getCollocations(),
         db.getProfileNames(),
+        db.getInstallHistory(),
     ]);
     profileNames = results[10]?.status === 'fulfilled' ? (results[10].value || {}) : {};
     const getValue = (i) => results[i].status === 'fulfilled' ? results[i].value : [];
+    installHistory = getValue(11);
     const communitiesData = getValue(0);
     const tagsData = getValue(1);
     const sensorsData = getValue(2);
@@ -2639,22 +2642,14 @@ function moveSensor(e) {
         taggedContacts: mentionedContacts,
     };
 
-    if (!setupMode) { notes.push(note); persistNote(note); }
+    if (!setupMode) {
+        notes.push(note); persistNote(note);
+        // Update install history + auto-set the install date (no prompt) — moves
+        // into lab storage are skipped inside recordSensorMove.
+        recordSensorMove(sensorId, fromId, toCommunityId, moveDate);
+    }
     closeModal('modal-move-sensor');
     refreshCurrentView();
-
-    // Prompt to update install date after move, except when moving into a
-    // lab-storage community (those moves aren't installations). We use the
-    // canonical community id list instead of a substring match because
-    // substrings like "lab" also hit real village names (e.g. Labouchere Bay).
-    if (!setupMode) {
-        const LAB_COMMUNITY_IDS = new Set(['anc-lab', 'fbx-lab', 'jnu-lab']);
-        const isLabLocation = LAB_COMMUNITY_IDS.has(toCommunityId);
-        if (!isLabLocation) {
-            const suggestedDate = moveDate.split('T')[0] || nowDatetime().split('T')[0];
-            promptInstallDateUpdate(sensorId, suggestedDate, `${s.id} was moved to ${toName}.`);
-        }
-    }
 }
 
 // ===== SENSOR DETAIL =====
@@ -3058,24 +3053,10 @@ function showCommunityView(communityId) {
 // out. Pods currently assigned here are shown as currently installed.
 function getCommunityInstallStays(communityId) {
     const ids = new Set([communityId, ...getChildCommunities(communityId).map(c => c.id)]);
-    const evBySensor = {};
-    notes.forEach(n => {
-        if (!n.type || !String(n.type).includes('Movement') || !n.additionalInfo) return;
-        let p; try { p = JSON.parse(n.additionalInfo); } catch (_) { return; }
-        if (!p.sensorId) return;
-        if (ids.has(p.toCommunity)) (evBySensor[p.sensorId] = evBySensor[p.sensorId] || []).push({ kind: 'install', date: n.date });
-        if (ids.has(p.fromCommunity)) (evBySensor[p.sensorId] = evBySensor[p.sensorId] || []).push({ kind: 'remove', date: n.date });
-    });
-    const stays = [];
-    Object.entries(evBySensor).forEach(([sid, evs]) => {
-        evs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
-        let open = null;
-        evs.forEach(e => {
-            if (e.kind === 'install') { if (open) stays.push(open); open = { sensorId: sid, install: e.date, removed: null }; }
-            else { if (open) { open.removed = e.date; stays.push(open); open = null; } else stays.push({ sensorId: sid, install: null, removed: e.date }); }
-        });
-        if (open) stays.push(open);
-    });
+    // Explicit install-history records (imported + written on each move).
+    const stays = installHistory
+        .filter(r => ids.has(r.communityId))
+        .map(r => ({ sensorId: r.sensorId, install: r.installedDate || null, removed: r.removedDate || null }));
     // Pods currently assigned here that don't already have an open stay — seed
     // one from the sensor's own install date.
     const hereNow = new Set(sensors.filter(s => ids.has(s.community)).map(s => s.id));
@@ -3087,6 +3068,27 @@ function getCommunityInstallStays(communityId) {
     stays.forEach(st => { st.current = !st.removed && hereNow.has(st.sensorId); });
     stays.sort((a, b) => (b.current ? 1 : 0) - (a.current ? 1 : 0) || (b.install || '').localeCompare(a.install || ''));
     return stays;
+}
+
+// Record a pod move in the install-history table: close the open stay at the
+// old community and open a new one at the destination. Also auto-sets the
+// sensor's install date (no more prompt). Lab communities aren't "installs".
+const LAB_COMMUNITY_IDS = new Set(['anc-lab', 'fbx-lab', 'jnu-lab']);
+function recordSensorMove(sensorId, fromCommunityId, toCommunityId, dateStr) {
+    const day = (dateStr || nowDatetime()).split('T')[0];
+    // Close any open stay for this sensor at the community it left.
+    if (fromCommunityId) {
+        const open = installHistory.find(r => r.sensorId === sensorId && r.communityId === fromCommunityId && !r.removedDate);
+        if (open) { open.removedDate = day; db.updateInstallRecord(open.id, { removed_date: day }).catch(() => {}); }
+    }
+    // Open a new stay at the destination (skip lab storage — not an install).
+    if (toCommunityId && !LAB_COMMUNITY_IDS.has(toCommunityId)) {
+        const rec = { communityId: toCommunityId, sensorId, installedDate: day, removedDate: '' };
+        installHistory.unshift(rec);
+        db.insertInstallRecord(rec).then(saved => { if (saved && saved.id) rec.id = saved.id; }).catch(() => {});
+        const s = findSensor(sensorId);
+        if (s) { s.dateInstalled = day; persistSensor(s); }   // auto-update install date
+    }
 }
 
 function renderCommunityInstallHistory(communityId) {
@@ -4469,7 +4471,6 @@ function saveNote(e) {
     let noteText = text;
     let additionalInfo = '';
     const communityTags = [...noteCommunityTags];
-    let pendingInstallPrompt = null;
 
     // Status change — REPLACES status (consistent with the status-badge modal).
     let statusChangedCount = 0;
@@ -4511,6 +4512,8 @@ function saveNote(e) {
                 if (fromId) fromIds.add(fromId);
                 s.community = toCommunityId;
                 persistSensor(s);
+                // Update install history + auto-set the install date (no prompt).
+                recordSensorMove(sId, fromId, toCommunityId, noteDate);
                 noteText += `\n${sId} removed from ${getCommunityName(fromId) || '(none)'} and brought to ${toName}.`;
                 movedCount++;
             });
@@ -4520,11 +4523,6 @@ function saveNote(e) {
                 buildSensorSidebar();
                 if (sensorTags.length === 1 && !additionalInfo) {
                     additionalInfo = JSON.stringify({ sensorId: firstMovedId, fromCommunity: firstFrom || '', toCommunity: toCommunityId });
-                }
-                const LAB = new Set(['anc-lab', 'fbx-lab', 'jnu-lab']);
-                if (sensorTags.length === 1 && !LAB.has(toCommunityId)) {
-                    const d = (noteDate.split('T')[0]) || nowDatetime().split('T')[0];
-                    pendingInstallPrompt = { id: firstMovedId, date: d, reason: `${firstMovedId} was moved to ${toName}.` };
                 }
             }
         }
@@ -4550,7 +4548,6 @@ function saveNote(e) {
     if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
     showSuccessToast(toastMsg);
     refreshCurrentView();
-    if (pendingInstallPrompt) promptInstallDateUpdate(pendingInstallPrompt.id, pendingInstallPrompt.date, pendingInstallPrompt.reason);
 }
 
 // ===== COMMUNICATIONS =====

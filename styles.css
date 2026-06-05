@@ -1805,6 +1805,10 @@ tr:last-child td {
     font-size: 13.5px;
     line-height: 1.6;
     color: var(--slate-700);
+    white-space: pre-wrap;   /* preserve the line breaks the user typed */
+}
+.timeline-additional-info, .timeline-followup-text, .timeline-text-full {
+    white-space: pre-wrap;
 }
 
 .timeline-followups {
