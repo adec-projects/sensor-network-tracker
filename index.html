@@ -1259,6 +1259,20 @@
         </div>
     </div>
 
+    <!-- Pod Install Reference (enlarged) -->
+    <div id="modal-install-reference" class="modal" role="dialog" aria-modal="true">
+        <div class="modal-content modal-wide">
+            <div class="modal-header">
+                <h2>Pod Install Reference</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-install-reference')">&times;</button>
+            </div>
+            <div style="padding:0 20px 20px">
+                <input type="text" id="install-ref-search" oninput="filterInstallReference(this.value)" placeholder="Search pod or location…" style="width:100%;max-width:360px;margin:4px 0 14px;padding:8px 12px;border:1px solid var(--slate-200);border-radius:var(--radius-sm);font-size:14px;font-family:var(--font-sans)">
+                <div id="install-reference-body" style="max-height:70vh;overflow:auto"></div>
+            </div>
+        </div>
+    </div>
+
     <!-- Global Collocation Modal -->
     <div id="modal-global-collocation" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content">

@@ -1627,6 +1627,11 @@ function renderDashboard() {
                         ${auditsCard}
                     </div>
                 </div>
+
+                <div class="dash-ref-card">
+                    <h3 class="dash-attn-head"><span>Pod install reference</span><button class="btn btn-sm" onclick="openInstallReference()">&#11036; Enlarge</button></h3>
+                    <div class="dash-ref-scroll">${renderInstallReferenceTable()}</div>
+                </div>
             </div>
 
             <aside class="dash-rail">
@@ -3091,6 +3096,35 @@ function recordSensorMove(sensorId, fromCommunityId, toCommunityId, dateStr) {
         const s = findSensor(sensorId);
         if (s) { s.dateInstalled = day; persistSensor(s); }   // auto-update install date
     }
+}
+
+// Live "install reference" — a quick-glance grid of every pod, where it is,
+// and when it was installed (a live version of the master device sheet).
+function renderInstallReferenceTable() {
+    const rows = [...sensors].sort((a, b) => a.id.localeCompare(b.id));
+    return `<table class="install-ref-table"><thead><tr><th>Pod</th><th>Location</th><th>Installed</th><th>Status</th></tr></thead><tbody>
+        ${rows.map(s => {
+            const st = getStatusArray(s);
+            const statusBadge = st.length ? `<span class="badge ${getStatusBadgeClass(st[0])}">${escapeHtml(st[0])}</span>` : '';
+            return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
+                <td class="mono">${escapeHtml(s.id)}</td>
+                <td>${s.community ? escapeHtml(getCommunityName(s.community)) : '<span class="field-placeholder">—</span>'}</td>
+                <td>${s.dateInstalled ? formatDate(s.dateInstalled) : '<span class="field-placeholder">—</span>'}</td>
+                <td>${statusBadge}</td>
+            </tr>`;
+        }).join('')}
+    </tbody></table>`;
+}
+function openInstallReference() {
+    document.getElementById('install-reference-body').innerHTML = renderInstallReferenceTable();
+    const search = document.getElementById('install-ref-search'); if (search) search.value = '';
+    openModal('modal-install-reference');
+}
+function filterInstallReference(q) {
+    const query = (q || '').toLowerCase().trim();
+    document.querySelectorAll('#install-reference-body tr[data-search]').forEach(tr => {
+        tr.style.display = !query || tr.dataset.search.includes(query) ? '' : 'none';
+    });
 }
 
 function renderCommunityInstallHistory(communityId) {
@@ -4801,6 +4835,16 @@ function stripTrailingFullBodyFromTitle(text, fullBody) {
     return head || text;
 }
 
+// Auto-generated summary lines (status changes, moves) appended to a note.
+// They're rendered smaller + italic so the user's own text stands out.
+const AUTO_NOTE_LINE_RE = /(status changed from .* to .*\.|removed from .* and brought to .*\.|added status .*)\s*$/i;
+function renderNoteBody(text) {
+    return text.split('\n').map(line => {
+        const esc = highlightMentions(escapeHtml(line));
+        return AUTO_NOTE_LINE_RE.test(line) ? `<span class="note-auto">${esc}</span>` : esc;
+    }).join('\n');
+}
+
 function renderNoteText(text, noteId) {
     if (!text) return '';
     if (text.includes('\n—')) {
@@ -4814,7 +4858,7 @@ function renderNoteText(text, noteId) {
                 mainText.push(line);
             }
         }
-        let html = highlightMentions(escapeHtml(mainText.join('\n')));
+        let html = renderNoteBody(mainText.join('\n'));
         if (followUps.length > 0) {
             html += '<div class="timeline-followups">';
             html += followUps.map((f, idx) => {
@@ -4831,7 +4875,7 @@ function renderNoteText(text, noteId) {
         }
         return html;
     }
-    return highlightMentions(escapeHtml(text));
+    return renderNoteBody(text);
 }
 
 function editFollowUp(noteId, followUpIdx) {
@@ -10797,6 +10841,16 @@ function renderCommunityOverview(communityId) {
         </div>`
         : '<p class="ov-empty">No audits yet</p>';
 
+    // Condensed install history — most recent stays, with a link to the tab.
+    const _stays = getCommunityInstallStays(communityId);
+    const installOverviewHtml = _stays.length
+        ? `<div class="ov-install-list">${_stays.slice(0, 4).map(st => `
+            <div class="ov-install-row" onclick="showSensorDetail('${st.sensorId}')">
+                <span class="mono">${escapeHtml(st.sensorId)}</span>
+                <span class="ov-install-dates">${st.install ? formatDate(st.install) : '?'} ${st.current ? '<span class="badge badge-online" style="font-size:9px;padding:0 6px">now</span>' : '&rarr; ' + (st.removed ? formatDate(st.removed) : '?')}</span>
+            </div>`).join('')}${_stays.length > 4 ? `<div class="ov-install-more">+ ${_stays.length - 4} more &rarr;</div>` : ''}</div>`
+        : '<p class="ov-empty">No install history yet</p>';
+
     dashboard.innerHTML = `
         <div class="community-overview-grid">
             <div class="ov-card">
@@ -10806,6 +10860,10 @@ function renderCommunityOverview(communityId) {
             <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-contacts')">Contacts <span class="ov-card-expand">&rarr;</span></h3>
                 ${contactsHtml}
+            </div>
+            <div class="ov-card">
+                <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-install-history')">Install History <span class="ov-card-expand">&rarr;</span></h3>
+                ${installOverviewHtml}
             </div>
             <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('all')">Recent History <span class="ov-card-expand">&rarr;</span></h3>
