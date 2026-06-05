@@ -3133,7 +3133,7 @@ function renderInstallReferenceTable() {
     const renderRow = s => {
         const st = getStatusArray(s);
         const dots = st.length
-            ? `<span class="status-dots" data-tip="${escapeHtml(st.join(', '))}">${st.map(x => `<span class="status-dot" style="background:${getStatusDotColor(x)}" data-tip="${escapeHtml(x)}"></span>`).join('')}</span>`
+            ? `<span class="status-dots" data-tip="${escapeHtml(st.join(', '))}">${st.map(x => `<span class="status-dot" style="background:${getStatusDotColor(x)}"></span>`).join('')}</span>`
             : '<span class="field-placeholder">—</span>';
         const locName = s.community ? getCommunityName(s.community) : '';
         return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
