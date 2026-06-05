@@ -3045,11 +3045,71 @@ function showCommunityView(communityId) {
     ];
     // A render error in any panel must NOT stop the page from opening.
     try { filterCommunityLog(); } catch (e) { console.error('[community view] log:', e); }
+    try { renderCommunityInstallHistory(communityId); } catch (e) { console.error('[community view] install history:', e); }
     try { renderCommunityFiles(communityId); } catch (e) { console.error('[community view] files:', e); }
     try { renderCommunityAudits(communityId); } catch (e) { console.error('[community view] audits:', e); }
     try { renderCommunityOverview(communityId); } catch (e) { console.error('[community view] overview:', e); }
 
     try { resetTabs(document.getElementById('view-community')); } catch (e) { /* noop */ }
+}
+
+// Install History — derived from sensor-movement logs. Each "stay" is when a
+// pod was installed at this community (or a sub-community) until it was moved
+// out. Pods currently assigned here are shown as currently installed.
+function getCommunityInstallStays(communityId) {
+    const ids = new Set([communityId, ...getChildCommunities(communityId).map(c => c.id)]);
+    const evBySensor = {};
+    notes.forEach(n => {
+        if (!n.type || !String(n.type).includes('Movement') || !n.additionalInfo) return;
+        let p; try { p = JSON.parse(n.additionalInfo); } catch (_) { return; }
+        if (!p.sensorId) return;
+        if (ids.has(p.toCommunity)) (evBySensor[p.sensorId] = evBySensor[p.sensorId] || []).push({ kind: 'install', date: n.date });
+        if (ids.has(p.fromCommunity)) (evBySensor[p.sensorId] = evBySensor[p.sensorId] || []).push({ kind: 'remove', date: n.date });
+    });
+    const stays = [];
+    Object.entries(evBySensor).forEach(([sid, evs]) => {
+        evs.sort((a, b) => (a.date || '').localeCompare(b.date || ''));
+        let open = null;
+        evs.forEach(e => {
+            if (e.kind === 'install') { if (open) stays.push(open); open = { sensorId: sid, install: e.date, removed: null }; }
+            else { if (open) { open.removed = e.date; stays.push(open); open = null; } else stays.push({ sensorId: sid, install: null, removed: e.date }); }
+        });
+        if (open) stays.push(open);
+    });
+    // Pods currently assigned here that don't already have an open stay — seed
+    // one from the sensor's own install date.
+    const hereNow = new Set(sensors.filter(s => ids.has(s.community)).map(s => s.id));
+    sensors.filter(s => ids.has(s.community)).forEach(s => {
+        if (!stays.some(st => st.sensorId === s.id && !st.removed)) {
+            stays.push({ sensorId: s.id, install: s.dateInstalled || null, removed: null });
+        }
+    });
+    stays.forEach(st => { st.current = !st.removed && hereNow.has(st.sensorId); });
+    stays.sort((a, b) => (b.current ? 1 : 0) - (a.current ? 1 : 0) || (b.install || '').localeCompare(a.install || ''));
+    return stays;
+}
+
+function renderCommunityInstallHistory(communityId) {
+    const el = document.getElementById('community-install-history-section');
+    if (!el) return;
+    const stays = getCommunityInstallStays(communityId);
+    if (!stays.length) {
+        el.innerHTML = '<div class="empty-state">No install history yet. As pods are moved in and out (via <strong>+ New Log → Move Sensor</strong>), each install and removal will be logged here automatically.</div>';
+        return;
+    }
+    el.innerHTML = `
+        <p style="font-size:12px;color:var(--slate-400);margin:0 0 12px">When each pod was installed and removed at this community. Built automatically from sensor-movement logs.</p>
+        <div class="table-container"><table class="contacts-table install-history-table"><thead><tr>
+            <th>Pod</th><th>Installed</th><th>Removed</th><th>Status</th>
+        </tr></thead><tbody>
+        ${stays.map(st => `<tr>
+            <td><span class="clickable mono" onclick="showSensorDetail('${st.sensorId}')">${escapeHtml(st.sensorId)}</span></td>
+            <td>${st.install ? formatDate(st.install) : '<span class="field-placeholder">unknown</span>'}</td>
+            <td>${st.removed ? formatDate(st.removed) : '<span class="field-placeholder">—</span>'}</td>
+            <td>${st.current ? '<span class="badge badge-online">Currently installed</span>' : '<span class="badge badge-offline">Removed</span>'}</td>
+        </tr>`).join('')}
+        </tbody></table></div>
+    `;
 }
 
 // ===== FILES =====
