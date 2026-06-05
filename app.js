@@ -2924,6 +2924,12 @@ function showCommunityView(communityId) {
 
     document.querySelectorAll('.community-list a').forEach(a => a.classList.remove('active'));
 
+    // Switch to the community view up front so a later panel-render error can
+    // never leave the page "stuck" (it just shows that panel empty instead).
+    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
+    document.getElementById('view-community').classList.add('active');
+    pushViewHistory();
+
     // Sensors — grouped by sub-community as cards
     const children = getChildCommunities(communityId);
     const commSensors = sensors.filter(s => s.community === communityId).sort((a, b) => a.id.localeCompare(b.id));
@@ -3037,22 +3043,13 @@ function showCommunityView(communityId) {
         ...commNotes,
         ...commComms.map(c => ({ ...c, type: c.commType || c.type })),
     ];
-    filterCommunityLog();
+    // A render error in any panel must NOT stop the page from opening.
+    try { filterCommunityLog(); } catch (e) { console.error('[community view] log:', e); }
+    try { renderCommunityFiles(communityId); } catch (e) { console.error('[community view] files:', e); }
+    try { renderCommunityAudits(communityId); } catch (e) { console.error('[community view] audits:', e); }
+    try { renderCommunityOverview(communityId); } catch (e) { console.error('[community view] overview:', e); }
 
-    // Files
-    renderCommunityFiles(communityId);
-
-    // Audits
-    renderCommunityAudits(communityId);
-
-    // Overview dashboard
-    renderCommunityOverview(communityId);
-
-    resetTabs(document.getElementById('view-community'));
-
-    document.querySelectorAll('.view').forEach(v => v.classList.remove('active'));
-    document.getElementById('view-community').classList.add('active');
-    pushViewHistory();
+    try { resetTabs(document.getElementById('view-community')); } catch (e) { /* noop */ }
 }
 
 // ===== FILES =====
@@ -5568,6 +5565,7 @@ function addCustomTag() {
 const MANUAL_STATUSES = [
     'Online', 'Offline', 'Lost Connection', 'In Transit Between Audits',
     'Lab Storage', 'Ready for Deployment', 'Needs Repair',
+    'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue',
     'Possible Auto Shutoff Firmware Issue'
 ];
 
@@ -5575,8 +5573,7 @@ const MANUAL_STATUSES = [
 // or detected from sensor data). Users can still pick them, but a warning confirms they really want to override.
 const AUTO_STATUSES = [
     'Collocation', 'Auditing a Community',
-    'Service at Quant', 'Quant Ticket in Progress',
-    'PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue'
+    'Service at Quant', 'Quant Ticket in Progress'
 ];
 
 const AUTO_STATUS_WARNINGS = {
