@@ -687,7 +687,7 @@ async function saveCommunityDetailsBtn(id) {
     }
 }
 function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
-function persistNote(n) { return db.insertNote(n).catch(handleSaveError); }
+function persistNote(n) { return db.insertNote(n).then(saved => { if (saved && saved.id) n.id = saved.id; }).catch(handleSaveError); }
 function persistComm(c) { return db.insertComm(c).catch(handleSaveError); }
 function persistCommunityTags(id, tags) { db.setCommunityTags(id, tags).catch(handleSaveError); }
 function persistCommunity(c) { db.insertCommunity(c).catch(handleSaveError); }
@@ -2733,7 +2733,7 @@ function showSensorView(sensorId) {
             ${(lastEdited || s.active === false) ? `<div class="info-item" style="grid-column:1/-1;text-align:right;font-size:11px;color:var(--slate-400);margin-bottom:-6px">${lastEdited || ''}${s.active === false ? `${lastEdited ? ' · ' : ''}<span style="color:var(--aurora-rose);font-weight:600">RETIRED</span>` : ''}</div>` : ''}
             <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
-            <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)} <a class="move-sensor-link" onclick="openMoveSensorModal('${s.id}')">Move &rarr;</a></p></div>
+            <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)}</p></div>
             <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
             <div class="info-item"><label>Install Date</label><p>${s.dateInstalled || '—'}</p></div>
 
@@ -4231,11 +4231,14 @@ function updateLogTypeUI() {
     const active = getActiveLogChips();
     const hasNoteAction = active.some(c => c.dataset.kind === 'note');
     const wantStatus = active.some(c => c.dataset.expand === 'status');
+    const wantMove = active.some(c => c.dataset.expand === 'move');
     // Sensor tags only apply to note-type logs (comms can't carry sensors).
     const sensorGroup = document.getElementById('tag-sensors-container')?.closest('.form-group');
     if (sensorGroup) sensorGroup.style.display = hasNoteAction ? '' : 'none';
     const statusGroup = document.getElementById('note-status-change-group');
     if (statusGroup) statusGroup.style.display = wantStatus ? '' : 'none';
+    const moveGroup = document.getElementById('note-move-group');
+    if (moveGroup) moveGroup.style.display = wantMove ? '' : 'none';
     const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
@@ -4314,6 +4317,18 @@ function openAddNoteModal(contextId, contextType) {
     // Hide the expandable action panels until their chip is selected.
     document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
+    document.getElementById('note-move-group').style.display = 'none';
+
+    // Populate the move-destination dropdown (regulatory sites first, then A–Z).
+    const moveTargetSelect = document.getElementById('note-move-target-community');
+    if (moveTargetSelect) {
+        const regulatoryIds = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
+        const reg = COMMUNITIES.filter(c => regulatoryIds.includes(c.id));
+        const others = COMMUNITIES.filter(c => !regulatoryIds.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name));
+        moveTargetSelect.innerHTML = '<option value="">— Select destination community —</option>' +
+            (reg.length ? `<optgroup label="Regulatory Sites">${reg.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>` : '') +
+            `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`;
+    }
 
     // Pre-populate status list with current sensor's statuses if available
     if (contextType === 'sensor') {
@@ -4388,23 +4403,15 @@ function saveNote(e) {
 
     const type = getNoteActionsType();
 
-    const note = {
-        id: generateId('n'),
-        date: noteDate,
-        type: type,
-        text: text,
-        createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: new Date().toISOString(),
-        taggedSensors: sensorTags,
-        taggedCommunities: noteCommunityTags,
-        taggedContacts: contactTags,
-    };
+    // Build everything up FIRST, then persist once. (The note's real DB id is
+    // assigned on insert, so we must not fire follow-up updates with the local
+    // temporary id — that caused "invalid input syntax for type uuid".)
+    let noteText = text;
+    let additionalInfo = '';
+    const communityTags = [...noteCommunityTags];
+    let pendingInstallPrompt = null;
 
-    notes.push(note); persistNote(note);
-
-    // Apply status change to all tagged sensors if the Status Change chip is on.
-    // REPLACES the status (consistent with the status-badge modal and every
-    // other status path in the app).
+    // Status change — REPLACES status (consistent with the status-badge modal).
     let statusChangedCount = 0;
     if (activeChips.some(c => c.dataset.expand === 'status')) {
         const newStatuses = getSelectedStatuses('note-status-list');
@@ -4417,26 +4424,73 @@ function saveNote(e) {
                 if (firstBefore === null) firstBefore = oldStatuses;
                 s.status = newStatuses;
                 persistSensor(s);
-                note.text = note.text + `\n${sId} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
+                noteText += `\n${sId} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
                 statusChangedCount++;
             });
             buildSensorSidebar();
-            const upd = { text: note.text };
-            // Single sensor → store structured before/after so the timeline shows
-            // the color-coded "Status Change: X → Y" badge line.
+            // Single sensor → structured before/after for the color-coded badge line.
             if (sensorTags.length === 1) {
-                note.additionalInfo = JSON.stringify({ beforeStatus: firstBefore || [], afterStatus: newStatuses });
-                upd.additional_info = note.additionalInfo;
+                additionalInfo = JSON.stringify({ beforeStatus: firstBefore || [], afterStatus: newStatuses });
             }
-            db.updateNote(note.id, upd).catch(() => {});
         }
     }
+
+    // Move — folded into THIS same log entry (one place for everything).
+    let movedCount = 0;
+    if (activeChips.some(c => c.dataset.expand === 'move')) {
+        const toCommunityId = document.getElementById('note-move-target-community')?.value || '';
+        if (toCommunityId && sensorTags.length > 0) {
+            const toName = getCommunityName(toCommunityId);
+            const fromIds = new Set();
+            let firstFrom = null, firstMovedId = null;
+            sensorTags.forEach(sId => {
+                const s = sensors.find(x => x.id === sId);
+                if (!s || s.community === toCommunityId) return;   // skip missing / already there
+                const fromId = s.community;
+                if (firstMovedId === null) { firstFrom = fromId; firstMovedId = sId; }
+                if (fromId) fromIds.add(fromId);
+                s.community = toCommunityId;
+                persistSensor(s);
+                noteText += `\n${sId} removed from ${getCommunityName(fromId) || '(none)'} and brought to ${toName}.`;
+                movedCount++;
+            });
+            if (movedCount > 0) {
+                // Tag from + to communities so the move shows in both histories.
+                [toCommunityId, ...fromIds].forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
+                buildSensorSidebar();
+                if (sensorTags.length === 1 && !additionalInfo) {
+                    additionalInfo = JSON.stringify({ sensorId: firstMovedId, fromCommunity: firstFrom || '', toCommunity: toCommunityId });
+                }
+                const LAB = new Set(['anc-lab', 'fbx-lab', 'jnu-lab']);
+                if (sensorTags.length === 1 && !LAB.has(toCommunityId)) {
+                    const d = (noteDate.split('T')[0]) || nowDatetime().split('T')[0];
+                    pendingInstallPrompt = { id: firstMovedId, date: d, reason: `${firstMovedId} was moved to ${toName}.` };
+                }
+            }
+        }
+    }
+
+    const note = {
+        id: generateId('n'),
+        date: noteDate,
+        type: type,
+        text: noteText,
+        additionalInfo: additionalInfo,
+        createdBy: getCurrentUserName(), createdById: currentUserId,
+        createdAt: new Date().toISOString(),
+        taggedSensors: sensorTags,
+        taggedCommunities: communityTags,
+        taggedContacts: contactTags,
+    };
+    notes.push(note); persistNote(note);
 
     closeModal('modal-add-note');
     let toastMsg = 'Note added';
     if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
+    if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
     showSuccessToast(toastMsg);
     refreshCurrentView();
+    if (pendingInstallPrompt) promptInstallDateUpdate(pendingInstallPrompt.id, pendingInstallPrompt.date, pendingInstallPrompt.reason);
 }
 
 // ===== COMMUNICATIONS =====
