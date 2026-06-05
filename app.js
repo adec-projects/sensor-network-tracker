@@ -4431,32 +4431,57 @@ function updateLogTypeUI() {
     if (statusGroup) statusGroup.style.display = wantStatus ? '' : 'none';
     const moveGroup = document.getElementById('note-move-group');
     if (moveGroup) moveGroup.style.display = wantMove ? '' : 'none';
+    // Seed the first movement row (prefilled with the tagged sensor + its
+    // current community) the first time the move panel is shown.
+    if (wantMove) {
+        const cont = document.getElementById('note-move-rows');
+        if (cont && !cont.querySelector('.move-row')) {
+            const firstTagged = getChipValues('tag-sensors-container')[0] || '';
+            const s = firstTagged ? sensors.find(x => x.id === firstTagged) : null;
+            addMoveRow({ sensor: firstTagged, from: s ? s.community : '' });
+        }
+    }
     const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
 }
 
-// Sensor swap: outgoing sensor goes to the chosen destination; an incoming
-// sensor takes its place (moves into the community the outgoing one vacated).
-function toggleSwapUI() {
-    const on = document.getElementById('note-move-swap-toggle')?.checked;
-    const grp = document.getElementById('note-swap-group');
-    if (grp) grp.style.display = on ? '' : 'none';
-    if (!on) return;
-    const outgoing = new Set(getChipValues('tag-sensors-container'));
-    const sel = document.getElementById('note-move-incoming-sensor');
-    if (sel) {
-        const prev = sel.value;
-        const opts = [...sensors]
-            .filter(s => !outgoing.has(s.id))
-            .sort((a, b) => a.id.localeCompare(b.id))
-            .map(s => `<option value="${s.id}">${escapeHtml(s.id)}${s.community ? ' — ' + escapeHtml(getCommunityName(s.community)) : ''}</option>`)
-            .join('');
-        sel.innerHTML = '<option value="">— Select incoming sensor —</option>' + opts;
-        if (prev) sel.value = prev;
-    }
-    // Label the destination = the community the (first) outgoing sensor is leaving.
-    const firstOut = getChipValues('tag-sensors-container').map(id => sensors.find(x => x.id === id)).find(Boolean);
-    const name = firstOut && firstOut.community ? getCommunityName(firstOut.community) : 'the vacated location';
-    const lbl = document.getElementById('note-swap-dest-name'); if (lbl) lbl.textContent = name;
+// Sensor movements are entered as fill-in-the-blank sentence rows:
+//   [sensor] removed from [community] and installed in [community]
+// A swap is just two rows. "+ Add sensor" appends another.
+function moveCommunityOptions(selectedId) {
+    const regulatoryIds = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
+    const reg = COMMUNITIES.filter(c => regulatoryIds.includes(c.id));
+    const others = COMMUNITIES.filter(c => !regulatoryIds.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name));
+    const opt = c => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`;
+    return '<option value="">— select —</option>' +
+        (reg.length ? `<optgroup label="Regulatory Sites">${reg.map(opt).join('')}</optgroup>` : '') +
+        `<optgroup label="Communities">${others.map(opt).join('')}</optgroup>`;
+}
+function moveSensorOptions(selectedId) {
+    return '<option value="">— sensor —</option>' + [...sensors].sort((a, b) => a.id.localeCompare(b.id))
+        .map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${escapeHtml(s.id)}</option>`).join('');
+}
+function addMoveRow(prefill) {
+    prefill = prefill || {};
+    const cont = document.getElementById('note-move-rows');
+    if (!cont) return;
+    const row = document.createElement('div');
+    row.className = 'move-row';
+    row.innerHTML = `
+        <select class="move-row-sensor" onchange="onMoveSensorChange(this)">${moveSensorOptions(prefill.sensor)}</select>
+        <span class="move-row-word">removed from</span>
+        <select class="move-row-from">${moveCommunityOptions(prefill.from)}</select>
+        <span class="move-row-word">and installed in</span>
+        <select class="move-row-to">${moveCommunityOptions(prefill.to)}</select>
+        <button type="button" class="move-row-remove" onclick="this.closest('.move-row').remove()" title="Remove this row">&times;</button>`;
+    cont.appendChild(row);
+}
+// When a row's sensor is picked, auto-fill its "removed from" to that sensor's
+// current community so the user doesn't have to look it up.
+function onMoveSensorChange(sel) {
+    const row = sel.closest('.move-row');
+    const s = sensors.find(x => x.id === sel.value);
+    const fromSel = row?.querySelector('.move-row-from');
+    if (fromSel && s && s.community) fromSel.value = s.community;
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
 function saveLogAsComm(commType) {
@@ -4535,22 +4560,10 @@ function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
     document.getElementById('note-move-group').style.display = 'none';
-    // Reset the swap sub-panel each time the modal opens.
-    const swapToggle = document.getElementById('note-move-swap-toggle');
-    if (swapToggle) swapToggle.checked = false;
-    const swapGroup = document.getElementById('note-swap-group');
-    if (swapGroup) swapGroup.style.display = 'none';
-
-    // Populate the move-destination dropdown (regulatory sites first, then A–Z).
-    const moveTargetSelect = document.getElementById('note-move-target-community');
-    if (moveTargetSelect) {
-        const regulatoryIds = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
-        const reg = COMMUNITIES.filter(c => regulatoryIds.includes(c.id));
-        const others = COMMUNITIES.filter(c => !regulatoryIds.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name));
-        moveTargetSelect.innerHTML = '<option value="">— Select destination community —</option>' +
-            (reg.length ? `<optgroup label="Regulatory Sites">${reg.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>` : '') +
-            `<optgroup label="Communities">${others.map(c => `<option value="${c.id}">${escapeHtml(c.name)}</option>`).join('')}</optgroup>`;
-    }
+    // Clear any movement rows from a previous open; a fresh one is seeded
+    // when the Move Sensor chip is selected.
+    const moveRows = document.getElementById('note-move-rows');
+    if (moveRows) moveRows.innerHTML = '';
 
     // Pre-populate status list with current sensor's statuses if available
     if (contextType === 'sensor') {
@@ -4656,54 +4669,39 @@ function saveNote(e) {
         }
     }
 
-    // Move — folded into THIS same log entry (one place for everything).
+    // Move — each fill-in-the-blank row is one sensor movement. A swap is
+    // just two rows. All fold into THIS one log entry.
     let movedCount = 0;
     if (activeChips.some(c => c.dataset.expand === 'move')) {
-        const toCommunityId = document.getElementById('note-move-target-community')?.value || '';
-        if (toCommunityId && sensorTags.length > 0) {
-            const toName = getCommunityName(toCommunityId);
-            const fromIds = new Set();
-            let firstFrom = null, firstMovedId = null;
-            sensorTags.forEach(sId => {
-                const s = sensors.find(x => x.id === sId);
-                if (!s || s.community === toCommunityId) return;   // skip missing / already there
-                const fromId = s.community;
-                if (firstMovedId === null) { firstFrom = fromId; firstMovedId = sId; }
-                if (fromId) fromIds.add(fromId);
-                s.community = toCommunityId;
-                persistSensor(s);
-                // Update install history + auto-set the install date (no prompt).
-                recordSensorMove(sId, fromId, toCommunityId, noteDate);
-                noteText += `\n${sId} removed from ${getCommunityName(fromId) || '(none)'} and brought to ${toName}.`;
-                movedCount++;
-            });
-            // Swap: an incoming sensor moves into the location the outgoing
-            // sensor just vacated (firstFrom). One log captures both moves.
-            const swapOn = document.getElementById('note-move-swap-toggle')?.checked;
-            const incomingId = document.getElementById('note-move-incoming-sensor')?.value || '';
-            if (swapOn && incomingId && firstFrom) {
-                const inS = sensors.find(x => x.id === incomingId);
-                if (inS && inS.community !== firstFrom) {
-                    const inFrom = inS.community;
-                    inS.community = firstFrom;
-                    persistSensor(inS);
-                    recordSensorMove(incomingId, inFrom, firstFrom, noteDate);
-                    noteText += `\n${incomingId} removed from ${getCommunityName(inFrom) || '(none)'} and brought to ${getCommunityName(firstFrom)}.`;
-                    movedCount++;
-                    if (!sensorTags.includes(incomingId)) sensorTags.push(incomingId);
-                    if (inFrom) fromIds.add(inFrom);
-                    fromIds.add(firstFrom);
-                }
-            }
-            if (movedCount > 0) {
-                // Tag from + to communities so the move shows in every history.
-                [toCommunityId, ...fromIds].forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
-                buildSensorSidebar();
-                // Single plain move keeps the structured badge; a swap (2 moves)
-                // relies on the auto-written text lines instead.
-                if (!swapOn && sensorTags.length === 1 && !additionalInfo) {
-                    additionalInfo = JSON.stringify({ sensorId: firstMovedId, fromCommunity: firstFrom || '', toCommunity: toCommunityId });
-                }
+        const rows = [...document.querySelectorAll('#note-move-rows .move-row')];
+        const fromIds = new Set();
+        const applied = [];
+        rows.forEach(row => {
+            const sId = row.querySelector('.move-row-sensor')?.value || '';
+            const fromId = row.querySelector('.move-row-from')?.value || '';
+            const toId = row.querySelector('.move-row-to')?.value || '';
+            const s = sensors.find(x => x.id === sId);
+            if (!s || !toId || s.community === toId) return;   // skip incomplete / no-op rows
+            s.community = toId;
+            persistSensor(s);
+            // Update install history + auto-set the install date (no prompt).
+            recordSensorMove(sId, fromId || null, toId, noteDate);
+            noteText += `\n${sId} removed from ${getCommunityName(fromId) || '(none)'} and installed in ${getCommunityName(toId)}.`;
+            movedCount++;
+            if (!sensorTags.includes(sId)) sensorTags.push(sId);
+            if (fromId) fromIds.add(fromId);
+            fromIds.add(toId);
+            applied.push({ sId, fromId, toId });
+        });
+        if (movedCount > 0) {
+            // Tag every from + to community so the move shows in each history.
+            [...fromIds].forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
+            buildSensorSidebar();
+            // A single plain move keeps the structured before/after badge; a
+            // multi-row swap relies on the auto-written text lines instead.
+            if (applied.length === 1 && !additionalInfo) {
+                const m = applied[0];
+                additionalInfo = JSON.stringify({ sensorId: m.sId, fromCommunity: m.fromId || '', toCommunity: m.toId });
             }
         }
     }
@@ -4981,7 +4979,7 @@ function stripTrailingFullBodyFromTitle(text, fullBody) {
 
 // Auto-generated summary lines (status changes, moves) appended to a note.
 // They're rendered smaller + italic so the user's own text stands out.
-const AUTO_NOTE_LINE_RE = /(status changed from .* to .*\.|removed from .* and brought to .*\.|added status .*)\s*$/i;
+const AUTO_NOTE_LINE_RE = /(status changed from .* to .*\.|removed from .* and (?:brought to|installed in) .*\.|added status .*)\s*$/i;
 function renderNoteBody(text) {
     return text.split('\n').map(line => {
         const esc = highlightMentions(escapeHtml(line));

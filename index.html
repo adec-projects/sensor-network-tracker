@@ -778,15 +778,9 @@
                     </div>
                 </div>
                 <div class="form-group" id="note-move-group" style="display:none">
-                    <label>Send tagged sensor(s) to</label>
-                    <select id="note-move-target-community" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)"><option value="">— Select destination community —</option></select>
-                    <label class="swap-toggle-label" style="display:flex;align-items:center;gap:7px;margin-top:10px;font-weight:400;font-size:13px;cursor:pointer">
-                        <input type="checkbox" id="note-move-swap-toggle" onchange="toggleSwapUI()" style="width:auto;margin:0"> &#128260; Swap &mdash; bring a different sensor in to replace it
-                    </label>
-                    <div id="note-swap-group" style="display:none;margin-top:8px">
-                        <label>Incoming sensor <span style="font-weight:400;color:var(--slate-400)">(moves into <span id="note-swap-dest-name">the vacated location</span>)</span></label>
-                        <select id="note-move-incoming-sensor" style="width:100%;padding:8px 12px;border-radius:6px;border:1px solid var(--slate-200);font-size:14px;font-family:var(--font-sans)"><option value="">— Select incoming sensor —</option></select>
-                    </div>
+                    <label>Sensor movements <span style="font-weight:400;color:var(--slate-400)">— for a swap, add a row for each sensor</span></label>
+                    <div id="note-move-rows"></div>
+                    <button type="button" class="btn btn-sm move-add-btn" onclick="addMoveRow()">+ Add sensor</button>
                 </div>
                 <div id="note-audit-link-group" style="display:none;margin-bottom:8px">
                     <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px">Link to audit</label>

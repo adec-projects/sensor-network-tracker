@@ -1604,6 +1604,39 @@ tr:last-child td {
     .install-ref-cols > .install-ref-table:first-child { border-right: none; padding-right: 0; }
     .install-ref-cols > .install-ref-table:last-child { padding-left: 0; }
 }
+/* Sensor-movement sentence rows in the New Log modal */
+.move-row {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-wrap: wrap;
+    margin-bottom: 8px;
+}
+.move-row select {
+    padding: 7px 9px;
+    border-radius: 6px;
+    border: 1px solid var(--slate-200);
+    font-size: 13px;
+    font-family: var(--font-sans);
+    background: var(--surface);
+}
+.move-row .move-row-sensor { font-family: var(--font-mono); min-width: 120px; }
+.move-row .move-row-from,
+.move-row .move-row-to { min-width: 130px; flex: 1; }
+.move-row-word { font-size: 13px; color: var(--slate-500); white-space: nowrap; }
+.move-row-remove {
+    border: none;
+    background: none;
+    color: var(--slate-400);
+    font-size: 18px;
+    line-height: 1;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+}
+.move-row-remove:hover { background: var(--slate-100); color: var(--aurora-rose); }
+.move-add-btn { margin-top: 4px; }
+
 .status-dots { display: inline-flex; gap: 4px; align-items: center; flex-wrap: wrap; }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; flex: 0 0 auto; cursor: default; }
 .hover-tip {
