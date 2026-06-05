@@ -3138,10 +3138,12 @@ function renderInstallReferenceTable() {
         const locName = s.community ? getCommunityName(s.community) : '';
         const lastSeg = (s.id.split('-').pop() || s.id);
         const shortId = lastSeg.replace(/^0+/, '') || lastSeg;
+        const m = (s.dateInstalled || '').match(/^(\d{4})-(\d{2})-(\d{2})/);
+        const shortDate = m ? `${+m[2]}/${+m[3]}/${m[1].slice(2)}` : (s.dateInstalled ? formatDate(s.dateInstalled) : '');
         return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
                 <td class="mono" data-tip="${escapeHtml(s.id)}">${escapeHtml(shortId)}</td>
                 <td${locName ? ` data-tip="${escapeHtml(locName)}"` : ''}>${locName ? escapeHtml(locName) : '<span class="field-placeholder">—</span>'}</td>
-                <td>${s.dateInstalled ? formatDate(s.dateInstalled) : '<span class="field-placeholder">—</span>'}</td>
+                <td>${shortDate ? escapeHtml(shortDate) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${dots}</td>
             </tr>`;
     };
