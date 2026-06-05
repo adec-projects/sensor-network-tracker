@@ -4433,6 +4433,31 @@ function updateLogTypeUI() {
     if (moveGroup) moveGroup.style.display = wantMove ? '' : 'none';
     const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
 }
+
+// Sensor swap: outgoing sensor goes to the chosen destination; an incoming
+// sensor takes its place (moves into the community the outgoing one vacated).
+function toggleSwapUI() {
+    const on = document.getElementById('note-move-swap-toggle')?.checked;
+    const grp = document.getElementById('note-swap-group');
+    if (grp) grp.style.display = on ? '' : 'none';
+    if (!on) return;
+    const outgoing = new Set(getChipValues('tag-sensors-container'));
+    const sel = document.getElementById('note-move-incoming-sensor');
+    if (sel) {
+        const prev = sel.value;
+        const opts = [...sensors]
+            .filter(s => !outgoing.has(s.id))
+            .sort((a, b) => a.id.localeCompare(b.id))
+            .map(s => `<option value="${s.id}">${escapeHtml(s.id)}${s.community ? ' — ' + escapeHtml(getCommunityName(s.community)) : ''}</option>`)
+            .join('');
+        sel.innerHTML = '<option value="">— Select incoming sensor —</option>' + opts;
+        if (prev) sel.value = prev;
+    }
+    // Label the destination = the community the (first) outgoing sensor is leaving.
+    const firstOut = getChipValues('tag-sensors-container').map(id => sensors.find(x => x.id === id)).find(Boolean);
+    const name = firstOut && firstOut.community ? getCommunityName(firstOut.community) : 'the vacated location';
+    const lbl = document.getElementById('note-swap-dest-name'); if (lbl) lbl.textContent = name;
+}
 // New Log communication types save as a comm (reuses insertComm + tags).
 function saveLogAsComm(commType) {
     const text = document.getElementById('note-text-input').value.trim();
@@ -4510,6 +4535,11 @@ function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
     document.getElementById('note-move-group').style.display = 'none';
+    // Reset the swap sub-panel each time the modal opens.
+    const swapToggle = document.getElementById('note-move-swap-toggle');
+    if (swapToggle) swapToggle.checked = false;
+    const swapGroup = document.getElementById('note-swap-group');
+    if (swapGroup) swapGroup.style.display = 'none';
 
     // Populate the move-destination dropdown (regulatory sites first, then A–Z).
     const moveTargetSelect = document.getElementById('note-move-target-community');
@@ -4647,11 +4677,31 @@ function saveNote(e) {
                 noteText += `\n${sId} removed from ${getCommunityName(fromId) || '(none)'} and brought to ${toName}.`;
                 movedCount++;
             });
+            // Swap: an incoming sensor moves into the location the outgoing
+            // sensor just vacated (firstFrom). One log captures both moves.
+            const swapOn = document.getElementById('note-move-swap-toggle')?.checked;
+            const incomingId = document.getElementById('note-move-incoming-sensor')?.value || '';
+            if (swapOn && incomingId && firstFrom) {
+                const inS = sensors.find(x => x.id === incomingId);
+                if (inS && inS.community !== firstFrom) {
+                    const inFrom = inS.community;
+                    inS.community = firstFrom;
+                    persistSensor(inS);
+                    recordSensorMove(incomingId, inFrom, firstFrom, noteDate);
+                    noteText += `\n${incomingId} removed from ${getCommunityName(inFrom) || '(none)'} and brought to ${getCommunityName(firstFrom)}.`;
+                    movedCount++;
+                    if (!sensorTags.includes(incomingId)) sensorTags.push(incomingId);
+                    if (inFrom) fromIds.add(inFrom);
+                    fromIds.add(firstFrom);
+                }
+            }
             if (movedCount > 0) {
-                // Tag from + to communities so the move shows in both histories.
+                // Tag from + to communities so the move shows in every history.
                 [toCommunityId, ...fromIds].forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
                 buildSensorSidebar();
-                if (sensorTags.length === 1 && !additionalInfo) {
+                // Single plain move keeps the structured badge; a swap (2 moves)
+                // relies on the auto-written text lines instead.
+                if (!swapOn && sensorTags.length === 1 && !additionalInfo) {
                     additionalInfo = JSON.stringify({ sensorId: firstMovedId, fromCommunity: firstFrom || '', toCommunity: toCommunityId });
                 }
             }
