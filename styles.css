@@ -1446,28 +1446,23 @@ tr:last-child td {
     border-color: var(--aurora-rose);
 }
 
-/* Color-coded status transition shown under a status-change note */
+/* Status transition under a status-change note — uses the same status badges
+   as the overview/sensor pages, joined by an arrow. */
 .timeline-status-change {
     display: flex;
     align-items: center;
     flex-wrap: wrap;
     gap: 6px;
     margin-top: 6px;
-    font-size: 13px;
-}
-.timeline-status-change .tsc-label {
-    font-weight: 600;
-    color: var(--slate-500);
-    margin-right: 2px;
 }
 .timeline-status-change .tsc-arrow {
     color: var(--slate-400);
     font-weight: 700;
 }
-.badge.badge-neutral {
-    background: var(--slate-100);
-    color: var(--slate-500);
-    border: 1px solid var(--slate-200);
+.timeline-status-change .tsc-none {
+    font-size: 12px;
+    color: var(--slate-400);
+    font-style: italic;
 }
 
 /* Retire (archive) action on the sensor page — muted until hovered */

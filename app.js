@@ -280,8 +280,10 @@ async function loadAllData() {
             id: c.id,
             name: c.name,
             role: c.role || '',
-            community: c.community_id || communities[0] || '', // primary
-            communities,                                        // full membership
+            // `community` is kept only as an internal first-of-list value for the
+            // few legacy single-community spots; there is no user-facing "primary".
+            community: c.community_id || communities[0] || '',
+            communities,                                        // the real assignment
             email: c.email || '',
             phone: c.phone || '',
             org: c.org || '',
@@ -2083,8 +2085,8 @@ function inlineSaveContact(el) {
     } else if (field === 'primaryContact') {
         c.primaryContact = el.value === 'true';
     } else if (field === 'community') {
-        // Setup-mode single picker sets the primary; keep the multi-community
-        // array in sync (use the detail-page editor for multiple communities).
+        // Setup-mode single picker — keep the multi-community array in sync
+        // (use the detail-page editor to assign several communities).
         c.community = newVal;
         c.communities = newVal ? [newVal] : [];
     } else {
@@ -3337,7 +3339,7 @@ async function saveContact(e) {
         return;
     }
 
-    // Communities (multi-select chips). First chip is the primary community.
+    // Communities (multi-select chips) — a contact can cover several, all equal.
     const communityIds = getChipValues('contact-communities-container')
         .map(n => (COMMUNITIES.find(c => c.name.toLowerCase() === String(n).toLowerCase()) || {}).id)
         .filter(Boolean);
@@ -4531,8 +4533,8 @@ function renderTimeline(containerId, items) {
                 if (Array.isArray(p.afterStatus)) {
                     const badges = arr => (arr && arr.length)
                         ? arr.map(st => `<span class="badge ${getStatusBadgeClass(st)}">${escapeHtml(st)}</span>`).join(' ')
-                        : '<span class="badge badge-neutral">none</span>';
-                    statusChangeHtml = `<div class="timeline-status-change"><span class="tsc-label">Status Change:</span> ${badges(p.beforeStatus)} <span class="tsc-arrow">&rarr;</span> ${badges(p.afterStatus)}</div>`;
+                        : '<span class="tsc-none">none</span>';
+                    statusChangeHtml = `<div class="timeline-status-change">${badges(p.beforeStatus)} <span class="tsc-arrow">&rarr;</span> ${badges(p.afterStatus)}</div>`;
                 }
             } catch (_) { /* not structured — skip */ }
         }
