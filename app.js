@@ -272,18 +272,24 @@ async function loadAllData() {
     });
 
     // Contacts — map DB columns to app format
-    contacts = contactsData.map(c => ({
-        id: c.id,
-        name: c.name,
-        role: c.role || '',
-        community: c.community_id || '',
-        email: c.email || '',
-        phone: c.phone || '',
-        org: c.org || '',
-        active: c.active !== false,
-        emailList: c.email_list === true,
-        primaryContact: c.primary_contact === true,
-    }));
+    contacts = contactsData.map(c => {
+        const communities = (Array.isArray(c.communities) && c.communities.length)
+            ? c.communities
+            : (c.community_id ? [c.community_id] : []);
+        return {
+            id: c.id,
+            name: c.name,
+            role: c.role || '',
+            community: c.community_id || communities[0] || '', // primary
+            communities,                                        // full membership
+            email: c.email || '',
+            phone: c.phone || '',
+            org: c.org || '',
+            active: c.active !== false,
+            emailList: c.email_list === true,
+            primaryContact: c.primary_contact === true,
+        };
+    });
 
     // Notes — already mapped by db.getNotes()
     notes = notesData;
@@ -2076,6 +2082,11 @@ function inlineSaveContact(el) {
         c.emailList = el.value === 'true';
     } else if (field === 'primaryContact') {
         c.primaryContact = el.value === 'true';
+    } else if (field === 'community') {
+        // Setup-mode single picker sets the primary; keep the multi-community
+        // array in sync (use the detail-page editor for multiple communities).
+        c.community = newVal;
+        c.communities = newVal ? [newVal] : [];
     } else {
         c[field] = newVal;
     }
@@ -2923,7 +2934,7 @@ function showCommunityView(communityId) {
     }
 
     // Contacts
-    const commContacts = contacts.filter(c => c.community === communityId).sort((a, b) => {
+    const commContacts = contacts.filter(c => (c.communities || []).includes(communityId) || c.community === communityId).sort((a, b) => {
         const aP = a.primaryContact ? 0 : 1, bP = b.primaryContact ? 0 : 1;
         if (aP !== bP) return aP - bP;
         const aI = a.active === false ? 1 : 0, bI = b.active === false ? 1 : 0;
@@ -2942,7 +2953,7 @@ function showCommunityView(communityId) {
     const childIds = children.map(c => c.id);
     const allCommunityIds = [communityId, ...childIds];
     const sensorIdsInCommunity = sensors.filter(s => allCommunityIds.includes(s.community)).map(s => s.id);
-    const contactIdsInCommunity = contacts.filter(c => allCommunityIds.includes(c.community)).map(c => c.id);
+    const contactIdsInCommunity = contacts.filter(c => (c.communities || []).some(id => allCommunityIds.includes(id)) || allCommunityIds.includes(c.community)).map(c => c.id);
 
     const commNotes = notes.filter(n => {
         return n.taggedCommunities && n.taggedCommunities.some(id => allCommunityIds.includes(id));
@@ -3178,7 +3189,9 @@ function switchContactsTab(tab) {
 }
 
 function isNonCommunityContact(c) {
-    return !c.community || !COMMUNITIES.find(cm => cm.id === c.community);
+    // A contact counts as "community" if ANY of its communities is a real one.
+    const ids = (c.communities && c.communities.length) ? c.communities : (c.community ? [c.community] : []);
+    return !ids.some(id => COMMUNITIES.find(cm => cm.id === id));
 }
 
 function renderContacts() {
@@ -3211,12 +3224,21 @@ function renderContacts() {
         return true;
     });
 
-    // Group by community (or org for non-community), sorted alphabetically
+    // Group by community (or org for non-community), sorted alphabetically. A
+    // contact that covers multiple communities appears under each of them.
     const groups = {};
     filtered.forEach(c => {
-        const groupName = isNonCommunityContact(c) ? (c.org || 'Unassigned') : getCommunityName(c.community);
-        if (!groups[groupName]) groups[groupName] = [];
-        groups[groupName].push(c);
+        if (isNonCommunityContact(c)) {
+            const g = c.org || 'Unassigned';
+            (groups[g] = groups[g] || []).push(c);
+            return;
+        }
+        const ids = (c.communities && c.communities.length) ? c.communities : (c.community ? [c.community] : []);
+        const realIds = ids.filter(id => COMMUNITIES.find(cm => cm.id === id));
+        (realIds.length ? realIds : [c.community]).forEach(id => {
+            const g = getCommunityName(id);
+            (groups[g] = groups[g] || []).push(c);
+        });
     });
 
     // Sort community names alphabetically
@@ -3293,14 +3315,15 @@ function openAddContactModal() {
     document.getElementById('contact-email-list').checked = false;
     document.getElementById('contact-primary-contact').checked = false;
     document.getElementById('delete-contact-btn').style.display = 'none';
-    populateGroupedCommunitySelect('contact-community-input');
+    document.querySelectorAll('#contact-communities-container .tag-chip').forEach(c => c.remove());
+    setupTagChipInput('contact-communities-container', () => COMMUNITIES, c => c.name);
     openModal('modal-add-contact');
 }
 
 function openAddContactForCommunity() {
     openAddContactModal();
     if (currentCommunity) {
-        document.getElementById('contact-community-input').value = currentCommunity;
+        prefillChip('contact-communities-container', getCommunityName(currentCommunity));
     }
 }
 
@@ -3314,11 +3337,21 @@ async function saveContact(e) {
         return;
     }
 
+    // Communities (multi-select chips). First chip is the primary community.
+    const communityIds = getChipValues('contact-communities-container')
+        .map(n => (COMMUNITIES.find(c => c.name.toLowerCase() === String(n).toLowerCase()) || {}).id)
+        .filter(Boolean);
+    if (!communityIds.length) {
+        showAlert('Community Required', 'Please add at least one community for this contact.');
+        return;
+    }
+
     const data = {
         id: editId || generateId('c'),
         name: document.getElementById('contact-name-input').value.trim(),
         role: document.getElementById('contact-role-input').value.trim(),
-        community: document.getElementById('contact-community-input').value,
+        community: communityIds[0],
+        communities: communityIds,
         email: emailVal,
         phone: document.getElementById('contact-phone-input').value.trim(),
         org: document.getElementById('contact-org-input').value.trim(),
@@ -3362,7 +3395,9 @@ async function doSaveContact(data, editId, isActive) {
             if ((old.name || '') !== data.name) infoChanges.push(`Name changed from "${old.name || '(empty)'}" to "${data.name || '(empty)'}"`);
             if ((old.role || '') !== data.role) infoChanges.push(`Role changed from "${old.role || '(empty)'}" to "${data.role || '(empty)'}"`);
             if ((old.org || '') !== data.org) infoChanges.push(`Organization changed from "${old.org || '(empty)'}" to "${data.org || '(empty)'}"`);
-            if ((old.community || '') !== data.community) infoChanges.push(`Community changed from "${getCommunityName(old.community) || '(none)'}" to "${getCommunityName(data.community) || '(none)'}"`);
+            const oldComms = (old.communities || []).slice().sort().join(',');
+            const newComms = (data.communities || []).slice().sort().join(',');
+            if (oldComms !== newComms) infoChanges.push(`Communities changed from "${(old.communities || []).map(getCommunityName).filter(Boolean).join(', ') || '(none)'}" to "${(data.communities || []).map(getCommunityName).filter(Boolean).join(', ') || '(none)'}"`);
         }
         const idx = contacts.findIndex(c => c.id === editId);
         if (idx >= 0) contacts[idx] = data;
@@ -3379,10 +3414,10 @@ async function doSaveContact(data, editId, isActive) {
         contacts.push(data);
         trackRecent('contacts', data.id, 'edited');
 
-        // Log new contact added
-        if (!setupMode && data.community) {
-            createNote('Info Edit', `${data.name} added as a contact for ${getCommunityName(data.community)}.`, {
-                communities: [data.community], contacts: [data.id] });
+        // Log new contact added (tagged to every community they cover)
+        if (!setupMode && data.communities && data.communities.length) {
+            createNote('Info Edit', `${data.name} added as a contact for ${data.communities.map(getCommunityName).filter(Boolean).join(', ')}.`, {
+                communities: data.communities, contacts: [data.id] });
         }
     }
 
@@ -3399,7 +3434,7 @@ async function doSaveContact(data, editId, isActive) {
 
         if (allChanges.length > 0) {
             createNote('Info Edit', `Contact updated: ${allChanges.join('; ')}.`, {
-                sensors: [], communities: data.community ? [data.community] : [], contacts: [data.id],
+                sensors: [], communities: data.communities && data.communities.length ? data.communities : (data.community ? [data.community] : []), contacts: [data.id],
             });
         }
     }
@@ -3532,7 +3567,12 @@ function showContactView(contactId) {
     } else {
         document.getElementById('contact-info-card').innerHTML = `
             <div class="info-item"><label>Role</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'role')">${c.role || '<span class="field-placeholder">Role / Title</span>'}</p></div>
-            <div class="info-item"><label>Community</label><p class="editable-field" onclick="inlineEditContactCommunity('${c.id}')">${getCommunityName(c.community)} <a class="move-sensor-link" onclick="event.stopPropagation(); showCommunity('${c.community}')">View &rarr;</a></p></div>
+            <div class="info-item"><label>Communities</label><p class="editable-field" onclick="inlineEditContactCommunity('${c.id}')">${(() => {
+                const ids = (c.communities && c.communities.length) ? c.communities : (c.community ? [c.community] : []);
+                return ids.length
+                    ? ids.map(id => `<span class="clickable" onclick="event.stopPropagation(); showCommunity('${id}')">${escapeHtml(getCommunityName(id))}</span>`).join(', ')
+                    : '<span class="field-placeholder">No community</span>';
+            })()}</p></div>
             <div class="info-item"><label>Organization</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'org')">${c.org || '<span class="field-placeholder">Organization</span>'}</p></div>
             <div class="info-item"><label>Email</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'email')">${c.email || '<span class="field-placeholder">Email</span>'}</p></div>
             <div class="info-item"><label>Phone</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'phone')">${c.phone || '<span class="field-placeholder">Phone</span>'}</p></div>
@@ -3757,32 +3797,39 @@ function inlineEditContactCommunity(contactId) {
     const c = contacts.find(x => x.id === contactId);
     if (!c) return;
 
-    const oldVal = c.community || '';
+    const oldVals = (c.communities && c.communities.length) ? c.communities.slice() : (c.community ? [c.community] : []);
     const infoCard = document.getElementById('contact-info-card');
     const items = infoCard.querySelectorAll('.info-item');
     let targetP;
     for (const item of items) {
         const lbl = item.querySelector('label');
-        if (lbl && lbl.textContent.trim() === 'Community') {
+        if (lbl && lbl.textContent.trim() === 'Communities') {
             targetP = item.querySelector('.editable-field');
             break;
         }
     }
     if (!targetP) return;
 
+    // Multi-select: a contact can cover several communities. The first selected
+    // (top-most) is treated as the primary.
     const select = document.createElement('select');
+    select.multiple = true;
     select.className = 'inline-edit-select';
     select.style.width = '100%';
-    select.innerHTML = '<option value="">-- Select --</option>' +
-        [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name))
-            .map(cm => `<option value="${cm.id}" ${c.community === cm.id ? 'selected' : ''}>${cm.name}</option>`)
-            .join('');
+    select.size = Math.min(8, Math.max(3, COMMUNITIES.length));
+    select.innerHTML = [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name))
+        .map(cm => `<option value="${cm.id}" ${oldVals.includes(cm.id) ? 'selected' : ''}>${escapeHtml(cm.name)}</option>`)
+        .join('');
+    const hint = document.createElement('div');
+    hint.style.cssText = 'font-size:11px;color:var(--slate-400);margin-top:4px';
+    hint.textContent = 'Cmd/Ctrl-click to pick several. Click away to save.';
 
     targetP.innerHTML = '';
     targetP.classList.remove('editable-field');
     targetP.style.cursor = 'default';
     targetP.onclick = null;
     targetP.appendChild(select);
+    targetP.appendChild(hint);
     select.focus();
 
     let handled = false;
@@ -3790,25 +3837,24 @@ function inlineEditContactCommunity(contactId) {
     function save() {
         if (handled) return;
         handled = true;
-        const newVal = select.value;
-        if (newVal !== oldVal) {
-            c.community = newVal;
+        const newVals = Array.from(select.selectedOptions).map(o => o.value).filter(Boolean);
+        const changed = oldVals.slice().sort().join(',') !== newVals.slice().sort().join(',');
+        if (changed && newVals.length) {
+            c.communities = newVals;
+            c.community = newVals[0];
             persistContact(c);
-
             if (!setupMode) {
-                const oldName = oldVal ? getCommunityName(oldVal) : '(none)';
-                const newName = newVal ? getCommunityName(newVal) : '(none)';
-                createNote('Info Edit', `Community changed from "${oldName}" to "${newName}" for ${c.name}.`, {
-                    sensors: [], communities: [oldVal, newVal].filter(Boolean), contacts: [contactId],
+                createNote('Info Edit', `Communities changed from "${oldVals.map(getCommunityName).filter(Boolean).join(', ') || '(none)'}" to "${newVals.map(getCommunityName).filter(Boolean).join(', ')}" for ${c.name}.`, {
+                    sensors: [], communities: [...new Set([...oldVals, ...newVals])], contacts: [contactId],
                 });
             }
         }
         showContactView(contactId);
+        if (currentCommunity) showCommunityView(currentCommunity);
     }
 
-    select.addEventListener('change', save);
     select.addEventListener('blur', function() {
-        setTimeout(function() { if (!handled) save(); }, 100);
+        setTimeout(function() { if (!handled) save(); }, 120);
     });
     select.addEventListener('keydown', function(e) {
         if (e.key === 'Escape') {
@@ -3938,7 +3984,7 @@ function emailFilterByCommunity() {
     }
 
     // Show only active contacts from the selected community
-    const filtered = contacts.filter(c => c.community === commId && c.active !== false);
+    const filtered = contacts.filter(c => ((c.communities || []).includes(commId) || c.community === commId) && c.active !== false);
     const list = document.getElementById('email-recipients-list');
     const commName = getCommunityName(commId);
 
@@ -6676,7 +6722,7 @@ const COMMUNITY_EXPORT_FIELDS = [
     { key: 'sensorCount', label: 'Direct Sensor Count', get: c => sensors.filter(s => s.community === c.id).length },
     { key: 'sensorIds', label: 'Direct Sensor IDs', get: c => sensors.filter(s => s.community === c.id).map(s => s.id).sort().join(', ') },
     { key: 'childCount', label: 'Sub-Community Count', get: c => getChildCommunities(c.id).length },
-    { key: 'contactCount', label: 'Direct Active Contact Count', get: c => contacts.filter(ct => ct.community === c.id && ct.active !== false).length },
+    { key: 'contactCount', label: 'Direct Active Contact Count', get: c => contacts.filter(ct => ((ct.communities || []).includes(c.id) || ct.community === c.id) && ct.active !== false).length },
 ];
 
 const EXPORT_FIELD_SETS = {
@@ -7244,7 +7290,7 @@ let deactivatedCommunities = [];
 function deactivateCommunity(communityId) {
     const community = COMMUNITIES.find(c => c.id === communityId);
     const communityName = community ? community.name : communityId;
-    const communityContacts = contacts.filter(c => c.community === communityId && c.active !== false);
+    const communityContacts = contacts.filter(c => ((c.communities || []).includes(communityId) || c.community === communityId) && c.active !== false);
     const contactMsg = communityContacts.length > 0
         ? `\n\nThis will also inactivate ${communityContacts.length} active contact${communityContacts.length === 1 ? '' : 's'} in this community.`
         : '';
@@ -7296,8 +7342,9 @@ function reactivateCommunity(communityId) {
     // Deactivating a community auto-deactivates its contacts, but reactivation
     // intentionally doesn't re-activate them (some may have genuinely left).
     // Surface a heads-up with a count so the user knows to review.
+    const _reactIds = [communityId, ...children.map(ch => ch.id)];
     const inactiveContactCount = contacts.filter(c =>
-        (c.community === communityId || children.some(ch => c.community === ch.id))
+        (c.communities || []).some(id => _reactIds.includes(id))
         && c.active === false
     ).length;
     const suffix = inactiveContactCount > 0
@@ -7314,7 +7361,7 @@ function isCommunityDeactivated(communityId) {
 function confirmDeleteCommunity(communityId) {
     const community = COMMUNITIES.find(c => c.id === communityId);
     const communityName = community ? community.name : communityId;
-    const commContacts = contacts.filter(c => c.community === communityId);
+    const commContacts = contacts.filter(c => (c.communities || []).includes(communityId) || c.community === communityId);
     const commSensors = sensors.filter(s => s.community === communityId);
     const commNotes = notes.filter(n => n.taggedCommunities && n.taggedCommunities.includes(communityId));
 
@@ -7326,8 +7373,13 @@ function confirmDeleteCommunity(communityId) {
 
     showConfirm('Delete Community', warning, async () => {
         try {
-            // Unassign contacts
-            commContacts.forEach(c => { c.community = ''; persistContact(c); });
+            // Unassign contacts — remove just this community from their set,
+            // and recompute the primary from whatever remains.
+            commContacts.forEach(c => {
+                c.communities = (c.communities || []).filter(id => id !== communityId);
+                c.community = c.communities[0] || '';
+                persistContact(c);
+            });
             // Unassign sensors
             commSensors.forEach(s => { s.community = ''; persistSensor(s); });
             // Detach child communities (make them standalone)
@@ -10531,7 +10583,7 @@ function renderCommunityOverview(communityId) {
         : '<p class="ov-empty">No communications yet</p>';
 
     // Top contacts (2) — primary contacts first, then alphabetical
-    const commContacts = contacts.filter(c => allCommunityIds.includes(c.community) && c.active !== false)
+    const commContacts = contacts.filter(c => ((c.communities || []).some(id => allCommunityIds.includes(id)) || allCommunityIds.includes(c.community)) && c.active !== false)
         .sort((a, b) => {
             const aP = a.primaryContact ? 0 : 1, bP = b.primaryContact ? 0 : 1;
             if (aP !== bP) return aP - bP;

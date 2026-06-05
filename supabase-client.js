@@ -228,6 +228,7 @@ const db = {
             name: contact.name,
             role: contact.role || '',
             community_id: contact.community || null,
+            communities: Array.isArray(contact.communities) ? contact.communities : (contact.community ? [contact.community] : []),
             email: contact.email || '',
             phone: contact.phone || '',
             org: contact.org || '',
@@ -241,9 +242,10 @@ const db = {
             row.id = contact.id;
         }
         let { data, error } = await supa.from('contacts').upsert(row).select();
-        // If email_list or primary_contact columns don't exist yet, retry without them
-        if (error && error.message && (error.message.includes('email_list') || error.message.includes('primary_contact'))) {
-            const { email_list, primary_contact, ...rowWithout } = row;
+        // Retry without any column that doesn't exist yet on this DB (communities
+        // is new; email_list/primary_contact were earlier additions).
+        if (error && error.message && /communities|email_list|primary_contact/.test(error.message)) {
+            const { communities, email_list, primary_contact, ...rowWithout } = row;
             ({ data, error } = await supa.from('contacts').upsert(rowWithout).select());
         }
         if (error) throw error;
