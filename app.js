@@ -10883,14 +10883,12 @@ function renderCommunityOverview(communityId) {
             <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-sensors')">Sensors <span class="ov-card-expand">&rarr;</span></h3>
                 ${sensorHtml}
+                <h4 class="ov-subhead">Install History</h4>
+                ${installOverviewHtml}
             </div>
             <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-contacts')">Contacts <span class="ov-card-expand">&rarr;</span></h3>
                 ${contactsHtml}
-            </div>
-            <div class="ov-card">
-                <h3 class="ov-card-title ov-card-clickable" onclick="activateCommunityTab('community-sensors')">Install History <span class="ov-card-expand">&rarr;</span></h3>
-                ${installOverviewHtml}
             </div>
             <div class="ov-card">
                 <h3 class="ov-card-title ov-card-clickable" onclick="openCommunityLog('all')">Log History <span class="ov-card-expand">&rarr;</span></h3>

@@ -1675,6 +1675,17 @@ tr:last-child td {
     border-top: 1px solid var(--slate-200);
 }
 
+.ov-subhead {
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    color: var(--slate-400);
+    margin: 18px 0 8px;
+    padding-top: 14px;
+    border-top: 1px solid var(--slate-100);
+}
+
 /* Condensed install history on the community overview */
 .ov-install-list { display: flex; flex-direction: column; gap: 2px; }
 .ov-install-row {
