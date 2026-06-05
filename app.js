@@ -1527,16 +1527,91 @@ function showView(viewName) {
 }
 
 // ===== DASHBOARD =====
+// A global "+ New Log" with no preset context — user picks who/what to tag.
+function openGlobalNewLog() { openNewLog('', ''); }
+
 function renderDashboard() {
     const totalSensors = sensors.length;
     const onlineCount = sensors.filter(s => getStatusArray(s).includes('Online')).length;
-    const issueCount = getIssueSensorCount();
     const communityCount = COMMUNITIES.filter(c => !isChildCommunity(c.id) && !isCommunityDeactivated(c.id)).length;
     const activeTickets = getActiveTicketCount();
     const activeAudits = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress').length;
 
-    // Compact stat bar
+    // --- Needs attention ---
+    const issueSensors = sensors.filter(s => getStatusArray(s).some(st => SENSOR_ISSUE_STATUSES.includes(st)));
+    const openTickets = serviceTickets.filter(t => t.status !== 'Closed')
+        .sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    const liveAudits = audits.filter(a => a.status === 'Scheduled' || a.status === 'In Progress')
+        .sort((a, b) => (a.startDate || '').localeCompare(b.startDate || ''));
+
+    const attnItem = (html, onclick) => `<div class="dash-attn-item" onclick="${onclick}">${html}</div>`;
+    const cardEmpty = msg => `<div class="dash-attn-empty">${msg}</div>`;
+
+    const issuesCard = issueSensors.length
+        ? issueSensors.slice(0, 6).map(s => attnItem(
+            `<span class="mono">${escapeHtml(s.id)}</span> ${getStatusArray(s).filter(st => SENSOR_ISSUE_STATUSES.includes(st)).map(st => `<span class="badge ${getStatusBadgeClass(st)}">${st}</span>`).join(' ')}`,
+            `showSensorDetail('${s.id}')`)).join('') + (issueSensors.length > 6 ? `<div class="dash-attn-more" onclick="showView('all-sensors')">+ ${issueSensors.length - 6} more →</div>` : '')
+        : cardEmpty('No sensors flagged. 🎉');
+
+    const ticketsCard = openTickets.length
+        ? openTickets.slice(0, 6).map(t => attnItem(
+            `<div class="dash-attn-title">${escapeHtml(t.issueDescription || t.ticketType || 'Service ticket')}</div><div class="dash-attn-sub">${escapeHtml(t.status || '')}</div>`,
+            `openTicketDetail('${t.id}')`)).join('')
+        : cardEmpty('No open service tickets.');
+
+    const auditsCard = liveAudits.length
+        ? liveAudits.slice(0, 6).map(a => attnItem(
+            `<div class="dash-attn-title">${escapeHtml(COMMUNITIES.find(c => c.id === a.communityId)?.name || a.communityId || 'Audit')}</div><div class="dash-attn-sub">${escapeHtml(a.status || '')}${a.startDate ? ' · ' + formatDate(a.startDate) : ''}</div>`,
+            `openAuditDetail('${a.id}')`)).join('')
+        : cardEmpty('No audits scheduled or in progress.');
+
+    // --- Recent activity (notes + comms, newest first) ---
+    const feed = [
+        ...notes.map(n => ({ ...n })),
+        ...comms.map(c => ({ ...c, type: c.commType || c.type })),
+    ].filter(x => x.date).sort((a, b) => (b.date || '').localeCompare(a.date || '')).slice(0, 8);
+
+    const feedHtml = feed.length ? feed.map(item => {
+        const isComm = !!item.commType;
+        const where = (item.taggedCommunities && item.taggedCommunities[0]) ? getCommunityName(item.taggedCommunities[0])
+            : (item.taggedSensors && item.taggedSensors[0]) ? item.taggedSensors[0] : '';
+        const go = (item.taggedCommunities && item.taggedCommunities[0]) ? `showCommunity('${item.taggedCommunities[0]}')`
+            : (item.taggedSensors && item.taggedSensors[0]) ? `showSensorDetail('${item.taggedSensors[0]}')` : '';
+        const snippet = (item.text || '').split('\n')[0].slice(0, 110);
+        return `<div class="dash-feed-item" ${go ? `onclick="${go}" style="cursor:pointer"` : ''}>
+            <div class="dash-feed-meta"><span class="badge ${isComm ? 'type-comm' : getTimelineTypeClass(item.type) || ''} dash-feed-type">${escapeHtml(item.type || 'Note')}</span><span class="dash-feed-date">${formatDate(item.date)}</span></div>
+            <div class="dash-feed-text">${escapeHtml(snippet)}${(item.text || '').length > 110 ? '…' : ''}</div>
+            ${where ? `<div class="dash-feed-where">${escapeHtml(where)}</div>` : ''}
+        </div>`;
+    }).join('') : cardEmpty('No activity logged yet.');
+
     document.getElementById('dashboard-summary').innerHTML = `
+        <div class="dash-actions">
+            <button class="btn btn-primary" onclick="openGlobalNewLog()">+ New Log</button>
+            <button class="btn btn-service" onclick="openNewTicketModal()">+ Service Ticket</button>
+            <button class="btn" onclick="openAddSensorModal()">+ Add Sensor</button>
+        </div>
+
+        <div class="dash-grid">
+            <div class="dash-attn-card">
+                <h3 class="dash-attn-head"><span>Sensors needing attention</span><span class="dash-attn-count ${issueSensors.length ? 'warn' : ''}">${issueSensors.length}</span></h3>
+                ${issuesCard}
+            </div>
+            <div class="dash-attn-card">
+                <h3 class="dash-attn-head ov-card-clickable" onclick="showView('service')"><span>Open service tickets</span><span class="dash-attn-count ${openTickets.length ? 'warn' : ''}">${openTickets.length}</span></h3>
+                ${ticketsCard}
+            </div>
+            <div class="dash-attn-card">
+                <h3 class="dash-attn-head ov-card-clickable" onclick="showView('audits')"><span>Audits in progress</span><span class="dash-attn-count">${liveAudits.length}</span></h3>
+                ${auditsCard}
+            </div>
+        </div>
+
+        <div class="dash-feed-card">
+            <h3 class="dash-attn-head"><span>Recent activity</span></h3>
+            ${feedHtml}
+        </div>
+
         <div class="dash-stat-bar">
             <div class="dash-stat-bar-item" onclick="showView('all-sensors')">
                 <span class="dash-stat-bar-value">${totalSensors}</span>
