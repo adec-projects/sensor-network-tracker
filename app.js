@@ -1119,7 +1119,9 @@ async function enterApp() {
     updateSidebarServiceCount();
     updateSidebarAuditCount();
     updateSidebarCollocationCount();
-    restoreLastView();
+    // Reopen the full set of tabs this browser tab had open before refresh;
+    // fall back to the single last view if there were none.
+    if (!restoreOpenTabs()) restoreLastView();
     startInactivityTimer();
     } catch (err) {
         console.error('App initialization error:', err);
@@ -1276,6 +1278,40 @@ function getTabId(type, itemId) {
     return type + ':' + itemId;
 }
 
+// Persist the open-tab set per browser tab so a refresh keeps every tab open
+// (not just the active one). sessionStorage is unique per browser tab and
+// survives refresh, so two browser tabs can hold different tab sets.
+function persistOpenTabs() {
+    try {
+        sessionStorage.setItem('snt_openTabs', JSON.stringify({
+            tabs: openTabs.map(t => ({ id: t.id, type: t.type, itemId: t.itemId, label: t.label, icon: t.icon })),
+            active: activeTabId,
+        }));
+    } catch (_) {}
+}
+
+// Rebuild the open tabs from sessionStorage on load. Drops any tab whose
+// item no longer exists. Returns true if it restored and activated a tab.
+function restoreOpenTabs() {
+    let saved = null;
+    try { saved = JSON.parse(sessionStorage.getItem('snt_openTabs') || 'null'); } catch (_) {}
+    if (!saved || !Array.isArray(saved.tabs) || saved.tabs.length === 0) return false;
+
+    const stillExists = t =>
+        t.type === 'community' ? COMMUNITIES.some(c => c.id === t.itemId)
+        : t.type === 'sensor' ? !!findSensor(t.itemId)
+        : t.type === 'contact' ? contacts.some(c => c.id === t.itemId)
+        : false;
+
+    openTabs = saved.tabs.filter(stillExists);
+    if (openTabs.length === 0) return false;
+
+    activeTabId = openTabs.some(t => t.id === saved.active) ? saved.active : openTabs[0].id;
+    renderOpenTabs();
+    switchToTab(activeTabId);
+    return true;
+}
+
 function openTab(type, itemId, label) {
     const tabId = getTabId(type, itemId);
     const icons = { community: '\u25CF', sensor: '\u25A0', contact: '\u263B' };
@@ -1322,6 +1358,7 @@ function switchToTab(tabId) {
 }
 
 function renderOpenTabs() {
+    persistOpenTabs();
     const bar = document.getElementById('open-tabs-bar');
     if (openTabs.length === 0) {
         bar.classList.remove('visible');
