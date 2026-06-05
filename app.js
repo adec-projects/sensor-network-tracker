@@ -3969,25 +3969,6 @@ function confirmDeleteContact(contactId) {
     );
 }
 
-function openContactCommModal() {
-    if (!currentContact) return;
-    const c = contacts.find(x => x.id === currentContact);
-    if (!c) return;
-    // Open the comm modal with the contact's community, and prefill the
-    // summary with a "@Name — " starter so the contact gets tagged the
-    // moment the user saves (mentions drive contact tagging now).
-    document.getElementById('comm-form').reset();
-    document.getElementById('comm-community-id').value = c.community;
-    document.getElementById('comm-date-input').value = nowDatetime();
-    const summary = document.getElementById('comm-text-input');
-    if (summary) summary.value = `@${c.name} — `;
-    openModal('modal-comm');
-    // Move the cursor to the end so the user types right after the mention.
-    if (summary) {
-        setTimeout(() => { summary.focus(); const len = summary.value.length; summary.setSelectionRange(len, len); }, 0);
-    }
-}
-
 // ===== EMAIL COMPOSER =====
 function openEmailModal() {
     populateCommunitySelect('email-community-filter');
@@ -4519,10 +4500,6 @@ function openCommModal(communityId, presetType) {
     setTimeout(() => document.getElementById('comm-text-input')?.focus(), 0);
 }
 
-// Shortcut handlers wired to the per-community header buttons.
-function logPhoneForCommunity(communityId) { openCommModal(communityId, 'Phone Call'); }
-function logEmailForCommunity(communityId) { openCommModal(communityId, 'Email'); }
-function logVisitForCommunity(communityId) { openCommModal(communityId, 'Site Visit'); }
 
 function saveComm(e) {
     e.preventDefault();
@@ -7034,48 +7011,6 @@ function getMostRecentCollocation(sensorId) {
         end = parts[2] === 'TBD' ? 'TBD' : (parts[2] ? formatDate(parts[2]) : '');
     }
     return { communityName: location, dateRange: `${start} - ${end}` };
-}
-
-function openCollocationModal(sensorId) {
-    document.getElementById('collocation-sensor-id').value = sensorId;
-    document.getElementById('collocation-start-input').value = '';
-    document.getElementById('collocation-end-input').value = '';
-    document.getElementById('collocation-notes-input').value = '';
-    // Populate location dropdown with all communities
-    const select = document.getElementById('collocation-location-input');
-    select.innerHTML = '<option value="">— Select Community —</option>' +
-        [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name))
-        .map(c => `<option value="${c.name}">${escapeHtml(c.name)}</option>`).join('');
-    openModal('modal-collocation');
-}
-
-function saveCollocation(e) {
-    e.preventDefault();
-    const sensorId = document.getElementById('collocation-sensor-id').value;
-    const location = document.getElementById('collocation-location-input').value;
-    const startDate = document.getElementById('collocation-start-input').value;
-    const endDate = document.getElementById('collocation-end-input').value;
-    const extraNotes = document.getElementById('collocation-notes-input').value.trim();
-    if (!sensorId || !location || !startDate || !endDate) return;
-    if (new Date(endDate) < new Date(startDate)) { showAlert('Validation Error', 'End date must be after start date.'); return; }
-
-    const s = findSensor(sensorId);
-    const communityId = s?.community || '';
-    // Create note with structured additionalInfo for getMostRecentCollocation
-    const noteText = `Collocation at ${location}: ${formatDate(startDate)} \u2013 ${formatDate(endDate)}.`;
-    const structuredInfo = JSON.stringify({
-        userNotes: extraNotes || '',
-        location: location,
-        startDate: startDate,
-        endDate: endDate,
-    });
-    createNote('Collocation', noteText, {
-        sensors: [sensorId],
-        communities: communityId ? [communityId] : [],
-    }, structuredInfo);
-
-    closeModal('modal-collocation'); showSuccessToast('Collocation logged');
-    if (currentSensor === sensorId) showSensorView(sensorId);
 }
 
 function openGlobalCollocationModal() {
