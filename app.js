@@ -2743,13 +2743,11 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Address/Coordinates</label>
                 <input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${s.location || ''}" placeholder="Address or GPS coordinates" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
-            <div class="info-pair">
-                <div class="info-item"><label>SOA Tag ID</label>
-                    <input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
-                </div>
-                <div class="info-item"><label>Purchase Date</label>
-                    <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)">
-                </div>
+            <div class="info-item"><label>SOA Tag ID</label>
+                <input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
+            </div>
+            <div class="info-item"><label>Purchase Date</label>
+                <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)">
             </div>
             <div class="info-item" style="margin-top:12px;padding-top:12px;border-top:1px solid var(--slate-200)">
                 <button class="btn btn-danger btn-sm" onclick="confirmDeleteSensor('${s.id}')">Delete Sensor</button>
@@ -2765,10 +2763,8 @@ function showSensorView(sensorId) {
             <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)}</p></div>
             <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
 
-            <div class="info-pair">
-                <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
-                <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
-            </div>
+            <div class="info-item"><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
+            <div class="info-item"><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
             ${customSensorFields.map(cf => `<div class="info-item"><label>${cf.label}</label><p class="editable-field" onclick="editCustomField('${s.id}', '${cf.key}')">${(s.customFields || {})[cf.key] || '—'}</p></div>`).join('')}
             <div class="info-item" style="grid-column:1/-1;border-top:1px solid var(--slate-100);padding-top:14px;margin-top:6px">
                 <label style="display:inline">Notes / Details</label>
