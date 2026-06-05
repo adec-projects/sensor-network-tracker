@@ -1588,6 +1588,13 @@ tr:last-child td {
     padding: 4px 18px 14px;
 }
 .dash-ref-scroll { max-height: 280px; overflow: auto; margin-top: 4px; }
+.install-ref-cols {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0 20px;
+    align-items: start;
+}
+@media (max-width: 760px) { .install-ref-cols { grid-template-columns: 1fr; } }
 .install-ref-table {
     width: 100%;
     border-collapse: collapse;

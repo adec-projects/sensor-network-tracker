@@ -3104,19 +3104,26 @@ function recordSensorMove(sensorId, fromCommunityId, toCommunityId, dateStr) {
 // Live "install reference" — a quick-glance grid of every pod, where it is,
 // and when it was installed (a live version of the master device sheet).
 function renderInstallReferenceTable() {
-    const rows = [...sensors].sort((a, b) => a.id.localeCompare(b.id));
-    return `<table class="install-ref-table"><thead><tr><th>Pod</th><th>Location</th><th>Installed</th><th>Status</th></tr></thead><tbody>
-        ${rows.map(s => {
-            const st = getStatusArray(s);
-            const statusBadge = st.length ? `<span class="badge ${getStatusBadgeClass(st[0])}">${escapeHtml(st[0])}</span>` : '';
-            return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
+    const rows = [...sensors]
+        .filter(s => /^MOD-/i.test(s.id))
+        .sort((a, b) => a.id.localeCompare(b.id));
+    const renderRow = s => {
+        const st = getStatusArray(s);
+        const statusBadge = st.length ? `<span class="badge ${getStatusBadgeClass(st[0])}">${escapeHtml(st[0])}</span>` : '';
+        return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
                 <td class="mono">${escapeHtml(s.id)}</td>
                 <td>${s.community ? escapeHtml(getCommunityName(s.community)) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${s.dateInstalled ? formatDate(s.dateInstalled) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${statusBadge}</td>
             </tr>`;
-        }).join('')}
+    };
+    const tableFor = list => `<table class="install-ref-table"><thead><tr><th>Pod</th><th>Location</th><th>Installed</th><th>Status</th></tr></thead><tbody>
+        ${list.map(renderRow).join('')}
     </tbody></table>`;
+    const mid = Math.ceil(rows.length / 2);
+    const left = rows.slice(0, mid);
+    const right = rows.slice(mid);
+    return `<div class="install-ref-cols">${tableFor(left)}${right.length ? tableFor(right) : ''}</div>`;
 }
 function openInstallReference() {
     document.getElementById('install-reference-body').innerHTML = renderInstallReferenceTable();
