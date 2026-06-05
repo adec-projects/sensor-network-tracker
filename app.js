@@ -4293,17 +4293,26 @@ function saveNote(e) {
     if (activeChips.some(c => c.dataset.expand === 'status')) {
         const newStatuses = getSelectedStatuses('note-status-list');
         if (newStatuses.length > 0 && sensorTags.length > 0) {
+            let firstBefore = null;
             sensorTags.forEach(sId => {
                 const s = sensors.find(x => x.id === sId);
                 if (!s) return;
                 const oldStatuses = getStatusArray(s);
+                if (firstBefore === null) firstBefore = oldStatuses;
                 s.status = newStatuses;
                 persistSensor(s);
                 note.text = note.text + `\n${sId} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
                 statusChangedCount++;
             });
             buildSensorSidebar();
-            db.updateNote(note.id, { text: note.text }).catch(() => {});
+            const upd = { text: note.text };
+            // Single sensor → store structured before/after so the timeline shows
+            // the color-coded "Status Change: X → Y" badge line.
+            if (sensorTags.length === 1) {
+                note.additionalInfo = JSON.stringify({ beforeStatus: firstBefore || [], afterStatus: newStatuses });
+                upd.additional_info = note.additionalInfo;
+            }
+            db.updateNote(note.id, upd).catch(() => {});
         }
     }
 
@@ -4467,6 +4476,21 @@ function renderTimeline(containerId, items) {
             ? `<div class="timeline-additional-info"><em>${highlightMentions(escapeHtml(additionalInfoDisplay))}</em></div>`
             : '';
 
+        // Color-coded "Status Change: before → after" line, from the structured
+        // beforeStatus/afterStatus saved on status-change notes.
+        let statusChangeHtml = '';
+        if (item.additionalInfo) {
+            try {
+                const p = JSON.parse(item.additionalInfo);
+                if (Array.isArray(p.afterStatus)) {
+                    const badges = arr => (arr && arr.length)
+                        ? arr.map(st => `<span class="badge ${getStatusBadgeClass(st)}">${escapeHtml(st)}</span>`).join(' ')
+                        : '<span class="badge badge-neutral">none</span>';
+                    statusChangeHtml = `<div class="timeline-status-change"><span class="tsc-label">Status Change:</span> ${badges(p.beforeStatus)} <span class="tsc-arrow">&rarr;</span> ${badges(p.afterStatus)}</div>`;
+                }
+            } catch (_) { /* not structured — skip */ }
+        }
+
         const createdAt = item.createdAt || item.created_at || '';
         const attribution = item.source === 'salesforce_import'
             ? `<div class="timeline-attribution">Created by ${item.loggedBy ? escapeHtml(item.loggedBy) : 'Unknown'}, SF import</div>`
@@ -4495,6 +4519,7 @@ function renderTimeline(containerId, items) {
                     ${actions}
                 </div>
                 ${redundantTitle ? '' : `<div class="timeline-text">${renderNoteText(stripTrailingFullBodyFromTitle(stripCommTypePrefix(item.text, item.commType), item.fullBody), isNote ? item.id : null)}${showExpand ? ' <small style="color:var(--navy-500)">(click to expand)</small>' : ''}</div>`}
+                ${statusChangeHtml}
                 ${additionalInfoHtml}
                 ${hasFullBody ? `<div class="timeline-text-full${isCommItem ? ' open' : ''}">${escapeHtml(item.fullBody)}</div>` : ''}
                 ${attribution}
