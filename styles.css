@@ -2275,30 +2275,38 @@ tr:hover .contact-delete-btn {
 .sensor-info-card {
     background: var(--surface);
     border-radius: var(--radius-lg);
-    padding: 24px;
-    margin-bottom: 24px;
+    padding: 18px;
+    margin-bottom: 18px;
     box-shadow: var(--shadow-sm);
     border: 1px solid rgba(0, 0, 0, 0.04);
     display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-    gap: 16px;
+    grid-template-columns: repeat(auto-fit, minmax(170px, 1fr));
+    gap: 12px;
 }
 
 .sensor-info-card .info-item label {
-    font-size: 10.5px;
+    font-size: 10px;
     text-transform: uppercase;
     letter-spacing: 0.06em;
     color: var(--slate-400);
     font-weight: 600;
     display: block;
-    margin-bottom: 3px;
+    margin-bottom: 2px;
 }
 
 .sensor-info-card .info-item p {
-    font-size: 14px;
+    font-size: 13px;
     color: var(--slate-800);
     font-weight: 500;
 }
+
+/* Keep SOA Tag ID + Purchase Date together as one linked unit */
+.soa-purchase-pair {
+    display: flex;
+    gap: 18px;
+    flex-wrap: wrap;
+}
+.soa-purchase-pair > div { min-width: 0; }
 
 .field-placeholder {
     color: var(--slate-300);
