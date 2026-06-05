@@ -1630,7 +1630,9 @@ tr:last-child td {
 .install-ref-table col.col-pod { width: 52px; }
 .install-ref-table col.col-installed { width: 86px; }
 .install-ref-table col.col-status { width: 76px; }
-.install-ref-table .status-dots { flex-wrap: nowrap; gap: 3px; }
+/* Fill the whole status cell so the hover/tooltip target is the same size on
+   every row, even ones with a single dot. */
+.install-ref-table .status-dots { flex-wrap: nowrap; gap: 3px; width: 100%; height: 38px; }
 .install-ref-table th {
     position: sticky;
     top: 0;
