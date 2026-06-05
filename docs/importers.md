@@ -2,6 +2,8 @@
 
 This repo contains several standalone HTML pages used to load data into Supabase during initial setup and one-off data cleanups. They are **not linked from the main app** — open them directly in a browser when you need them.
 
+**All of these now live in `archive/`** (e.g. `archive/audit-importer.html`, `archive/sf-importer.html`) to keep them out of the everyday app surface. Their everyday equivalents inside the app are the canonical paths — e.g. audits are normally created with the in-app "Upload Audit from Excel"; comms/notes are logged with "+ New Log". Reach for the archived importers only for bulk migration/backfill.
+
 Each importer is a self-contained page that loads the Supabase JS library from a CDN, authenticates against the same project as the main app, and writes to one or more tables. They're deliberately kept as plain HTML so they survive framework changes and can be used even after the main app evolves.
 
 **⚠️ All importers write to production Supabase.** There is no dev database. Open them only when you intend to run them.

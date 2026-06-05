@@ -8391,7 +8391,7 @@ function closeExcelPreview() {
 // ===== UPLOAD AUDIT FROM EXCEL (in-app) =====
 // Create a new audit record from a completed audit Excel: auto-fills pods and
 // dates from the file name, pulls the DQI table (with a sheet picker when the
-// file has more than one), and attaches the workbook. Mirrors audit-importer.html.
+// file has more than one), and attaches the workbook. Mirrors archive/audit-importer.html.
 const _AUDIT_MONTHS = { jan:1, feb:2, mar:3, apr:4, may:5, jun:6, jul:7, aug:8, sep:9, oct:10, nov:11, dec:12 };
 let _auditXls = null;
 
