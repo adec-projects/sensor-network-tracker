@@ -3133,16 +3133,17 @@ function renderInstallReferenceTable() {
     const renderRow = s => {
         const st = getStatusArray(s);
         const dots = st.length
-            ? `<span class="status-dots" title="${escapeHtml(st.join(', '))}">${st.map(x => `<span class="status-dot" style="background:${getStatusDotColor(x)}" title="${escapeHtml(x)}"></span>`).join('')}</span>`
+            ? `<span class="status-dots" data-tip="${escapeHtml(st.join(', '))}">${st.map(x => `<span class="status-dot" style="background:${getStatusDotColor(x)}" data-tip="${escapeHtml(x)}"></span>`).join('')}</span>`
             : '<span class="field-placeholder">—</span>';
+        const locName = s.community ? getCommunityName(s.community) : '';
         return `<tr onclick="closeModal('modal-install-reference'); showSensorDetail('${s.id}')" data-search="${escapeHtml((s.id + ' ' + getCommunityName(s.community)).toLowerCase())}">
                 <td class="mono">${escapeHtml(s.id)}</td>
-                <td>${s.community ? escapeHtml(getCommunityName(s.community)) : '<span class="field-placeholder">—</span>'}</td>
+                <td${locName ? ` data-tip="${escapeHtml(locName)}"` : ''}>${locName ? escapeHtml(locName) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${s.dateInstalled ? formatDate(s.dateInstalled) : '<span class="field-placeholder">—</span>'}</td>
                 <td>${dots}</td>
             </tr>`;
     };
-    const tableFor = list => `<table class="install-ref-table"><thead><tr><th>Pod</th><th>Location</th><th>Installed</th><th>Status</th></tr></thead><tbody>
+    const tableFor = list => `<table class="install-ref-table"><colgroup><col class="col-pod"><col class="col-loc"><col class="col-installed"><col class="col-status"></colgroup><thead><tr><th>Pod</th><th>Location</th><th>Installed</th><th>Status</th></tr></thead><tbody>
         ${list.map(renderRow).join('')}
     </tbody></table>`;
     const mid = Math.ceil(rows.length / 2);
@@ -13955,5 +13956,45 @@ function closeSidebar() {
         const ta = document.getElementById(textareaId);
         const dd = document.getElementById(dropdownId);
         if (ta && dd) setupMentionAutocomplete(ta, dd);
+    });
+})();
+
+// --- Lightweight hover tooltip ------------------------------------------------
+// Body-level floating tooltip for any element with [data-tip]. Appears instantly
+// and follows the cursor, so it never gets clipped by scroll containers (unlike
+// the native `title` attribute, which also has a ~1s delay).
+(function initHoverTip() {
+    let tip = null;
+    const ensure = () => {
+        if (!tip) {
+            tip = document.createElement('div');
+            tip.className = 'hover-tip';
+            tip.style.display = 'none';
+            document.body.appendChild(tip);
+        }
+        return tip;
+    };
+    const place = e => {
+        const t = ensure();
+        let x = e.clientX + 12, y = e.clientY + 16;
+        if (x + t.offsetWidth > window.innerWidth - 8) x = e.clientX - t.offsetWidth - 12;
+        t.style.left = x + 'px';
+        t.style.top = y + 'px';
+    };
+    document.addEventListener('mouseover', e => {
+        const el = e.target.closest('[data-tip]');
+        if (!el) return;
+        const t = ensure();
+        t.textContent = el.getAttribute('data-tip');
+        t.style.display = 'block';
+        place(e);
+    });
+    document.addEventListener('mousemove', e => {
+        if (!tip || tip.style.display === 'none') return;
+        if (!e.target.closest('[data-tip]')) { tip.style.display = 'none'; return; }
+        place(e);
+    });
+    document.addEventListener('mouseout', e => {
+        if (tip && e.target.closest('[data-tip]')) tip.style.display = 'none';
     });
 })();
