@@ -19,7 +19,7 @@ Three-piece stack:
 
 Data flow: browser → `supabase-client.js` (`db` helpers) → Supabase. The app has no custom backend server.
 
-See `ARCHITECTURE.md` for the data-flow diagram and `docs/data-model.md` for table details.
+See `ARCHITECTURE.md` for the data-flow diagram, `docs/data-dictionary.md` for table-by-table details, and `schema/current-schema.sql` for the exact DDL.
 
 ## File Map
 

@@ -1,132 +1,109 @@
 # Architecture
 
-How the ADEC Sensor Network Tracker is put together, from the browser down to the database.
-
-For a plain-language version suitable for non-technical readers, see [`user-guide.html`](user-guide.html). This doc is for developers and agents working on the code.
+How the ADEC Sensor Network Tracker is put together, from the browser down to the database. For an end-user oriented version, see [`user-guide.html`](user-guide.html). This doc is for developers and agents working on the code.
 
 ---
 
-## The three pieces
+## The two pieces
 
 ```
-┌───────────────────┐        ┌──────────────────────────┐        ┌──────────────┐
-│  Browser          │        │  Supabase                │        │  QuantAQ     │
-│  (GitHub Pages)   │◀──────▶│  Postgres · Auth ·       │───────▶│  REST API    │
-│  index.html       │        │  Storage · Edge Fns ·    │        │              │
-│  app.js           │        │  Cron (pg_cron)          │        │              │
-│  quantaq.js       │        │                          │        │              │
-│  supabase-client  │        │                          │        │              │
-└───────────────────┘        └──────────────────────────┘        └──────────────┘
+┌───────────────────┐        ┌──────────────────────────┐
+│  Browser          │        │  Supabase                │
+│  (GitHub Pages)   │◀──────▶│  Postgres, Auth,         │
+│  index.html       │        │  Storage, pg_cron        │
+│  app.js           │        │                          │
+│  supabase-client  │        │                          │
+└───────────────────┘        └──────────────────────────┘
 ```
 
-1. **Browser / frontend** — a single static page hosted on GitHub Pages. No build step. All code is vanilla JS.
-2. **Supabase** — the only backend. Hosts the database, handles auth, stores uploaded files, runs the edge function, and drives the cron job.
-3. **QuantAQ** — the sensor manufacturer's API. The browser never talks to it directly; only the edge function holds the API key.
+1. **Browser / frontend.** A single static page hosted on GitHub Pages. No build step, all vanilla JS.
+2. **Supabase.** The only backend. It hosts the Postgres database, handles auth, stores uploaded files, and runs one scheduled job (a nightly trash purge via pg_cron).
+
+QuantAQ is the sensor manufacturer (the pods are QuantAQ Modulairs), but there is no automatic API integration anymore. It was removed. Sensor issues are noticed and logged manually.
 
 ---
 
-## Request paths
+## Request path
 
-### A normal app interaction (e.g., "save a sensor")
+A normal interaction, for example saving a sensor:
 
 ```
 User clicks Save
-  → app.js calls db.saveSensor(...)   (supabase-client.js)
-  → supabase-js library sends PATCH to supabase.co
-  → RLS policy checks auth.uid() against the row
-  → row is updated, response returns to the browser
-  → app.js re-renders the view
+  -> app.js calls a db.* helper (supabase-client.js)
+  -> supabase-js sends the request to supabase.co
+  -> an RLS policy checks the user's session against the row
+  -> the row is written, the response returns to the browser
+  -> app.js re-renders the view
 ```
 
-Every write goes through a helper on the `db` object in `supabase-client.js`. There is no direct `supabase.from(...)` scattered through `app.js` — if you find yourself wanting to add one, add a `db.*` helper instead.
-
-### A QuantAQ health check
-
-```
-pg_cron (Supabase)
-  → invokes edge function `quantaq-check` on a schedule
-  → edge function calls QuantAQ REST API with stored API key
-  → decodes flag bitmask, applies grace periods
-  → writes rows into `quantaq_alerts` table
-  → browser (next time user opens the page) loads alerts via quantaq.js
-```
-
-Users can also trigger the scan manually from the UI — same edge function, same code path, different trigger.
-
-See [`docs/quantaq-integration.md`](docs/quantaq-integration.md) for the full integration details.
+Every read and write goes through a helper on the `db` object in `supabase-client.js`. There are no direct `supabase.from(...)` calls scattered through `app.js`. If you need a new query, add a `db.*` helper rather than reaching into Supabase from the UI code.
 
 ---
 
 ## Authentication
 
-Supabase email + password auth, gated by an allowlist.
+Supabase email and password auth, gated by an allowlist:
 
-1. `allowed_emails` table holds the emails permitted to sign up.
-2. `is_email_allowed(check_email)` RPC (called from `db.signUp` in `supabase-client.js`) checks against it before attempting signup.
-3. A database trigger also rejects any signup whose email isn't in `allowed_emails` — enforcement runs on Supabase's server, not in the browser, so the browser check is a UX optimization, not the security boundary.
-4. Row Level Security is enabled on every table. Without a valid session there is no data access.
+1. The `allowed_emails` table holds the emails permitted to sign up.
+2. `is_email_allowed(check_email)` (called from `db.signUp`) checks against it before attempting signup.
+3. A database trigger also rejects any signup whose email isn't allowed. That enforcement runs on Supabase's server, so the browser check is just a UX nicety, not the security boundary.
+4. Row Level Security is enabled on every table, so without a valid session there is no data access.
 
-The anon key committed in `supabase-client.js` is the public anon key — safe to publish. RLS is what keeps the data private.
+The anon key committed in `supabase-client.js` is the public anon key and is safe to publish. RLS is what keeps the data private. See [`SECURITY.md`](SECURITY.md) for the full access-control model.
 
 ---
 
-## Data model (summary)
+## Data model
 
-See [`docs/data-model.md`](docs/data-model.md) for the full table-by-table reference. High-level:
+See [`docs/data-dictionary.md`](docs/data-dictionary.md) for the table-by-table reference and [`schema/current-schema.sql`](schema/current-schema.sql) for the exact DDL. The shape at a glance:
 
-- **`communities`** — the ~40 Alaska communities + 3 regulatory sites. Supports parent/child for sub-communities (e.g., NCore under Fairbanks).
-- **`community_tags`** — arbitrary labels per community.
-- **`sensors`** — QuantAQ Modulairs. Status is a text array so a sensor can be "Online" + "PM Sensor Issue" simultaneously.
-- **`contacts`** — people at each community.
-- **`notes`** + **`note_tags`** — cross-tagged history notes. One note can appear in the history of a sensor, a community, and a contact at once.
-- **`comms`** + **`comm_tags`** — communication log (emails, phone calls, site visits) with the same cross-tagging model.
-- **`community_files`** — metadata rows pointing at files in the `community-files` storage bucket.
-- **`quantaq_alerts`** — sensor health alerts produced by the edge function.
-- **`profiles`** — user display info, keyed by `auth.users.id`.
-- **`allowed_emails`** — signup allowlist.
-- **`app_settings`** — misc key/value settings (e.g., last QuantAQ check timestamp).
+- **`communities`** are the ~40 Alaska communities plus regulatory sites and labs, with parent/child support for sub-sites (for example NCore under Fairbanks).
+- **`sensors`** are the pods. Status is a text array, so a pod can be "Online" and "PM Sensor Issue" at the same time.
+- **`contacts`** are people at each community, and one contact can belong to several communities.
+- **`notes`** + **`note_tags`** are the cross-tagged history. A single note can show up in the history of a sensor, a community, and a contact at once.
+- **`comms`** + **`comm_tags`** are the communication log (emails, calls, site visits) using the same cross-tagging idea.
+- **`audits`**, **`collocations`**, **`service_tickets`**, **`install_history`** cover field operations.
+- **`community_files`** are metadata rows pointing at files in Supabase Storage.
+- **`profiles`** holds user display info keyed by the auth user id; **`allowed_emails`** is the signup allowlist; **`app_settings`** is a small key/value store.
 
 ---
 
 ## Code layout
 
 ```
-index.html              single-page app shell — all views and modals
+index.html              single-page app shell, all views and modals
 styles.css              design tokens, layout, theme
 app.js                  the main app (rendering, business logic)
-quantaq.js              QuantAQ alerts UI (loads from quantaq_alerts)
-quantaq.css             QuantAQ-specific styles
-supabase-client.js      Supabase setup + `db` helper object — the data layer
+supabase-client.js      Supabase setup and the db helper, i.e. the data layer
+schema/current-schema.sql   authoritative current schema
 supabase/
   config.toml
-  functions/quantaq-check/    edge function run by cron
-  migrations/                 timestamped SQL migrations
+  migrations/           timestamped SQL migrations (forward-only)
 ```
 
-Historical/setup SQL (`supabase-schema.sql`, `seed-data*.sql`, `quantaq-setup.sql`, `collocation-schema.sql`) lives at the repo root but should be treated as reference. New schema changes go in `supabase/migrations/`.
+Retired setup SQL lives in `archive/legacy-sql/` and should be treated as history. New schema changes go in `supabase/migrations/`.
 
 ---
 
 ## Conventions
 
-- **One file per concern, mostly.** `app.js` is monolithic on purpose — keep it that way until it's genuinely painful. Don't introduce a framework or build step without discussion.
-- **All data access through `db.*`.** If a feature needs a new query, add a helper to `supabase-client.js`.
-- **Edit annotations.** When a sensor changes, the app prompts for a context note and writes it to `notes` — this is how history is built. Preserve that pattern when adding new editable fields.
-- **Cross-tagging is a first-class idea.** New entities (e.g., a future "project" type) should plug into the same `note_tags` / `comm_tags` model rather than growing parallel history tables.
-- **Design rules:** navy/gold/white only, DM Sans + JetBrains Mono, tokens in `:root`.
+- **One file per concern, mostly.** `app.js` is monolithic on purpose. Keep it that way until it is genuinely painful, and don't introduce a framework or build step without discussion.
+- **All data access through `db.*`.** A feature that needs a new query gets a helper in `supabase-client.js`.
+- **History is built from notes.** When something changes, the app writes a note. Preserve that pattern when adding editable fields.
+- **Cross-tagging is first-class.** New entities should plug into the same `note_tags` / `comm_tags` model rather than growing parallel history tables.
+- **Design rules:** navy, gold, and white only; DM Sans and JetBrains Mono; tokens in `:root`.
 
 ---
 
 ## Deployment
 
-- Push to `main`. GitHub Pages rebuilds automatically.
-- Database changes: create a new file under `supabase/migrations/` and run `supabase db push` (or apply manually via the Supabase SQL editor).
-- Edge function changes: `supabase functions deploy quantaq-check`.
+- Push to `main` and GitHub Pages rebuilds automatically.
+- Database changes: add a new file under `supabase/migrations/` and apply it with `supabase db push` or through the Supabase SQL editor.
 
 ---
 
 ## What's deliberately not here
 
-- **No build step, bundler, TypeScript, or framework.** Adding any of these is a large architectural decision — don't do it incidentally.
-- **No staging environment.** Local dev points at production Supabase. If this becomes a problem, the fix is a second Supabase project, not mocks.
-- **No custom backend server.** Supabase is it. Anything that needs secrets (like the QuantAQ API key) goes in an edge function.
+- **No build step, bundler, TypeScript, or framework.** Adding any of these is a large decision, not something to do incidentally.
+- **No staging environment.** Local dev points at production Supabase. If that becomes a real problem, the answer is a second Supabase project, not mocks.
+- **No custom backend server.** Supabase is the whole backend.
