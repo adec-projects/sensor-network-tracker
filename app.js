@@ -6141,16 +6141,84 @@ function resetTabs(container) {
 }
 
 // ===== MODALS =====
+// Selector for the things a keyboard user can land on inside a dialog.
+const _FOCUSABLE_SEL = 'a[href], button:not([disabled]), textarea:not([disabled]), input:not([type=hidden]):not([disabled]):not([readonly]), select:not([disabled]), [tabindex]:not([tabindex="-1"])';
+
 function openModal(id) {
-    document.getElementById(id).classList.add('open');
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    // Remember what had focus so we can hand it back when the modal closes
+    // (keyboard/screen-reader users land back where they were).
+    modal._restoreFocus = document.activeElement;
+    modal.classList.add('open');
+
+    // A fresh open starts clean; typing in any field marks it dirty so we can
+    // warn before discarding. Stored on the element so close can detach it.
+    modal.dataset.dirty = '';
+    modal._dirtyHandler = () => { modal.dataset.dirty = '1'; };
+    modal.addEventListener('input', modal._dirtyHandler);
+    modal.addEventListener('change', modal._dirtyHandler);
+
+    // Trap Tab inside the dialog so focus can't wander to the page behind it.
+    modal._trapHandler = (e) => {
+        if (e.key !== 'Tab') return;
+        const items = [...modal.querySelectorAll(_FOCUSABLE_SEL)].filter(el => el.offsetParent !== null);
+        if (!items.length) return;
+        const first = items[0], last = items[items.length - 1];
+        if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+        else if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+    };
+    modal.addEventListener('keydown', modal._trapHandler);
+
     // Wire chip strips for any mention-textareas inside (idempotent).
     if (typeof wireAllMentionChipStrips === 'function') {
         setTimeout(wireAllMentionChipStrips, 0);
     }
+
+    // Focus the first real field, unless the opener already focused something
+    // inside (several modals focus a specific field themselves).
+    setTimeout(() => {
+        if (modal.contains(document.activeElement) && document.activeElement !== document.body) return;
+        const first = [...modal.querySelectorAll(_FOCUSABLE_SEL)]
+            .find(el => el.offsetParent !== null && !el.classList.contains('modal-close'));
+        first?.focus();
+    }, 0);
 }
 
 function closeModal(id) {
-    document.getElementById(id).classList.remove('open');
+    const modal = document.getElementById(id);
+    if (!modal) return;
+    modal.classList.remove('open');
+    if (modal._dirtyHandler) {
+        modal.removeEventListener('input', modal._dirtyHandler);
+        modal.removeEventListener('change', modal._dirtyHandler);
+        modal._dirtyHandler = null;
+    }
+    if (modal._trapHandler) {
+        modal.removeEventListener('keydown', modal._trapHandler);
+        modal._trapHandler = null;
+    }
+    modal.dataset.dirty = '';
+    // Hand focus back to wherever it was before the modal opened.
+    const restore = modal._restoreFocus;
+    modal._restoreFocus = null;
+    if (restore && typeof restore.focus === 'function' && document.contains(restore)) {
+        restore.focus();
+    }
+}
+
+// User-initiated close (X / Cancel / Escape). Warns before discarding unsaved
+// edits; programmatic closeModal (after a successful save) stays silent.
+function requestCloseModal(id) {
+    const modal = document.getElementById(id);
+    if (modal && modal.dataset.dirty === '1') {
+        showConfirm('Discard changes?',
+            'This form has unsaved changes. Close it and lose them?',
+            () => closeModal(id),
+            { danger: true, confirmText: 'Discard' });
+        return;
+    }
+    closeModal(id);
 }
 
 // Escape key closes the topmost open modal
@@ -6162,9 +6230,9 @@ document.addEventListener('keydown', (e) => {
         // Close any popover first
         const popover = document.querySelector('.axis-popover');
         if (popover) { popover.remove(); return; }
-        // Close the topmost regular modal
+        // Close the topmost regular modal (warns if it has unsaved edits)
         const modals = document.querySelectorAll('.modal.open');
-        if (modals.length > 0) { closeModal(modals[modals.length - 1].id); }
+        if (modals.length > 0) { requestCloseModal(modals[modals.length - 1].id); }
     }
 });
 
