@@ -1168,7 +1168,6 @@ async function logoutUser() {
     currentUserRole = 'user';
     currentUserCanEditGuide = false;
     _userGuideBodyCache = undefined;
-    selectedSensors.clear();
     viewHistory = [];
     setupMode = false;
     sessionStorage.removeItem('snt_setupMode');
@@ -2013,7 +2012,6 @@ function renderSensorTableHeader() {
     }).join('');
 
     document.getElementById('sensors-table-header').innerHTML = `
-        <th style="width:30px"><input type="checkbox" id="select-all-sensors" onchange="toggleAllSensorCheckboxes(this.checked)" aria-label="Select all sensors"></th>
         <th class="sortable-th" onclick="sortSensorsBy('id')">Sensor ID</th>
         ${colHeaders}
         <th>Actions${setupMode ? ` <button class="btn btn-sm" onclick="event.stopPropagation(); openAddFieldModal()" style="margin-left:4px;padding:2px 6px;font-size:10px">+ Field</button>${hiddenColumns.length > 0 ? ` <button class="btn btn-sm" onclick="event.stopPropagation(); restoreHiddenColumns()" style="padding:2px 6px;font-size:10px">Restore (${hiddenColumns.length})</button>` : ''}` : ''}</th>
@@ -2160,11 +2158,10 @@ function renderSensors() {
     });
 
     const cols = getVisibleColumns();
-    const totalCols = cols.length + 3; // checkbox + sensor ID + actions
+    const totalCols = cols.length + 2; // sensor ID + actions
 
     setTimeout(labelAllTables, 0); // pick up the just-rendered rows
     document.getElementById('sensors-tbody').innerHTML = filtered.map(s => {
-        const checkbox = `<td><input type="checkbox" class="sensor-checkbox" data-sensor-id="${s.id}" onchange="toggleSensorCheckbox('${s.id}', this.checked)" ${selectedSensors.has(s.id) ? 'checked' : ''}></td>`;
         const idCell = setupMode
             ? `<td><span class="clickable" onclick="showSensorDetail('${s.id}')">${s.id}</span><br>
                 <select class="inline-edit-select inline-edit-sm" data-sensor="${s.id}" data-field="type" onchange="inlineSaveSensor(this)">
@@ -2175,7 +2172,7 @@ function renderSensors() {
         const actions = setupMode
             ? `<td><button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button></td>`
             : `<td><button class="btn btn-sm" onclick="openEditSensorModal('${s.id}')">Edit</button> <button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button></td>`;
-        return `<tr>${checkbox}${idCell}${dataCells}${actions}</tr>`;
+        return `<tr>${idCell}${dataCells}${actions}</tr>`;
     }).join('') || `<tr><td colspan="${totalCols}" class="empty-state">No sensors found.</td></tr>`;
 
     renderSensorTableHeader();
@@ -4303,22 +4300,6 @@ function openQuickEmail(contactId) {
 }
 
 // ===== NOTES =====
-// Mass Action button on the sensors view: if any row-checkboxes are
-// selected, pre-fill the note's tagged-sensors with them so the user doesn't
-// have to retype the IDs. Previously the button just opened a blank note,
-// making the row checkboxes useless.
-function openMassActionNote() {
-    openAddNoteModal('', '');
-    if (selectedSensors.size === 0) return;
-    const container = document.getElementById('tag-sensors-container');
-    if (!container) return;
-    // Clear existing placeholder chips, then add one per selected sensor.
-    container.querySelectorAll('.tag-chip').forEach(c => c.remove());
-    for (const sid of selectedSensors) {
-        prefillChip('tag-sensors-container', sid);
-    }
-}
-
 // ===== UNIFIED "NEW LOG" =====
 // One entry point on community/sensor pages: opens the note modal with the
 // type picker on. Communication types route to a comm on save; everything
@@ -7141,45 +7122,6 @@ function exportContacts() { openExportModal('contacts'); }
 function exportCommunities() { openExportModal('communities'); }
 
 // ===== BULK ACTIONS =====
-let selectedSensors = new Set();
-
-function toggleSensorCheckbox(sensorId, checked) {
-    if (checked) selectedSensors.add(sensorId);
-    else selectedSensors.delete(sensorId);
-    updateBulkActionButton();
-}
-
-function toggleAllSensorCheckboxes(checked) {
-    document.querySelectorAll('.sensor-checkbox').forEach(cb => {
-        cb.checked = checked;
-        const sensorId = cb.dataset.sensorId;
-        if (checked) selectedSensors.add(sensorId);
-        else selectedSensors.delete(sensorId);
-    });
-    updateBulkActionButton();
-}
-
-function updateBulkActionButton() {
-    // Guards: these IDs are placeholders from an older UI iteration that
-    // isn't in index.html yet. Guarding means clicking a sensor-row
-    // checkbox doesn't throw a TypeError on a null element reference.
-    const count = selectedSensors.size;
-    const countEl = document.getElementById('bulk-count');
-    const btnEl = document.getElementById('bulk-action-btn');
-    const clearEl = document.getElementById('bulk-clear-btn');
-    if (countEl) countEl.textContent = count;
-    if (btnEl) btnEl.style.display = count > 0 ? '' : 'none';
-    if (clearEl) clearEl.style.display = count > 0 ? '' : 'none';
-}
-
-function clearSensorSelection() {
-    selectedSensors.clear();
-    const selectAll = document.getElementById('select-all-sensors');
-    if (selectAll) selectAll.checked = false;
-    document.querySelectorAll('.sensor-checkbox').forEach(cb => cb.checked = false);
-    updateBulkActionButton();
-}
-
 // ===== BACK BUTTON =====
 let viewHistory = []; // Each entry: { viewId, itemId }
 
