@@ -3123,6 +3123,35 @@ function closeOpenStays(sensorId, dateStr) {
     });
 }
 
+// Undo the install_history changes that recordSensorMove made for one sensor:
+// delete the stay it opened at the destination, and reopen the stay it closed at
+// the origin. Used when a movement event is deleted/reverted so Install History
+// doesn't keep a phantom stay. `moveDay` is the move's date (YYYY-MM-DD).
+function revertInstallForMove(sensorId, fromCommunityId, toCommunityId, moveDay) {
+    const day = (moveDay || '').split('T')[0];
+    // Delete the destination stay opened by the move (still open, same start day).
+    if (toCommunityId && !LAB_COMMUNITY_IDS.has(toCommunityId)) {
+        const idx = installHistory.findIndex(r => r.sensorId === sensorId
+            && r.communityId === toCommunityId && !r.removedDate
+            && (!day || r.installedDate === day));
+        if (idx >= 0) {
+            const rec = installHistory[idx];
+            installHistory.splice(idx, 1);
+            if (rec.id) db.deleteInstallRecord(rec.id).catch(() => {});
+        }
+    }
+    // Reopen the origin stay the move closed (removedDate set to the move day).
+    if (fromCommunityId) {
+        const closed = installHistory.find(r => r.sensorId === sensorId
+            && r.communityId === fromCommunityId && r.removedDate
+            && (!day || r.removedDate === day));
+        if (closed) {
+            closed.removedDate = '';
+            if (closed.id) db.updateInstallRecord(closed.id, { removed_date: null }).catch(() => {});
+        }
+    }
+}
+
 // Live "install reference" — a quick-glance grid of every pod, where it is,
 // and when it was installed (a live version of the master device sheet).
 function renderInstallReferenceTable() {
@@ -5251,9 +5280,11 @@ async function deleteTimelineItem(id, isNote) {
                     if (sId && parsed.fromCommunity !== undefined) {
                         const s = sensors.find(x => x.id === sId);
                         if (s) {
+                            const movedTo = s.community;   // destination before we revert it
                             s.community = parsed.fromCommunity;
                             if (parsed.beforeDateInstalled) s.dateInstalled = parsed.beforeDateInstalled;
                             persistSensor(s);
+                            revertInstallForMove(sId, parsed.fromCommunity, movedTo, note.date);
                         }
                     }
                     // Bulk movement revert (from bulk actions)
@@ -5261,11 +5292,13 @@ async function deleteTimelineItem(id, isNote) {
                         for (const [sId, oldComm] of Object.entries(parsed.beforeCommunities)) {
                             const s = sensors.find(x => x.id === sId);
                             if (s) {
+                                const movedTo = s.community;   // destination before we revert it
                                 s.community = oldComm;
                                 if (parsed.beforeDateInstalled && parsed.beforeDateInstalled[sId]) {
                                     s.dateInstalled = parsed.beforeDateInstalled[sId];
                                 }
                                 persistSensor(s);
+                                revertInstallForMove(sId, oldComm, movedTo, note.date);
                             }
                         }
                     }

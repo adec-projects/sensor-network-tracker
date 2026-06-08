@@ -295,6 +295,10 @@ const db = {
         const { error } = await supa.from('install_history').update(updates).eq('id', id);
         if (error) throw error;
     },
+    async deleteInstallRecord(id) {
+        const { error } = await supa.from('install_history').delete().eq('id', id);
+        if (error) throw error;
+    },
 
     async upsertContact(contact) {
         const row = {
