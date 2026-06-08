@@ -3576,7 +3576,6 @@ function openAddContactModal() {
     document.getElementById('contact-active-yes').checked = true;
     document.getElementById('contact-email-list').checked = false;
     document.getElementById('contact-primary-contact').checked = false;
-    document.getElementById('delete-contact-btn').style.display = 'none';
     document.querySelectorAll('#contact-communities-container .tag-chip').forEach(c => c.remove());
     setupTagChipInput('contact-communities-container', () => COMMUNITIES, c => c.name);
     openModal('modal-add-contact');

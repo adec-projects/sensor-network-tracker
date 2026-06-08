@@ -192,8 +192,12 @@ const db = {
     // cache for "edited by" labels; a failure degrades labels to blank rather
     // than blocking app load.
     async getProfileNames() {
-        const { data, error } = await supa.from('profiles').select('id, name');
-        if (error) return {};
+        let data;
+        try {
+            data = await fetchAllRows((from, to) => supa.from('profiles').select('id, name').range(from, to));
+        } catch (_) {
+            return {};   // non-fatal: name cache degrades to blank labels, not a broken load
+        }
         const out = {};
         (data || []).forEach(p => { if (p.id) out[p.id] = p.name || ''; });
         return out;
