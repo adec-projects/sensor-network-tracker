@@ -4859,7 +4859,9 @@ function renderTimeline(containerId, items) {
         return;
     }
 
-    items.sort((a, b) => b.date.localeCompare(a.date));
+    // Null-safe: a single note with a missing date must not throw and blank the
+    // entire timeline (the caller swallows render errors -> silent empty list).
+    items.sort((a, b) => (b.date || '').localeCompare(a.date || ''));
 
     container.innerHTML = items.map(item => {
         const typeClass = getTimelineTypeClass(item.type);
