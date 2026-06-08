@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ADEC Sensor Network Tracker — User Guide</title>
+<title>ADEC Sensor Network Tracker, User Guide</title>
 <style>
 @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@400;500;600;700&display=swap');
 
@@ -18,7 +18,7 @@
       }
 
   /* Dashed outline on the focused editable region so it's obvious what you're editing */
-  /* Disable the TOC links during editing — clicking them should not navigate */
+  /* Disable the TOC links during editing, clicking them should not navigate */
   /* ====================================================== */
   /* Below is IDENTICAL to user-guide.html so what you see   */
   /* here matches exactly what users see after publish.      */
@@ -192,7 +192,7 @@
   <div class="subtitle">User Guide &amp; App Overview</div>
   <div>Alaska Department of Environmental Conservation</div>
   <div>Air Monitoring &amp; Quality Assurance</div>
-  <div class="version" style="margin-top: 16px">By Ayla Crosby | April 2026</div>
+  <div class="version" style="margin-top: 16px">By Ayla Crosby | Last updated June 2026</div>
 </div>
 
 <div class="container">
@@ -220,7 +220,7 @@
 
 <h2 id="overview">1. What Is This App?</h2>
 
-<p>This is our internal tool for tracking everything related to the Community-Based Sensor Network. It replaces the old Salesforce workflow and puts everything in one place — sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and audits.</p>
+<p>This is our internal tool for tracking everything related to the Community-Based Sensor Network. It replaces the old Salesforce workflow and puts everything in one place, sensors, the communities they're deployed in, contacts at each site, service tickets, collocations, and audits.</p>
 
 <div class="feature-grid">
   <div class="feature-card">
@@ -248,13 +248,13 @@
 <h3>The Layout</h3>
 <p>The app has a sidebar on the left with everything organized under:</p>
 <ul>
-  <li><strong>Dashboard</strong> — Quick overview of the network with summary tiles, sensors needing attention, open tickets, audits in progress, a pod install reference, and a recent activity feed</li>
-  <li><strong>Sensors</strong> — Full list of all sensors with search/filter</li>
-  <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → finished, analysis pending&nbsp;→ complete)</li>
-  <li><strong>Collocations</strong> — The collocation pipeline (in progress&nbsp;→ finished, analysis pending → complete)</li>
-  <li><strong>Service Tickets</strong> — Track repairs and calibrations with QuantAQ, add progress notes, RMA and shipping numbers, etc.</li>
-  <li><strong>Communities</strong> — All deployment communities organized by region, filterable by tags</li>
-  <li><strong>Contacts</strong> — Community contacts grouped by location showing primary, active, and inactive statuses for each contact</li>
+  <li><strong>Dashboard</strong>: Quick overview of the network with summary tiles, sensors needing attention, open tickets, audits in progress, a pod install reference, and a recent activity feed</li>
+  <li><strong>Sensors</strong>: Full list of all sensors with search/filter</li>
+  <li><strong>Audits</strong>: The audit pipeline (scheduled → in progress → finished, analysis pending&nbsp;→ complete)</li>
+  <li><strong>Collocations</strong>: The collocation pipeline (in progress&nbsp;→ finished, analysis pending → complete)</li>
+  <li><strong>Service Tickets</strong>: Track repairs and calibrations with QuantAQ, add progress notes, RMA and shipping numbers, etc.</li>
+  <li><strong>Communities</strong>: All deployment communities organized by region, filterable by tags</li>
+  <li><strong>Contacts</strong>: Community contacts grouped by location showing primary, active, and inactive statuses for each contact</li>
 </ul>
 
 <div class="callout tip">
@@ -335,10 +335,10 @@
 <h3>Sensor Detail Page</h3>
 <p>Each sensor has tabs for:</p>
 <ul>
-  <li><strong>Event History</strong> — Every note, status change, movement, and service event. Filterable by category.</li>
-  <li><strong>Collocations</strong> — All collocations this sensor was part of, plus its initial collocation from the original Salesforce data</li>
-  <li><strong>Audits</strong> — Any audits involving this sensor</li>
-  <li><strong>Service Tickets</strong> — Open and closed tickets with progress notes</li>
+  <li><strong>Event History</strong>: Every note, status change, movement, and service event. Filterable by category.</li>
+  <li><strong>Collocations</strong>: All collocations this sensor was part of, plus its initial collocation from the original Salesforce data</li>
+  <li><strong>Audits</strong>: Any audits involving this sensor</li>
+  <li><strong>Service Tickets</strong>: Open and closed tickets with progress notes</li>
 </ul>
 
 <h2 id="communities">5. Communities</h2>
@@ -349,7 +349,7 @@
 
 <div class="callout">
   <div class="callout-label">How Community History Works</div>
-  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's individual history.
+  The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show, not the sensor's entire history from previous communities; that will be visible under the sensor's individual history.
 </div>
 
 <h2 id="notes">6. Logging &amp; Event History</h2>
@@ -374,18 +374,18 @@
 <p>Each note in the timeline has an <strong>Add Note</strong> button that lets you append a follow-up directly under that note. Follow-ups are timestamped with your name and date and stay visually grouped with the parent. Type @ inside a follow-up to tag a contact, and they'll be added to the parent note's tags so the follow-up shows up on their contact page too.</p>
 
 <h3>Deleting a Note</h3>
-<p>Click the trash icon. For ordinary notes, you'll get a confirm dialog. For <strong>Status Change</strong> and <strong>Movement</strong> notes, the confirm dialog includes an extra checkbox: <strong>"Also revert sensor changes."</strong> Leaving it checked rolls the sensor's status (or community) back to what it was before the note was created — handy when you log a status change by mistake. Uncheck it if you only want to delete the note record without touching the sensor.</p>
+<p>Click the trash icon. For ordinary notes, you'll get a confirm dialog. For <strong>Status Change</strong> and <strong>Movement</strong> notes, the confirm dialog includes an extra checkbox: <strong>"Also revert sensor changes."</strong> Leaving it checked rolls the sensor's status (or community) back to what it was before the note was created, handy when you log a status change by mistake. Uncheck it if you only want to delete the note record without touching the sensor.</p>
 
-<p>Deletes are soft — the record goes to the Trash Bin (Settings → Trash Bin, admin-only) for 30 days before being auto-purged. See <a href="#trash">Section 14. Trash Bin &amp; Archived Items</a>.</p>
+<p>Deletes are soft, the record goes to the Trash Bin (Settings → Trash Bin, admin-only) for 30 days before being auto-purged. See <a href="#trash">Section 14. Trash Bin &amp; Archived Items</a>.</p>
 
 <h3>Event History Filters</h3>
 <p>On sensor pages, the event history dropdown lets you filter by:</p>
 <ul>
-  <li><strong>Sensor Movement</strong> — Installs, removals, relocations</li>
-  <li><strong>Troubleshooting / Site Work</strong> — Field work and issue resolution</li>
-  <li><strong>Status Changes</strong> — Any status modifications</li>
-  <li><strong>Communications</strong> — Logged emails, calls, site visits</li>
-  <li><strong>General Notes</strong> — Everything else</li>
+  <li><strong>Sensor Movement</strong>: Installs, removals, relocations</li>
+  <li><strong>Troubleshooting / Site Work</strong>: Field work and issue resolution</li>
+  <li><strong>Status Changes</strong>: Any status modifications</li>
+  <li><strong>Communications</strong>: Logged emails, calls, site visits</li>
+  <li><strong>General Notes</strong>: Everything else</li>
 </ul>
 
 <h2 id="tickets">7. Service Tickets</h2>
@@ -411,13 +411,13 @@
 <p>As you advance the ticket through each stage, the sensor's status updates automatically. For example, advancing to "Shipped to Quant" adds that status to the sensor and removes any previous shipping status.</p>
 
 <h3>Multi-Sensor Tickets</h3>
-<p>A single ticket can cover several sensors at once — useful when you ship a batch back to QuantAQ together. Tag every sensor on the ticket and they all advance through the workflow as one unit. Each sensor's individual page links back to the shared ticket, and progress notes appear on all of their histories.</p>
+<p>A single ticket can cover several sensors at once, useful when you ship a batch back to QuantAQ together. Tag every sensor on the ticket and they all advance through the workflow as one unit. Each sensor's individual page links back to the shared ticket, and progress notes appear on all of their histories.</p>
 
 <h3>Progress Notes</h3>
 <p>Each ticket has a Progress Notes section where you can add timestamped updates as things progress. These notes show on both the ticket detail and the sensor page's ticket preview, so you can see the latest status without clicking into the ticket.</p>
 
 <h3>Tracking Info</h3>
-<p>There are fields for shipment tracking info — <strong>Tracking Info (to QuantAQ)</strong> for the package you ship out, and <strong>Return Tracking Info (from QuantAQ)</strong> for the package coming back. Just enter the carrier and tracking number, like "UPS, 1234567890".</p>
+<p>There are fields for shipment tracking info, <strong>Tracking Info (to QuantAQ)</strong> for the package you ship out, and <strong>Return Tracking Info (from QuantAQ)</strong> for the package coming back. Just enter the carrier and tracking number, like "UPS, 1234567890".</p>
 
 <h3>Closed Tickets</h3>
 <p>Closed tickets appear in their own section at the bottom of the Service Tickets page</p>
@@ -429,10 +429,10 @@
 <h3>Starting a Collocation</h3>
 <p>Click "+ Start Collocation" from the Collocations page in the sidebar. You'll pick:</p>
 <ul>
-  <li><strong>Location</strong> — Regulatory sites are listed first, then all other communities alphabetically</li>
-  <li><strong>Sensors</strong> — Tag the sensors being collocated</li>
-  <li><strong>Conducted By</strong> — Who's running it</li>
-  <li><strong>Notes</strong> — Any details</li>
+  <li><strong>Location</strong>: Regulatory sites are listed first, then all other communities alphabetically</li>
+  <li><strong>Sensors</strong>: Tag the sensors being collocated</li>
+  <li><strong>Conducted By</strong>: Who's running it</li>
+  <li><strong>Notes</strong>: Any details</li>
 </ul>
 
 <p>The sensors automatically get a "Collocation" status tag, and it's removed when the collocation completes.</p>
@@ -488,7 +488,7 @@
   <li>Export hourly data from AirVision for the BAM, permanent pod, and all community pods</li>
   <li>When selecting regulatory site data, use <strong>PM<sub>2.5</sub> and PM<sub>10</sub> local conditions</strong></li>
   <li>Clean up any invalidated data and trim to the collocation dates</li>
-  <li><strong>Don't remove the first 24 hours</strong> — the app handles that automatically</li>
+  <li><strong>Don't remove the first 24 hours</strong>: the app handles that automatically</li>
   <li>Define the BAM source (Garden BAM, NCore BAM, or Floyd Dryden BAM) and the permanent pod (optional; if no permanent pod is defined, all Quants will be compared against all other Quants instead of all Quants compared against the one permanent pod. All Quants get compared to the BAM data in both cases).</li>
   <li>Upload the Excel file</li>
 </ol>
@@ -507,36 +507,36 @@
 <h3>Analysis Tabs</h3>
 <p>The analysis view has tabs matching our standard report format:</p>
 <ul>
-  <li><strong>Time Series</strong> — Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.). Click sensors in the legend to toggle them off/on in the plot.</li>
-  <li><strong>Pods vs BAM</strong> — Each sensor compared against the BAM (PM only)</li>
-  <li><strong>Quants PM</strong> — Each pod compared against the permanent pod for PM, or each pod compared to each other pod if no permanent pod is defined</li>
-  <li><strong>Quants Gaseous</strong> — Each pod compared against the permanent pod for gases (CO, NO, NO<sub>2</sub>, O<sub>3</sub>), or each pod compared to each other pod if no permanent pod is defined</li>
-  <li><strong>Data Sheet</strong> — Full data table with yellow-shaded first 24 hours and red-highlighted missing/removed data</li>
+  <li><strong>Time Series</strong>: Hourly plots for each parameter (tabbed by PM<sub>2.5</sub>, PM<sub>10</sub>, CO, etc.). Click sensors in the legend to toggle them off/on in the plot.</li>
+  <li><strong>Pods vs BAM</strong>: Each sensor compared against the BAM (PM only)</li>
+  <li><strong>Quants PM</strong>: Each pod compared against the permanent pod for PM, or each pod compared to each other pod if no permanent pod is defined</li>
+  <li><strong>Quants Gaseous</strong>: Each pod compared against the permanent pod for gases (CO, NO, NO<sub>2</sub>, O<sub>3</sub>), or each pod compared to each other pod if no permanent pod is defined</li>
+  <li><strong>Data Sheet</strong>: Full data table with yellow-shaded first 24 hours and red-highlighted missing/removed data</li>
 </ul>
 
 <h3>Saving Reports</h3>
-<p>Click "Save as HTML" to download a standalone report file. It opens in any browser with all the interactive charts — no server needed. The filename follows the format: <code>Garden_Collocation_Analysis_445_451_674_Mar19_Apr1_2026.html</code></p>
+<p>Click "Save as HTML" to download a standalone report file. It opens in any browser with all the interactive charts, no server needed. The filename follows the format: <code>Garden_Collocation_Analysis_445_451_674_Mar19_Apr1_2026.html</code></p>
 
 <h3>How Audit Reports Read</h3>
 <ul>
-  <li><strong>DQI equation coloring</strong> — Slope, intercept, and R² are each colored independently in the equation line: green when the value passes its DQI threshold, orange when it fails. (Colorblind-safe palette.) Plot lines themselves stay neutral so the colors only signal what they need to.</li>
-  <li><strong>Audit dates</strong> — Reports use the <strong>Actual Start</strong> and <strong>Actual End</strong> fields from the audit, not the scheduled dates, so the header reflects what really happened.</li>
-  <li><strong>Progress note timestamps</strong> — Each progress note in the report shows a small timestamp so you can see when it was logged.</li>
+  <li><strong>DQI equation coloring</strong>: Slope, intercept, and R² are each colored independently in the equation line: green when the value passes its DQI threshold, orange when it fails. (Colorblind-safe palette.) Plot lines themselves stay neutral so the colors only signal what they need to.</li>
+  <li><strong>Audit dates</strong>: Reports use the <strong>Actual Start</strong> and <strong>Actual End</strong> fields from the audit, not the scheduled dates, so the header reflects what really happened.</li>
+  <li><strong>Progress note timestamps</strong>: Each progress note in the report shows a small timestamp so you can see when it was logged.</li>
 </ul>
 
 <h3>Validation Checks</h3>
 <p>Every analysis includes automated failsafe checks (click the validation dropdown to review):</p>
 <ul>
-  <li><strong>Self-test</strong> — Verifies the regression engine is computing correctly using known test data</li>
-  <li><strong>R² cross-check</strong> — Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, this is flagged in the validation dropdown on the analysis</li>
-  <li><strong>Timestamp validation</strong> — Checks for data gaps, short datasets, and date issues</li>
-  <li><strong>Sample size</strong> — Flags if there isn't enough data for reliable results</li>
-  <li><strong>Borderline DQI</strong> — Alerts when a pass/fail result is very close to the threshold</li>
+  <li><strong>Self-test</strong>: Verifies the regression engine is computing correctly using known test data</li>
+  <li><strong>R² cross-check</strong>: Independently verifies each R² value using a different math method. The primary method uses least-squares regression and the cross-check uses Pearson correlation; if the two don't match, this is flagged in the validation dropdown on the analysis</li>
+  <li><strong>Timestamp validation</strong>: Checks for data gaps, short datasets, and date issues</li>
+  <li><strong>Sample size</strong>: Flags if there isn't enough data for reliable results</li>
+  <li><strong>Borderline DQI</strong>: Alerts when a pass/fail result is very close to the threshold</li>
 </ul>
 
 <div class="callout tip">
   <div class="callout-label">Good to Know</div>
-  X-PM sensors (the Modulair-PM models) only compare PM<sub>2.5</sub> and PM<sub>10</sub> — gas parameters are automatically skipped for these sensors since they don't measure gases.
+  X-PM sensors (the Modulair-PM models) only compare PM<sub>2.5</sub> and PM<sub>10</sub>, gas parameters are automatically skipped for these sensors since they don't measure gases.
 </div>
 
 <h2 id="contacts">11. Contacts</h2>
@@ -547,7 +547,7 @@
 
 <h2 id="exporting">12. Exporting Data</h2>
 
-<p>Each of the three main lists — Sensors, Communities, and Contacts — has an <strong>Export as Spreadsheet</strong> button at the top of the page. They all work the same way and open the same field-picker popup.</p>
+<p>Each of the three main lists, Sensors, Communities, and Contacts, has an <strong>Export as Spreadsheet</strong> button at the top of the page. They all work the same way and open the same field-picker popup.</p>
 
 <ol>
   <li>Click <strong>Export as Spreadsheet</strong>.</li>
@@ -558,9 +558,9 @@
 
 <p>Fields vary by list:</p>
 <ul>
-  <li><strong>Sensors</strong> — ID, type, status, community, location, install date, SOA tag, purchase date. Custom sensor fields (added in Setup Mode) are included automatically.</li>
-  <li><strong>Communities</strong> — Name, parent community, tags, status, sensor count, sensor IDs, sub-community count, contact count.</li>
-  <li><strong>Contacts</strong> — Name, role, community, organization, email, phone, mass-email-list flag, status.</li>
+  <li><strong>Sensors</strong>: ID, type, status, community, location, install date, SOA tag, purchase date. Custom sensor fields (added in Setup Mode) are included automatically.</li>
+  <li><strong>Communities</strong>: Name, parent community, tags, status, sensor count, sensor IDs, sub-community count, contact count.</li>
+  <li><strong>Contacts</strong>: Name, role, community, organization, email, phone, mass-email-list flag, status.</li>
 </ul>
 
 <h2 id="admin-modes">13. Admin Modes (Setup &amp; Sandbox)</h2>
@@ -572,13 +572,13 @@
 
 <p>While Setup Mode is on:</p>
 <ul>
-  <li>Edits still save to the real database the same way — this is <strong>not</strong> a practice mode.</li>
+  <li>Edits still save to the real database the same way, this is <strong>not</strong> a practice mode.</li>
   <li>The app stops writing automatic history notes for status changes, community moves, contact edits, etc.</li>
   <li>The "Date of change" and "Notes" prompts on the status-change and move modals are hidden so you can move through records faster.</li>
   <li>Extra admin controls appear on the sensors table: add custom fields, edit sensor IDs inline, and restore hidden columns.</li>
 </ul>
 
-<p>Clicking the toggle opens a popup that explains the above. Click "Enter Setup Mode" to confirm. Turn it off again when you're done — normal editing re-enables the automatic history trail. Setup Mode auto-resets when you sign out or close the browser.</p>
+<p>Clicking the toggle opens a popup that explains the above. Click "Enter Setup Mode" to confirm. Turn it off again when you're done, normal editing re-enables the automatic history trail. Setup Mode auto-resets when you sign out or close the browser.</p>
 
 <div class="callout heads-up">
   <div class="callout-label">Heads Up</div>
@@ -586,7 +586,7 @@
 </div>
 
 <h3>Sandbox Mode</h3>
-<p>Sandbox Mode is a <strong>safe practice space</strong>. You can click around, add/edit/delete sensors, communities, contacts, notes — anything — and nothing you do will save to the real database. Use it to try new features, train yourself on a workflow, or show someone around without any risk.</p>
+<p>Sandbox Mode is a <strong>safe practice space</strong>. You can click around, add/edit/delete sensors, communities, contacts, notes, anything, and nothing you do will save to the real database. Use it to try new features, train yourself on a workflow, or show someone around without any risk.</p>
 
 <p>How it works:</p>
 <ul>
@@ -596,7 +596,7 @@
   <li>A bright amber banner stays at the top of the screen the whole time so you never forget you're in sandbox.</li>
 </ul>
 
-<p>Clicking the toggle opens a popup that explains the above. Click "Enter Sandbox" to confirm — the page reloads with the sandbox safety net active. Turn it off when you're done — all edits will be automatically saved to the database again. Sandbox Mode auto-resets when you refresh the page, sign out, or close the browser.</p>
+<p>Clicking the toggle opens a popup that explains the above. Click "Enter Sandbox" to confirm, the page reloads with the sandbox safety net active. Turn it off when you're done, all edits will be automatically saved to the database again. Sandbox Mode auto-resets when you refresh the page, sign out, or close the browser.</p>
 
 <div class="callout tip">
   <div class="callout-label">Which One Do I Want?</div>
@@ -606,7 +606,7 @@
 
 <h2 id="trash">14. Trash Bin &amp; Archived Items</h2>
 
-<p>Deletes in this app are <strong>soft deletes</strong>. When you click the trash icon on a note, comm log, service ticket, audit, or collocation, the record disappears from its normal lists but stays in the database — admins can restore it from the Trash Bin in Settings.</p>
+<p>Deletes in this app are <strong>soft deletes</strong>. When you click the trash icon on a note, comm log, service ticket, audit, or collocation, the record disappears from its normal lists but stays in the database, admins can restore it from the Trash Bin in Settings.</p>
 
 <p>Archived sensors live alongside the trash. You can also flip back to them via the Active / Archived tabs at the top of the All Sensors page.</p>
 
@@ -615,12 +615,12 @@
 
 <h3>Restore vs. Purge</h3>
 <ul>
-  <li><strong>Restore</strong> — puts the item back exactly where it came from (sensor history, community page, ticket list, etc).</li>
-  <li><strong>Purge</strong> — permanently deletes it. There's no undo.</li>
+  <li><strong>Restore</strong>: puts the item back exactly where it came from (sensor history, community page, ticket list, etc).</li>
+  <li><strong>Purge</strong>: permanently deletes it. There's no undo.</li>
 </ul>
 
 <h3>Auto-Purge After 30 Days</h3>
-<p>Items in the trash bin are automatically purged 30 days after deletion. The window gives you time to recover an accidental delete without letting old junk pile up forever. <strong>Archived sensors don't auto-purge</strong> — they stay until an admin explicitly removes them, because tickets, audits, and notes can still reference them.</p>
+<p>Items in the trash bin are automatically purged 30 days after deletion. The window gives you time to recover an accidental delete without letting old junk pile up forever. <strong>Archived sensors don't auto-purge</strong>: they stay until an admin explicitly removes them, because tickets, audits, and notes can still reference them.</p>
 
 <div class="callout heads-up">
   <div class="callout-label">Heads Up</div>
@@ -640,7 +640,7 @@
 
 <div class="callout">
   <div class="callout-label">Notes + Status Changes</div>
-  When you add a note and also change the sensor status, they get combined into one entry in the event history — not two separate notes. The status change text gets appended to your note.
+  When you add a note and also change the sensor status, they get combined into one entry in the event history, not two separate notes. The status change text gets appended to your note.
 </div>
 
 <div class="callout tip">
@@ -650,7 +650,7 @@
 
 <div class="callout">
   <div class="callout-label">Re-uploading Analysis Data</div>
-  You can re-upload data anytime from the collocation or audit detail view. Just click "Re-upload Data" and it'll clear the old results and let you start fresh. Take note: the old analysis is gone once you click re-upload — there's no undo.
+  You can re-upload data anytime from the collocation or audit detail view. Just click "Re-upload Data" and it'll clear the old results and let you start fresh. Take note: the old analysis is gone once you click re-upload, there's no undo.
 </div>
 
 <div class="callout tip">
@@ -662,7 +662,7 @@
 
 <div class="footer">
   ADEC Division of Air Quality • Air Monitoring &amp; Quality Assurance<br>
-  Sensor Network Tracker User Guide • April 2026
+  Sensor Network Tracker User Guide • June 2026
 </div>
 
 </body>
