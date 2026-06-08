@@ -1927,18 +1927,17 @@ function renderStatusBadges(s, clickable) {
     }
 
     if (statuses.length === 0) {
-        if (clickable) return `<span class="editable-field" onclick="openStatusChangeModal('${s.id}')">No status set</span>`;
         return '—';
     }
+    // Status is display-only here. It can only be changed via Setup mode or the
+    // New Log button (Status Change), never by clicking a badge. The one click
+    // still allowed is the "Quant Ticket in Progress" badge linking to its
+    // ticket, which is navigation, not a status edit.
     let html = statuses.map(st => {
-        const cls = clickable ? 'badge-clickable' : '';
-        if (st === 'Quant Ticket in Progress' && clickable) {
-            const activeTicket = activeTickets[0];
-            const ticketClick = activeTicket ? `onclick="openTicketDetail('${activeTicket.id}')"` : `onclick="openStatusChangeModal('${s.id}')"`;
-            return `<span class="badge ${getStatusBadgeClass(st)} ${cls}" ${ticketClick}>${st}</span>`;
+        if (st === 'Quant Ticket in Progress' && clickable && activeTickets[0]) {
+            return `<span class="badge ${getStatusBadgeClass(st)} badge-clickable" onclick="openTicketDetail('${activeTickets[0].id}')">${st}</span>`;
         }
-        const onclick = clickable ? `onclick="openStatusChangeModal('${s.id}')"` : '';
-        return `<span class="badge ${getStatusBadgeClass(st)} ${cls}" ${onclick}>${st}</span>`;
+        return `<span class="badge ${getStatusBadgeClass(st)}">${st}</span>`;
     }).join(' ');
 
     // Show active ticket stage as a badge only if it's not already represented in the sensor statuses
@@ -2516,73 +2515,6 @@ function completeAnnotation(additionalInfo) {
     persistNote(note);
     closeModal('modal-edit-annotation');
     setTimeout(() => showNextAnnotation(), 150);
-}
-
-// ===== INLINE STATUS CHANGE =====
-function openStatusChangeModal(sensorId) {
-    const s = findSensor(sensorId);
-    if (!s) return;
-    document.getElementById('status-change-sensor-id').value = s.id;
-    document.getElementById('status-change-old').value = JSON.stringify(getStatusArray(s));
-    document.getElementById('status-change-sensor-label').textContent = s.id;
-    renderStatusToggleList('status-change-new', getStatusArray(s));
-    document.getElementById('status-change-info').value = '';
-    document.getElementById('status-change-date').value = nowDatetime();
-    document.getElementById('status-change-date-group').style.display = setupMode ? 'none' : '';
-    document.getElementById('status-change-notes-group').style.display = setupMode ? 'none' : '';
-    openModal('modal-status-change');
-}
-
-function saveStatusChange(e) {
-    e.preventDefault();
-    const sensorId = document.getElementById('status-change-sensor-id').value;
-    const oldStatuses = JSON.parse(document.getElementById('status-change-old').value);
-    const newStatuses = getSelectedStatuses('status-change-new');
-    const additionalInfo = document.getElementById('status-change-info').value.trim();
-    const statusDate = document.getElementById('status-change-date').value || nowDatetime();
-
-    const oldStr = oldStatuses.join(', ') || '(none)';
-    const newStr = newStatuses.join(', ') || '(none)';
-
-    if (oldStr === newStr) {
-        closeModal('modal-status-change');
-        return;
-    }
-
-    const s = findSensor(sensorId);
-    if (!s) return;
-
-    s.status = newStatuses;
-    persistSensor(s);
-
-    let noteText = `${sensorId} status changed from "${oldStr}" to "${newStr}".`;
-
-    const mentionedContacts = parseMentionedContacts(additionalInfo);
-
-    const structuredInfo = JSON.stringify({
-        userNotes: additionalInfo || '',
-        beforeStatus: oldStatuses,
-        afterStatus: newStatuses,
-        sensorId: sensorId,
-    });
-
-    const note = {
-        id: generateId('n'),
-        date: statusDate,
-        type: 'Status Change',
-        text: noteText,
-        additionalInfo: structuredInfo,
-        createdBy: getCurrentUserName(), createdById: currentUserId,
-        createdAt: new Date().toISOString(),
-        taggedSensors: [sensorId],
-        taggedCommunities: s.community ? [s.community] : [],
-        taggedContacts: mentionedContacts,
-    };
-
-    if (!setupMode) { notes.push(note); persistNote(note); }
-    closeModal('modal-status-change');
-    buildSensorSidebar();
-    refreshCurrentView();
 }
 
 // ===== INSTALL DATE PROMPT =====
@@ -14067,7 +13999,6 @@ function closeSidebar() {
     const pairs = [
         ['note-text-input', 'note-mention-dropdown'],
         ['move-additional-info', 'move-mention-dropdown'],
-        ['status-change-info', 'status-mention-dropdown'],
         ['comm-text-input', 'comm-mention-dropdown'],
     ];
     pairs.forEach(([textareaId, dropdownId]) => {

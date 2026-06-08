@@ -649,39 +649,6 @@
         </div>
     </div>
 
-    <!-- Inline Status Change Modal -->
-    <div id="modal-status-change" class="modal" role="dialog" aria-modal="true">
-        <div class="modal-content modal-sm">
-            <div class="modal-header">
-                <h2>Change Sensor Status</h2>
-                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-status-change')">&times;</button>
-            </div>
-            <form id="status-change-form" onsubmit="saveStatusChange(event)">
-                <input type="hidden" id="status-change-sensor-id">
-                <input type="hidden" id="status-change-old">
-                <div class="form-group">
-                    <label>Sensor: <strong id="status-change-sensor-label"></strong></label>
-                </div>
-                <div class="form-group">
-                    <label>New Status</label>
-                    <div id="status-change-new" class="status-toggle-list"></div>
-                </div>
-                <div class="form-group" id="status-change-date-group">
-                    <label>Date</label>
-                    <input type="datetime-local" id="status-change-date">
-                </div>
-                <div class="form-group" id="status-change-notes-group">
-                    <label>Additional Info (optional)</label>
-                    <textarea id="status-change-info" rows="3" class="mention-textarea" placeholder="Type @ to tag a contact."></textarea>
-                    <div class="mention-dropdown" id="status-mention-dropdown"></div>
-                </div>
-                <div class="modal-footer">
-                    <button type="button" class="btn" onclick="closeModal('modal-status-change')">Cancel</button>
-                    <button type="submit" class="btn btn-primary">Update Status</button>
-                </div>
-            </form>
-        </div>
-    </div>
 
     <!-- Add Contact Modal -->
     <div id="modal-add-contact" class="modal" role="dialog" aria-modal="true">
