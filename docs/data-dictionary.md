@@ -1,12 +1,12 @@
 # Data Dictionary — ADEC Sensor Network Tracker
 
-Plain-English reference for every table and column in the database, written for
-the State of Alaska team taking this over. Pair it with the technical DDL in
-[`schema/current-schema.sql`](../schema/current-schema.sql) (the exact column
-types, keys, and indexes) and the migration notes in
-[`docs/mssql-migration-guide.md`](mssql-migration-guide.md).
+Describes the purpose and semantics of every table and column — the business
+meaning the DDL alone doesn't convey. Complements
+[`schema/current-schema.sql`](../schema/current-schema.sql) (exact types, keys,
+indexes) and [`docs/mssql-migration-guide.md`](mssql-migration-guide.md)
+(type/feature mapping).
 
-**Convention notes that apply throughout:**
+**Conventions used throughout:**
 - **`id`** is the primary key of every table.
 - **`created_at` / `updated_at`** are timestamps (with time zone) for when a row
   was created / last changed.
