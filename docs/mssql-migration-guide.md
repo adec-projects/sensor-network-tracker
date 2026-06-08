@@ -165,7 +165,26 @@ Load tables parents-first so FKs satisfy:
 
 ---
 
-## 10. Dates stored as text
+## 10a. Event-time timezone convention (IMPORTANT)
+
+`notes.date` and `comms.date` are **event times entered in Alaska local time**.
+Because the columns are `timestamptz`, PostgreSQL stores them stamped `+00:00`,
+so the *UTC components* of the stored value are actually the intended **Alaska
+wall-clock** time (e.g. a stored `2026-06-08T14:30:00+00:00` means **2:30 PM
+Alaska**, not 2:30 PM UTC). The app normalizes this on read.
+
+By contrast, the audit/lifecycle timestamps (`created_at`, `updated_at`,
+`closed_at`, `deleted_at`, `*_upload_date`) are **true UTC instants** and should
+be converted to Alaska time for display normally.
+
+**Recommendation for MS SQL:** during the data load, convert `notes.date` /
+`comms.date` to **true `DATETIMEOFFSET` instants in the Alaska offset** (i.e.
+re-interpret the stored UTC wall-clock as `America/Anchorage`, accounting for
+DST), so going forward all timestamps are real instants and no special-case
+display logic is needed. The other timestamp columns load as-is (already true
+instants).
+
+## 10b. Dates stored as text
 
 Several date columns are `text` (ISO strings), not real dates:
 `sensors.date_purchased/date_installed/collocation_dates`,
