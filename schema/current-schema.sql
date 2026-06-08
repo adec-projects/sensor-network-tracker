@@ -1,5 +1,5 @@
 -- =============================================================================
--- ADEC Sensor Network Tracker — AUTHORITATIVE CURRENT SCHEMA
+-- ADEC Sensor Network Tracker: AUTHORITATIVE CURRENT SCHEMA
 -- =============================================================================
 -- This file is the single source of truth for the live database structure,
 -- reverse-engineered directly from the production Supabase/PostgreSQL database
@@ -16,7 +16,7 @@
 --   1. text[] ARRAY columns (sensors.status, contacts.communities,
 --      service_tickets.sensor_ids, collocations.sensor_ids, notes.merged_sf_ids,
 --      comms.merged_sf_ids). MS SQL has no array type. Options: a child table
---      (one row per value) — the cleanest relational choice — or a delimited
+--      (one row per value, the cleanest relational choice) or a delimited
 --      string / JSON column. A child table is recommended for the tag-like ones.
 --
 --   2. jsonb columns (audits/collocations analysis_results, analysis_chart_data).
@@ -31,7 +31,7 @@
 --
 --   5. text type -> MS SQL: NVARCHAR(MAX) (or sized NVARCHAR where appropriate).
 --
---   6. Row Level Security (RLS) policies are NOT reproduced here — they are a
+--   6. Row Level Security (RLS) policies are NOT reproduced here: they are a
 --      Supabase/Postgres access-control layer enforced by the `authenticated`
 --      JWT role. MS SQL has its own security model (schema/role grants, or
 --      row-level security predicates). See supabase/migrations/ + SECURITY.md
@@ -47,11 +47,11 @@
 -- LOGICAL-BUT-UNENFORCED REFERENCES (denormalized by design)
 -- ----------------------------------------------------------
 -- These text columns point at other rows but have NO foreign key, on purpose:
---   * note_tags.tag_id / comm_tags.tag_id  — polymorphic: resolves to a sensor,
+--   * note_tags.tag_id / comm_tags.tag_id are polymorphic: they resolve to a sensor,
 --       community, OR contact depending on tag_type (mixed PK types make a real
 --       FK impossible). The app filters dangling tags defensively.
 --   * sensors / install_history / service_tickets sensor references by text id.
---   * audits.community_id, audits.audit_pod_id, audits.community_pod_id — loose
+--   * audits.community_id, audits.audit_pod_id, audits.community_pod_id: loose
 --       text (audits can reference imported pods not in the sensors table).
 -- For MS SQL these can either stay loose or gain enforced FKs once the data is
 -- known clean (see the orphan-tag cleanup performed during handoff prep).
@@ -59,7 +59,7 @@
 
 
 -- ---------------------------------------------------------------------------
--- profiles — app users (1:1 with Supabase Auth users)
+-- profiles: app users (1:1 with Supabase Auth users)
 -- [MSSQL] The auth.users FK is Supabase-specific; re-point to your identity store.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.profiles (
@@ -72,7 +72,7 @@ CREATE TABLE public.profiles (
 
 
 -- ---------------------------------------------------------------------------
--- communities — the ~40 AK communities (+ regulatory sites & labs). Self-
+-- communities: the ~40 AK communities (+ regulatory sites & labs). Self-
 -- referencing for sub-communities (e.g. school sites under a district).
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.communities (
@@ -89,7 +89,7 @@ CREATE TABLE public.communities (
 
 
 -- ---------------------------------------------------------------------------
--- sensors — physical QuantAQ Modulair pods (and a few other LCS units).
+-- sensors: physical QuantAQ Modulair pods (and a few other LCS units).
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.sensors (
     id                text PRIMARY KEY,         -- e.g. 'MOD-00451', 'MOD-X-PM-01760'
@@ -113,7 +113,7 @@ CREATE INDEX idx_sensors_active ON public.sensors(active);
 
 
 -- ---------------------------------------------------------------------------
--- contacts — people at each community (and non-community contacts).
+-- contacts: people at each community (and non-community contacts).
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.contacts (
     id              uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -134,7 +134,7 @@ CREATE TABLE public.contacts (
 
 
 -- ---------------------------------------------------------------------------
--- notes — log entries (issues, installs, moves, general). Cross-tagged to
+-- notes: log entries (issues, installs, moves, general). Cross-tagged to
 -- sensors/communities/contacts via note_tags. Soft-deletable (trash bin).
 -- source/sf_id/merged_sf_ids/logged_by track Salesforce-imported records.
 -- ---------------------------------------------------------------------------
@@ -160,7 +160,7 @@ CREATE INDEX idx_notes_deleted_at ON public.notes(deleted_at) WHERE deleted_at I
 
 
 -- ---------------------------------------------------------------------------
--- comms — communications (calls/emails/site visits). Cross-tagged via comm_tags.
+-- comms: communications (calls/emails/site visits). Cross-tagged via comm_tags.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.comms (
     id            uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -186,7 +186,7 @@ CREATE INDEX idx_comms_deleted_at ON public.comms(deleted_at) WHERE deleted_at I
 
 
 -- ---------------------------------------------------------------------------
--- note_tags / comm_tags — POLYMORPHIC cross-reference. One row links a note (or
+-- note_tags / comm_tags: POLYMORPHIC cross-reference. One row links a note (or
 -- comm) to a sensor, community, or contact. tag_id is text and has NO FK (it
 -- resolves to a different table per tag_type). [MSSQL] keep as-is, or split into
 -- three typed link tables for enforced integrity.
@@ -211,7 +211,7 @@ CREATE INDEX idx_comm_tags_lookup  ON public.comm_tags(tag_type, tag_id);
 
 
 -- ---------------------------------------------------------------------------
--- community_tags — free-text LABELS on a community (e.g. 'Regulatory Site').
+-- community_tags: free-text LABELS on a community (e.g. 'Regulatory Site').
 -- NOTE: unrelated to comm_tags above despite the similar name. Documented as a
 -- known naming trap for the new team.
 -- ---------------------------------------------------------------------------
@@ -224,7 +224,7 @@ CREATE TABLE public.community_tags (
 
 
 -- ---------------------------------------------------------------------------
--- community_files — uploaded files (stored in Supabase Storage; storage_path is
+-- community_files: uploaded files (stored in Supabase Storage; storage_path is
 -- the bucket path). [MSSQL] file blobs will need a new storage strategy.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.community_files (
@@ -242,7 +242,7 @@ CREATE UNIQUE INDEX uq_files_sf_id ON public.community_files(sf_id) WHERE sf_id 
 
 
 -- ---------------------------------------------------------------------------
--- audits — audit-pod collocations against a community pod. notes is a JSON
+-- audits: audit-pod collocations against a community pod. notes is a JSON
 -- string array of progress notes. community_id / *_pod_id are loose text.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.audits (
@@ -276,8 +276,8 @@ CREATE INDEX idx_audits_deleted_at ON public.audits(deleted_at) WHERE deleted_at
 
 
 -- ---------------------------------------------------------------------------
--- collocations — multi-pod collocation studies at a community/lab.
--- NOTE: location_id (not community_id) is the FK to communities here — the one
+-- collocations: multi-pod collocation studies at a community/lab.
+-- NOTE: location_id (not community_id) is the FK to communities here: the one
 -- naming inconsistency in the schema, documented for the new team.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.collocations (
@@ -307,7 +307,7 @@ CREATE INDEX idx_collocations_deleted_at ON public.collocations(deleted_at) WHER
 
 
 -- ---------------------------------------------------------------------------
--- service_tickets — Quant service/RMA tickets. sensor_ids[] is the canonical
+-- service_tickets: Quant service/RMA tickets. sensor_ids[] is the canonical
 -- multi-sensor list; sensor_id is the legacy single-sensor column kept for
 -- back-compat. quant_notes holds a JSON array of progress notes (the column
 -- name is a QuantAQ-era leftover; it is generic progress-note data).
@@ -337,7 +337,7 @@ CREATE INDEX idx_service_tickets_sensor_ids ON public.service_tickets USING gin 
 
 
 -- ---------------------------------------------------------------------------
--- install_history — derived log of which pod was installed at which community
+-- install_history: derived log of which pod was installed at which community
 -- and when (one row per "stay"). Powers the community Install History timeline.
 -- Dates are text. sensor_id is loose (no FK).
 -- ---------------------------------------------------------------------------
@@ -353,7 +353,7 @@ CREATE INDEX idx_install_history_comm ON public.install_history(community_id);
 
 
 -- ---------------------------------------------------------------------------
--- app_settings — key/value app configuration (typed-as-text grab bag).
+-- app_settings: key/value app configuration (typed-as-text grab bag).
 -- Known keys: 'mfa_required', 'user_guide_body', and the guide editor flags.
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.app_settings (
@@ -365,7 +365,7 @@ CREATE TABLE public.app_settings (
 
 
 -- ---------------------------------------------------------------------------
--- allowed_emails — signup allow-list (gates account creation; enforced by a
+-- allowed_emails: signup allow-list (gates account creation; enforced by a
 -- DB trigger + the is_email_allowed() RPC, not just the browser).
 -- ---------------------------------------------------------------------------
 CREATE TABLE public.allowed_emails (
@@ -379,11 +379,11 @@ CREATE TABLE public.allowed_emails (
 
 -- =============================================================================
 -- NOT INCLUDED HERE (intentionally):
---   * RLS policies, DB functions/RPCs, triggers, cron jobs — see
+--   * RLS policies, DB functions/RPCs, triggers, cron jobs: see
 --     supabase/migrations/ and SECURITY.md. These are Supabase/Postgres-specific
 --     and must be re-implemented in the MS SQL security/identity model.
 --   * Supabase-managed schemas (auth, storage). profiles.id references
---     auth.users(id) — the one Supabase dependency to re-home.
---   * quantaq_alerts_backup_test — a dead QuantAQ-era backup table; dropped
+--     auth.users(id): the one Supabase dependency to re-home.
+--   * quantaq_alerts_backup_test: a dead QuantAQ-era backup table; dropped
 --     during handoff prep (not part of the app).
 -- =============================================================================

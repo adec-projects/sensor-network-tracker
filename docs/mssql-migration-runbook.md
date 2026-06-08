@@ -1,11 +1,11 @@
-# Migration Runbook — Supabase (PostgreSQL) → Microsoft SQL Server
+# Migration Runbook: Supabase (PostgreSQL) → Microsoft SQL Server
 
 A step-by-step procedure for the State of Alaska team to move the ADEC Sensor
 Network Tracker's data and structure into Microsoft SQL Server. Read the
 companion docs first:
-- [`schema/current-schema.sql`](../schema/current-schema.sql) — the source schema (with `[MSSQL]` tags).
-- [`docs/mssql-migration-guide.md`](mssql-migration-guide.md) — type mappings & design decisions.
-- [`docs/data-dictionary.md`](data-dictionary.md) — plain-English meaning of every table/column.
+- [`schema/current-schema.sql`](../schema/current-schema.sql): the source schema (with `[MSSQL]` tags).
+- [`docs/mssql-migration-guide.md`](mssql-migration-guide.md): type mappings & design decisions.
+- [`docs/data-dictionary.md`](data-dictionary.md): plain-English meaning of every table/column.
 
 ---
 
@@ -13,11 +13,11 @@ companion docs first:
 
 **Transfers:** all 16 application tables and their data (see the dictionary).
 
-**Does NOT transfer automatically — needs re-implementation in MS SQL / Azure:**
-- **Auth/identity** — currently Supabase Auth (`auth.users`). `profiles.id` points at it.
-- **Row Level Security policies** — re-do as MS SQL roles/grants (see guide §5).
-- **DB functions, triggers, cron** — re-do as stored procs / Agent jobs (guide §6).
-- **File storage** — `community_files.storage_path` points into Supabase Storage; the file blobs need a new home (e.g. Azure Blob Storage).
+**Does NOT transfer automatically: needs re-implementation in MS SQL / Azure:**
+- **Auth/identity**: currently Supabase Auth (`auth.users`). `profiles.id` points at it.
+- **Row Level Security policies**: re-do as MS SQL roles/grants (see guide §5).
+- **DB functions, triggers, cron**: re-do as stored procs / Agent jobs (guide §6).
+- **File storage**: `community_files.storage_path` points into Supabase Storage; the file blobs need a new home (e.g. Azure Blob Storage).
 
 ---
 
@@ -67,7 +67,7 @@ replace PostgreSQL array columns (guide §2):
 | `collocation_sensors(collocation_id, sensor_id)` | `collocations.sensor_ids` |
 | `service_ticket_sensors(ticket_id, sensor_id)` | `service_tickets.sensor_ids` |
 
-The two `merged_sf_ids` arrays (notes/comms) are provenance-only — keep them as a
+The two `merged_sf_ids` arrays (notes/comms) are provenance-only: keep them as a
 single `NVARCHAR(MAX)` JSON/CSV column rather than a child table.
 
 Create FKs and the PK/unique/filtered indexes per `current-schema.sql`. Defer the
@@ -77,7 +77,7 @@ self-referencing `communities.parent_id` FK until after the communities load.
 
 ## 3. Export the data from Supabase
 
-**Option A — full SQL dump (recommended for a faithful copy).** With the project's
+**Option A: full SQL dump (recommended for a faithful copy).** With the project's
 Postgres connection string (Supabase Dashboard → Project Settings → Database):
 ```
 pg_dump --data-only --schema=public --no-owner --no-privileges \
@@ -86,12 +86,12 @@ pg_dump --data-only --schema=public --no-owner --no-privileges \
 Then transform types/arrays for MS SQL, or load into a staging Postgres and use a
 Postgres→MSSQL tool (e.g. SSMA for PostgreSQL).
 
-**Option B — per-table CSV.** In the Supabase SQL editor, `SELECT * FROM <table>;`
+**Option B: per-table CSV.** In the Supabase SQL editor, `SELECT * FROM <table>;`
 then **Export → CSV** for each table. Simple, but you must handle the array/JSON
 columns (next step) and re-type during `BULK INSERT`.
 
 **For the array columns, export the already-expanded child rows** with these
-queries (one row per element — load straight into the §2 child tables):
+queries (one row per element: load straight into the §2 child tables):
 ```sql
 SELECT id AS sensor_id,     unnest(status)      AS status        FROM sensors      WHERE status      <> '{}';
 SELECT id AS contact_id,    unnest(communities) AS community_id  FROM contacts     WHERE communities <> '{}';
@@ -120,7 +120,7 @@ SELECT id AS ticket_id,     unnest(sensor_ids)  AS sensor_id     FROM service_ti
 ## 5. Load order (parents first, FKs satisfied)
 
 1. `profiles` (after identity is set up)
-2. `communities` — load all rows, then enable the `parent_id` self-FK
+2. `communities`: load all rows, then enable the `parent_id` self-FK
 3. `sensors`, `contacts`
 4. `notes`, `comms`, `audits`, `collocations`, `service_tickets`, `install_history`,
    `community_files`, `community_tags`, `app_settings`, `allowed_emails`
@@ -141,7 +141,7 @@ SELECT id AS ticket_id,     unnest(sensor_ids)  AS sensor_id     FROM service_ti
   ```
 - Spot-check a few records end-to-end (a sensor with several statuses, a note with
   multiple tags, a contact in multiple communities).
-- Re-run the orphan-tag check (§1a) adapted to MS SQL — expect 0.
+- Re-run the orphan-tag check (§1a) adapted to MS SQL: expect 0.
 
 ---
 
@@ -149,6 +149,6 @@ SELECT id AS ticket_id,     unnest(sensor_ids)  AS sensor_id     FROM service_ti
 
 The front end (this repo's `index.html` / `app.js` / `supabase-client.js`) talks to
 Supabase via the `db` helper in `supabase-client.js`. If the app itself is being
-kept, that single file is where all data access lives — repointing it at a new
+kept, that single file is where all data access lives: repointing it at a new
 backend/API is the integration surface. If the State is rebuilding the UI, this
 repo serves as the functional reference and the schema/dictionary are the spec.
