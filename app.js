@@ -8199,6 +8199,18 @@ function _pnRecordKind(parentKind) {
     return parentKind === 'ticket' ? 'service_ticket' : parentKind;
 }
 
+// True when an RPC call failed because the function isn't in the DB yet (the
+// edit/delete_progress_note migration hasn't been applied). Lets the client
+// fall back to the old full-array rewrite so the live site keeps working until
+// the SQL is run.
+function _pnRpcMissing(err) {
+    const code = err?.code;
+    const msg = (err?.message || '').toLowerCase();
+    return code === 'PGRST202'
+        || msg.includes('could not find the function')
+        || msg.includes('does not exist');
+}
+
 async function saveProgressNoteEdit(parentKind, itemId, origIdx) {
     const ctx = _pnParentAccess(parentKind, itemId);
     if (!ctx) return;
@@ -8222,7 +8234,14 @@ async function saveProgressNoteEdit(parentKind, itemId, origIdx) {
         if (Array.isArray(rebuilt)) ctx.record.progressNotes = rebuilt;
         else { note.text = newText; note.taggedContacts = mentions; }
     } catch (err) {
-        handleSaveError(err);
+        if (_pnRpcMissing(err)) {
+            // Migration not applied yet: old full-array rewrite.
+            note.text = newText;
+            note.taggedContacts = mentions;
+            ctx.persist({ progressNotes: ctx.record.progressNotes });
+        } else {
+            handleSaveError(err);
+        }
     }
     ctx.reopen();
 }
@@ -8240,7 +8259,13 @@ function deleteProgressNote(parentKind, itemId, origIdx) {
             if (Array.isArray(rebuilt)) ctx.record.progressNotes = rebuilt;
             else ctx.record.progressNotes.splice(origIdx, 1);
         } catch (err) {
-            handleSaveError(err);
+            if (_pnRpcMissing(err)) {
+                // Migration not applied yet: old full-array rewrite.
+                ctx.record.progressNotes.splice(origIdx, 1);
+                ctx.persist({ progressNotes: ctx.record.progressNotes });
+            } else {
+                handleSaveError(err);
+            }
         }
         ctx.reopen();
     }, { danger: true, confirmText: 'Delete' });
