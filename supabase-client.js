@@ -19,6 +19,26 @@ function serializeNotesField(notes) {
     return JSON.stringify(notes || []);
 }
 
+// note.date / comm.date are EVENT times entered/stored as Alaska wall-clock
+// (offset-less 'YYYY-MM-DDTHH:MM'). The column is timestamptz, so on read they
+// come back stamped '+00:00' — and the UI, which treats offset-less strings as
+// already-Alaska, would otherwise re-convert and shift them ~8h ("1 AM" bug).
+// Their UTC components ARE the intended Alaska time, so strip back to the naive
+// wall-clock on read. Date-only / already-naive values pass through unchanged;
+// a midnight time collapses to date-only so imported date-only notes stay clean.
+// Display-only normalization — does not change stored data.
+function akEventDate(ts) {
+    if (!ts) return ts;
+    const s = String(ts);
+    if (!s.endsWith('Z') && !/[+-]\d\d:?\d\d$/.test(s)) return s; // already naive / date-only
+    const d = new Date(s);
+    if (isNaN(d.getTime())) return s;
+    const p = n => String(n).padStart(2, '0');
+    const ymd = `${d.getUTCFullYear()}-${p(d.getUTCMonth() + 1)}-${p(d.getUTCDate())}`;
+    const hasTime = d.getUTCHours() || d.getUTCMinutes();
+    return hasTime ? `${ymd}T${p(d.getUTCHours())}:${p(d.getUTCMinutes())}` : ymd;
+}
+
 // Fetch every row of a query, paging past PostgREST's default 1000-row cap.
 // `buildQuery(from, to)` must return a fresh range-scoped query each call.
 async function fetchAllRows(buildQuery) {
@@ -332,7 +352,7 @@ const db = {
             const tags = note.note_tags || [];
             return {
                 id: note.id,
-                date: note.date,
+                date: akEventDate(note.date),
                 type: note.type,
                 text: note.text,
                 additionalInfo: note.additional_info || '',
@@ -451,7 +471,7 @@ const db = {
             const tags = comm.comm_tags || [];
             return {
                 id: comm.id,
-                date: comm.date,
+                date: akEventDate(comm.date),
                 type: 'Communication',
                 commType: comm.comm_type,
                 text: comm.text,
