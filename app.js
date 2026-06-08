@@ -1077,16 +1077,16 @@ async function enterApp() {
             ? !!emailRow.can_edit_user_guide
             : currentUserRole === 'admin';
 
-        // Self-heal: if profile.role disagrees with allowed_emails.role, sync
-        // it so DB-level RLS checks (which read profiles.role) match what the
-        // UI is showing. RLS "Users can update own profile" permits this.
+        // Self-heal: if profile.role disagrees with allowed_emails.role, sync it
+        // so DB-level RLS checks (which read profiles.role) match the UI. This
+        // goes through the SECURITY DEFINER sync_my_role() RPC, which sets the
+        // caller's role ONLY from the admin-controlled allowed_emails table, so a
+        // user cannot use it to escalate. Direct client writes to profiles.role
+        // are blocked by RLS (the "can't change your own role" WITH CHECK).
         if (profile && emailRow?.role && profile.role !== emailRow.role) {
-            const session2 = await db.getSession();
-            if (session2?.user?.id) {
-                supa.from('profiles').update({ role: emailRow.role }).eq('id', session2.user.id)
-                    .then(() => { if (profile) profile.role = emailRow.role; })
-                    .catch(err => console.warn('[role sync] failed:', err));
-            }
+            supa.rpc('sync_my_role')
+                .then(() => { if (profile) profile.role = emailRow.role; })
+                .catch(err => console.warn('[role sync] failed:', err));
         }
 
         // Repair profile if it was previously anonymized by deletion
@@ -2408,14 +2408,17 @@ function saveSensor(e) {
             }
         }
 
-        // Apply the data — preserve customFields from the existing sensor
+        // Apply the data. Merge OVER the existing sensor so fields the edit form
+        // doesn't include (install date, details, collocation dates, customFields)
+        // are preserved instead of being blanked to '' on save.
         const idx = sensors.findIndex(s => s.id === editId);
+        let saved = data;
         if (idx >= 0) {
-            data.customFields = sensors[idx].customFields || {};
-            sensors[idx] = data;
+            saved = { ...sensors[idx], ...data, customFields: sensors[idx].customFields || {} };
+            sensors[idx] = saved;
         }
-        trackRecent('sensors', data.id, 'edited');
-        persistSensor(data);
+        trackRecent('sensors', saved.id, 'edited');
+        persistSensor(saved);
         closeModal('modal-add-sensor'); showSuccessToast('Sensor saved');
         renderSensors();
 
@@ -8287,7 +8290,12 @@ async function saveNewTicket(event) {
     try {
         const saved = await db.insertServiceTicket(ticket);
         serviceTickets.unshift(saved);
-    } catch (err) { handleSaveError(err); ticket.id = generateId('tkt'); serviceTickets.unshift(ticket); }
+    } catch (err) {
+        // Don't fabricate a phantom local ticket on failure: abort, surface the
+        // error, and leave the modal open so the user can retry.
+        handleSaveError(err);
+        return;
+    }
 
     // Tag each sensor with 'Quant Ticket in Progress'
     for (const sid of sensorIds) {
@@ -8487,7 +8495,12 @@ async function saveNewAudit(event) {
             conductedBy, progressNotes: auditNotes ? [{ text: auditNotes, by: getCurrentUserName(), at: nowDatetime() }] : [], analysisResults: {},
             createdBy: getCurrentUserName(), createdById: currentUserId };
         try { const saved = await db.insertAudit(audit); audits.unshift(saved); }
-        catch (err) { handleSaveError(err); audit.id = generateId('aud'); audits.unshift(audit); }
+        catch (err) {
+            // Don't fabricate a phantom local audit on failure: abort and surface
+            // the error so it isn't shown as "scheduled" when it never saved.
+            handleSaveError(err);
+            return;
+        }
 
         const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
         createNote('Audit', `Audit scheduled: ${auditPodId} auditing ${communityPodId} at ${communityName} (${startDate} to ${endDate}).`, {
@@ -10206,12 +10219,16 @@ function runLinearRegression(xArr, yArr) {
 function checkDQI(result) {
     if (!result) return { r2: false, slope: false, intercept: false, sd: false, rmse: false, pass: false };
     const T = DQI_THRESHOLDS;
+    // Gate every metric on the value actually being present. In JS,
+    // `null <= 5` is `true`, so a MISSING sd/rmse would otherwise score as a
+    // pass and falsely mark the whole DQI as met.
+    const has = v => v != null && !isNaN(v);
     const dqo = {
-        r2: result.r2 >= T.r2.min,
-        slope: result.slope >= T.slope.min && result.slope <= T.slope.max,
-        intercept: result.intercept >= T.intercept.min && result.intercept <= T.intercept.max,
-        sd: result.sd <= T.sd.max,
-        rmse: result.rmse <= T.rmse.max,
+        r2: has(result.r2) && result.r2 >= T.r2.min,
+        slope: has(result.slope) && result.slope >= T.slope.min && result.slope <= T.slope.max,
+        intercept: has(result.intercept) && result.intercept >= T.intercept.min && result.intercept <= T.intercept.max,
+        sd: has(result.sd) && result.sd <= T.sd.max,
+        rmse: has(result.rmse) && result.rmse <= T.rmse.max,
     };
     dqo.pass = dqo.r2 && dqo.slope && dqo.intercept && dqo.sd && dqo.rmse;
     return dqo;
@@ -10221,9 +10238,18 @@ function rebuildCacheFromSaved(audit) {
     const cd = audit.analysisChartData;
     if (!cd || !cd.rows || !cd.rows.length) return null;
 
+    // Coerce each saved value to a real number, turning null/''/undefined into
+    // NaN so the regression's isNaN/isFinite guard excludes them. Without this,
+    // a one-sided row {a:12.5, b:null} survives the `|| {NaN,NaN}` guard (the
+    // object is truthy) and the null is later treated as 0, skewing slope/R2/RMSE
+    // and the DQI verdict on reload. Mirrors the collocation rebuild.
+    const num = x => (x === null || x === undefined || x === '') ? NaN : Number(x);
     const allRows = cd.rows.map(r => ({
         timestamp: new Date(r.t),
-        values: Object.fromEntries(AUDIT_PARAMETERS.map(p => [p.key, r.v?.[p.key] || { a: NaN, b: NaN }])),
+        values: Object.fromEntries(AUDIT_PARAMETERS.map(p => {
+            const cell = r.v?.[p.key];
+            return [p.key, cell ? { a: num(cell.a), b: num(cell.b) } : { a: NaN, b: NaN }];
+        })),
     }));
 
     const trimIndex = cd.trimIndex || 0;
