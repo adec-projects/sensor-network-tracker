@@ -19,6 +19,22 @@ function serializeNotesField(notes) {
     return JSON.stringify(notes || []);
 }
 
+// Fetch every row of a query, paging past PostgREST's default 1000-row cap.
+// `buildQuery(from, to)` must return a fresh range-scoped query each call.
+async function fetchAllRows(buildQuery) {
+    const PAGE = 1000;
+    let from = 0, all = [];
+    while (true) {
+        const { data, error } = await buildQuery(from, from + PAGE - 1);
+        if (error) throw error;
+        const batch = data || [];
+        all = all.concat(batch);
+        if (batch.length < PAGE) break;   // last page
+        from += PAGE;
+    }
+    return all;
+}
+
 // ===== AUTH =====
 const db = {
     // --- Auth ---
@@ -284,11 +300,11 @@ const db = {
         // Disambiguate the FK — with updated_by and deleted_by also
         // pointing at profiles, `profiles(name)` is now ambiguous and
         // returns nothing. Pin the join to created_by specifically.
-        const { data, error } = await supa
+        const data = await fetchAllRows((from, to) => supa
             .from('notes')
             .select('*, note_tags(*), profiles:created_by(name)')
-            .order('date', { ascending: false });
-        if (error) throw error;
+            .order('date', { ascending: false })
+            .range(from, to));
         // Filter soft-deleted rows client-side — robust against PostgREST
         // schema-cache hiccups where a just-added column isn't visible yet.
         const live = (data || []).filter(r => !r.deleted_at);
@@ -405,11 +421,11 @@ const db = {
 
     // --- Communications ---
     async getComms() {
-        const { data, error } = await supa
+        const data = await fetchAllRows((from, to) => supa
             .from('comms')
             .select('*, comm_tags(*), profiles:created_by(name)')
-            .order('date', { ascending: false });
-        if (error) throw error;
+            .order('date', { ascending: false })
+            .range(from, to));
         const live = (data || []).filter(r => !r.deleted_at);
 
         return live.map(comm => {
