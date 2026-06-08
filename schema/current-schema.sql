@@ -131,6 +131,8 @@ CREATE TABLE public.contacts (
     updated_at      timestamptz DEFAULT now(),
     updated_by      uuid REFERENCES public.profiles(id) ON DELETE SET NULL
 );
+CREATE INDEX idx_contacts_community_id ON public.contacts(community_id);
+CREATE INDEX idx_contacts_communities  ON public.contacts USING gin (communities);  -- [MSSQL] GIN n/a
 
 
 -- ---------------------------------------------------------------------------
@@ -157,6 +159,7 @@ CREATE TABLE public.notes (
 );
 CREATE UNIQUE INDEX uq_notes_sf_id ON public.notes(sf_id) WHERE sf_id IS NOT NULL;
 CREATE INDEX idx_notes_deleted_at ON public.notes(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_notes_date ON public.notes(date DESC);
 
 
 -- ---------------------------------------------------------------------------
@@ -183,6 +186,8 @@ CREATE TABLE public.comms (
 );
 CREATE UNIQUE INDEX uq_comms_sf_id ON public.comms(sf_id) WHERE sf_id IS NOT NULL;
 CREATE INDEX idx_comms_deleted_at ON public.comms(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_comms_community_id ON public.comms(community_id);
+CREATE INDEX idx_comms_date ON public.comms(date DESC);
 
 
 -- ---------------------------------------------------------------------------
@@ -239,6 +244,7 @@ CREATE TABLE public.community_files (
     created_at   timestamptz DEFAULT now()
 );
 CREATE UNIQUE INDEX uq_files_sf_id ON public.community_files(sf_id) WHERE sf_id IS NOT NULL;
+CREATE INDEX idx_community_files_comm ON public.community_files(community_id);
 
 
 -- ---------------------------------------------------------------------------
@@ -270,9 +276,10 @@ CREATE TABLE public.audits (
     deleted_at           timestamptz,
     deleted_by           uuid REFERENCES public.profiles(id) ON DELETE SET NULL
 );
-CREATE INDEX idx_audits_status     ON public.audits(status);
-CREATE INDEX idx_audits_start_date ON public.audits(start_date);
-CREATE INDEX idx_audits_deleted_at ON public.audits(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_audits_status       ON public.audits(status);
+CREATE INDEX idx_audits_start_date   ON public.audits(start_date);
+CREATE INDEX idx_audits_community_id ON public.audits(community_id);
+CREATE INDEX idx_audits_deleted_at   ON public.audits(deleted_at) WHERE deleted_at IS NOT NULL;
 
 
 -- ---------------------------------------------------------------------------
@@ -303,7 +310,8 @@ CREATE TABLE public.collocations (
     deleted_at           timestamptz,
     deleted_by           uuid REFERENCES public.profiles(id) ON DELETE SET NULL
 );
-CREATE INDEX idx_collocations_deleted_at ON public.collocations(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_collocations_deleted_at  ON public.collocations(deleted_at) WHERE deleted_at IS NOT NULL;
+CREATE INDEX idx_collocations_location_id ON public.collocations(location_id);
 
 
 -- ---------------------------------------------------------------------------
