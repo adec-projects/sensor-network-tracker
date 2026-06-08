@@ -1,3 +1,11 @@
+-- ############################################################################
+-- ##  ARCHIVED / STALE — DO NOT USE AS THE SCHEMA REFERENCE.                ##
+-- ##  This is an April-2026 snapshot and no longer matches the live         ##
+-- ##  database (missing many later columns, tables, and changes).           ##
+-- ##  The authoritative, current schema is:  schema/current-schema.sql      ##
+-- ##  Kept only for historical reference.                                   ##
+-- ############################################################################
+
 -- =============================================
 -- ADEC Sensor Network Tracker — Supabase Schema
 -- Run this in: Supabase Dashboard > SQL Editor
