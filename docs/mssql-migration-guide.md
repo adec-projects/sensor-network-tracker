@@ -57,7 +57,12 @@ Also several `text` columns hold JSON-as-text: `audits.notes`,
 `collocations.notes`, `service_tickets.quant_notes` (each is a JSON array of
 progress-note objects `{text, by, at, ...}`).
 
-- Store as `NVARCHAR(MAX)` with `CHECK (ISJSON(col) = 1)`.
+`notes.additional_info` is a **mixed** column: it holds JSON for status-change
+and move notes (the structured before/after data), but plain free text (or empty)
+for ordinary notes. Do NOT put an unconditional `ISJSON` CHECK on it; leave it
+`NVARCHAR(MAX)` and treat it as JSON only where the note type warrants.
+
+- Store the always-JSON columns as `NVARCHAR(MAX)` with `CHECK (ISJSON(col) = 1)`.
 - The app reads/writes these as whole JSON blobs; you can keep that pattern, or
   normalize the progress-note arrays into a `progress_notes` child table if you
   want them queryable. Normalizing is optional.
@@ -81,6 +86,11 @@ exist in MS SQL.
 - `profiles.role` (`user` / `admin`) drives in-app permissions: preserve it.
 - The signup allow-list (`allowed_emails` + the `is_email_allowed` rule) gates who
   can get an account. Re-implement that gate in the new auth flow.
+- **MFA is in use.** The app reads `app_settings.mfa_required` and, when set,
+  requires a TOTP challenge after login; admins can reset a user's MFA
+  (`admin_reset_mfa`, which clears Supabase `auth.mfa_factors`). The new identity
+  provider needs an equivalent MFA enforcement and an admin MFA-reset path. (Note:
+  today the MFA gate is enforced in the UI, not in RLS — see SECURITY.md.)
 
 ---
 
@@ -106,16 +116,36 @@ policies here are role-based, not per-row.
 
 ## 6. Functions, triggers, cron
 
-These PostgreSQL/Supabase server-side pieces exist (see `supabase/migrations/`):
+These PostgreSQL/Supabase server-side pieces exist (definitions in
+`supabase/migrations/`). The behavior to preserve, function by function:
 
-- **RPCs/functions:** `is_email_allowed`, `send_user_invite`, `delete_auth_user`,
-  `admin_reset_mfa`, `upsert_profile`, `append_progress_note`. Re-implement the
-  ones still needed as MS SQL stored procedures. (`append_progress_note` exists to
-  make concurrent progress-note appends race-free: keep that behavior.)
-- **Trigger:** `set_updated_by()` stamps `updated_by`/`updated_at` on update for a
-  set of tables. MS SQL: an `AFTER UPDATE` trigger or handle in the app/stored proc.
-- **Cron:** a scheduled job auto-purges trash older than 30 days
-  (`trash_auto_purge_30d`). MS SQL: a SQL Server Agent job.
+- **`is_email_allowed(email)`** — the signup gate. Case-insensitive email match
+  against `allowed_emails`, AND the row must be active (`status='active'` or null).
+  Returns boolean. (`20260422221400_hardening_pass.sql`)
+- **`upsert_profile(id, email, name)`** — on INSERT it sets the profile's `role`
+  from the matching `allowed_emails` row; on conflict it updates only the name and
+  **never overwrites an admin-set role**. (`20260421210700_sync_profile_role...`)
+- **`sync_my_role()`** — sets the caller's `profiles.role` from their
+  `allowed_emails` entry (used by the app to keep RLS role in sync without letting
+  a user change their own role). (`20260608030000_fix_profile_role_escalation.sql`)
+- **`append_progress_note(kind, id, text, contacts)`** — race-free single-statement
+  append of a progress note to a ticket/audit/collocation; stamps the note `at`
+  time in **America/Anchorage** wall-clock. Keep both the atomicity and the AK-time.
+  (`20260423213800_progress_note_ak_time.sql`)
+- **`send_user_invite`, `delete_auth_user`, `admin_reset_mfa`** — admin-only user
+  management. `delete_auth_user` and `admin_reset_mfa` reach into Supabase's
+  `auth.users` / `auth.mfa_factors` schema, so they're tied to Supabase Auth and
+  must be re-expressed against the new identity provider.
+- **Trigger `set_updated_by()`** — on UPDATE sets `updated_by = auth.uid()` (only
+  when there is a logged-in user) and bumps `updated_at = now()` **only for
+  `communities`, `contacts`, `notes`, `comms`** (not sensors/tickets/audits/
+  collocations). A naive "set updated_at on every table" reimplementation would
+  change behavior; match the table list.
+- **Cron — `purge_old_trash()`**, scheduled as pg_cron job **`purge-old-trash`**,
+  daily at **09:00 UTC**. Hard-deletes rows whose `deleted_at` is older than
+  **30 days** from exactly five tables: `notes`, `comms`, `service_tickets`,
+  `audits`, `collocations` (NOT sensors). Reproduce as a SQL Server Agent job with
+  the same cutoff and tables.
 - The old QuantAQ integration (API/cron/alerts) was **fully removed**, so there's
   nothing to migrate there.
 

@@ -17,13 +17,28 @@ companion docs first:
 - **Auth/identity**: currently Supabase Auth (`auth.users`). `profiles.id` points at it.
 - **Row Level Security policies**: re-do as MS SQL roles/grants (see guide §5).
 - **DB functions, triggers, cron**: re-do as stored procs / Agent jobs (guide §6).
-- **File storage**: `community_files.storage_path` points into Supabase Storage; the file blobs need a new home (e.g. Azure Blob Storage).
+- **File storage**: uploaded files live in the Supabase Storage bucket named **`community-files`**, with `community_files.storage_path` of the form `{community_id}/{timestamp}_{filename}`. Export the blobs from that bucket, re-home them (e.g. Azure Blob Storage), and rewrite `storage_path` accordingly.
 
 ---
 
 ## 1. Pre-flight: confirm the source data is clean
 
 **Take a backup snapshot first.** Before exporting, capture a known-good snapshot of the source database (Supabase keeps automatic daily backups; confirm a recent one exists or trigger one from the dashboard). This is your rollback point if anything in the load goes wrong. Also run the final trash purge from `SECURITY.md`/handoff notes (delete soft-deleted rows) so only live records transfer.
+
+Two extra data checks to run before export (each should return few/zero rows; clean them up if not):
+```sql
+-- Duplicate cross-tags (note_tags/comm_tags have no unique constraint). Add a
+-- unique index on the new MS SQL link tables; dedupe here first.
+SELECT note_id, tag_type, tag_id, count(*) FROM note_tags
+GROUP BY note_id, tag_type, tag_id HAVING count(*) > 1;
+SELECT comm_id, tag_type, tag_id, count(*) FROM comm_tags
+GROUP BY comm_id, tag_type, tag_id HAVING count(*) > 1;
+
+-- Normalize empty-string dates to NULL so a TRY_CAST(... AS DATE) is clean and
+-- "how many dates are set" counts are honest (the app writes both '' and NULL).
+UPDATE audits SET start_date = NULLIF(start_date,''), end_date = NULLIF(end_date,'');
+UPDATE collocations SET start_date = NULLIF(start_date,''), end_date = NULLIF(end_date,'');
+```
 
 Run these read-only checks against the live Supabase DB and confirm the expected results before exporting:
 
