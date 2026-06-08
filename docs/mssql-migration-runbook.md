@@ -23,6 +23,8 @@ companion docs first:
 
 ## 1. Pre-flight: confirm the source data is clean
 
+**Take a backup snapshot first.** Before exporting, capture a known-good snapshot of the source database (Supabase keeps automatic daily backups; confirm a recent one exists or trigger one from the dashboard). This is your rollback point if anything in the load goes wrong. Also run the final trash purge from `SECURITY.md`/handoff notes (delete soft-deleted rows) so only live records transfer.
+
 Run these read-only checks against the live Supabase DB and confirm the expected results before exporting:
 
 ```sql
@@ -152,3 +154,8 @@ Supabase via the `db` helper in `supabase-client.js`. If the app itself is being
 kept, that single file is where all data access lives: repointing it at a new
 backend/API is the integration surface. If the State is rebuilding the UI, this
 repo serves as the functional reference and the schema/dictionary are the spec.
+
+After cutover, keep the Supabase project running in read-only mode for a fallback
+window (30 to 60 days) before decommissioning it, rather than tearing it down
+immediately. That gives a place to re-check anything that looks off in the new
+system against the original data.
