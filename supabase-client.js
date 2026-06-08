@@ -103,8 +103,7 @@ const db = {
 
     // --- Communities ---
     async getCommunities() {
-        const { data, error } = await supa.from('communities').select('*').order('name');
-        if (error) throw error;
+        const data = await fetchAllRows((from, to) => supa.from('communities').select('*').order('name').range(from, to));
         return data || [];
     },
 
@@ -141,8 +140,7 @@ const db = {
 
     // --- Community Tags ---
     async getCommunityTags() {
-        const { data, error } = await supa.from('community_tags').select('*');
-        if (error) throw error;
+        const data = await fetchAllRows((from, to) => supa.from('community_tags').select('*').range(from, to));
         return data || [];
     },
 
@@ -164,8 +162,7 @@ const db = {
     // for physical inventory. Profile-name resolution for updated_by /
     // archived_by is done at display time via the profiles cache.
     async getSensors(opts = {}) {
-        const { data, error } = await supa.from('sensors').select('*').order('id');
-        if (error) throw error;
+        const data = await fetchAllRows((from, to) => supa.from('sensors').select('*').order('id').range(from, to));
         // Client-side active-filter so a stale PostgREST schema cache
         // can't wipe the sensor list when the 'active' column was just added.
         if (opts.includeArchived) return data || [];
@@ -234,19 +231,24 @@ const db = {
 
     // --- Contacts ---
     async getContacts() {
-        const { data, error } = await supa.from('contacts').select('*').order('name');
-        if (error) throw error;
+        const data = await fetchAllRows((from, to) => supa.from('contacts').select('*').order('name').range(from, to));
         return data || [];
     },
 
     // --- Install history (per-community pod install/removal records) ---
     async getInstallHistory() {
-        const { data, error } = await supa.from('install_history').select('*').order('installed_date', { ascending: false });
-        if (error) { console.warn('[install_history] not available:', error.message); return []; }
-        return (data || []).map(r => ({
-            id: r.id, communityId: r.community_id, sensorId: r.sensor_id,
-            installedDate: r.installed_date || '', removedDate: r.removed_date || '',
-        }));
+        // Swallow errors (return []) because this table is loaded defensively;
+        // a missing/late-cached table must not break the whole app load.
+        try {
+            const data = await fetchAllRows((from, to) => supa.from('install_history')
+                .select('*').order('installed_date', { ascending: false }).range(from, to));
+            return (data || []).map(r => ({
+                id: r.id, communityId: r.community_id, sensorId: r.sensor_id,
+                installedDate: r.installed_date || '', removedDate: r.removed_date || '',
+            }));
+        } catch (error) {
+            console.warn('[install_history] not available:', error.message); return [];
+        }
     },
     async insertInstallRecord(rec) {
         const { data, error } = await supa.from('install_history').insert({
@@ -527,8 +529,7 @@ const db = {
 
     // --- Community Files ---
     async getCommunityFiles() {
-        const { data, error } = await supa.from('community_files').select('*').order('created_at', { ascending: false });
-        if (error) throw error;
+        const data = await fetchAllRows((from, to) => supa.from('community_files').select('*').order('created_at', { ascending: false }).range(from, to));
         return data || [];
     },
 
@@ -563,10 +564,9 @@ const db = {
 
     // --- Audits ---
     async getAudits() {
-        const { data, error } = await supa
+        const data = await fetchAllRows((from, to) => supa
             .from('audits').select('*, profiles:created_by(name)')
-            .order('start_date', { ascending: false });
-        if (error) throw error;
+            .order('start_date', { ascending: false }).range(from, to));
         const live = (data || []).filter(r => !r.deleted_at);
         return live.map(a => ({
             id: a.id, auditPodId: a.audit_pod_id, communityPodId: a.community_pod_id,
@@ -633,10 +633,9 @@ const db = {
 
     // --- Collocations ---
     async getCollocations() {
-        const { data, error } = await supa
+        const data = await fetchAllRows((from, to) => supa
             .from('collocations').select('*, profiles:created_by(name)')
-            .order('start_date', { ascending: false });
-        if (error) throw error;
+            .order('start_date', { ascending: false }).range(from, to));
         const live = (data || []).filter(r => !r.deleted_at);
         return live.map(c => ({
             id: c.id, locationId: c.location_id, status: c.status,
@@ -714,10 +713,9 @@ const db = {
 
     // --- Service Tickets ---
     async getServiceTickets() {
-        const { data, error } = await supa
+        const data = await fetchAllRows((from, to) => supa
             .from('service_tickets').select('*, profiles:created_by(name)')
-            .order('created_at', { ascending: false });
-        if (error) throw error;
+            .order('created_at', { ascending: false }).range(from, to));
         const live = (data || []).filter(r => !r.deleted_at);
         return live.map(t => {
             const sensorIds = Array.isArray(t.sensor_ids) && t.sensor_ids.length > 0
