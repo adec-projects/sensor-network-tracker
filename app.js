@@ -4543,6 +4543,14 @@ function saveNote(e) {
     if (!editingNow && commChip && !hasNoteAction) { saveLogAsComm(commChip.dataset.commtype); return; }
 
     const text = document.getElementById('note-text-input').value.trim();
+    // A plain note must have a description. Status-change / move actions
+    // auto-generate the note text, so empty typed text is fine for those.
+    const hasGeneratingAction = activeChips.some(c => c.dataset.expand === 'status' || c.dataset.expand === 'move');
+    if (!text && !hasGeneratingAction && !editingNow) {
+        showAlert('Add a description', 'Please type a description for this log.');
+        document.getElementById('note-text-input').focus();
+        return;
+    }
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();
 
     const sensorTags = getChipValues('tag-sensors-container');
@@ -4701,6 +4709,7 @@ function saveComm(e) {
     const commType = document.getElementById('comm-type-input').value;
     const commDate = document.getElementById('comm-date-input').value || nowDatetime();
     const text = document.getElementById('comm-text-input').value.trim();
+    if (!text) { showAlert('Add a description', 'Please type a description before saving.'); document.getElementById('comm-text-input').focus(); return; }
 
     // Contacts come from @mentions in the summary — no more separate field.
     const taggedContacts = parseMentionedContacts(text);
@@ -7017,7 +7026,7 @@ const SENSOR_EXPORT_FIELDS = [
 const CONTACT_EXPORT_FIELDS = [
     { key: 'name', label: 'Name', get: c => c.name },
     { key: 'role', label: 'Role', get: c => c.role || '' },
-    { key: 'community', label: 'Community', get: c => getCommunityName(c.community) },
+    { key: 'community', label: 'Community', get: c => ((c.communities && c.communities.length) ? c.communities : (c.community ? [c.community] : [])).map(getCommunityName).filter(Boolean).join('; ') },
     { key: 'org', label: 'Organization', get: c => c.org || '' },
     { key: 'email', label: 'Email', get: c => c.email || '' },
     { key: 'phone', label: 'Phone', get: c => c.phone || '' },
