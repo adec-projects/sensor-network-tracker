@@ -54,13 +54,16 @@ const db = {
         });
         if (error) throw error;
 
-        // Create profile
+        // Create profile. Don't fail signup if this hiccups (a DB trigger also
+        // backstops profile creation), but surface it so a missing profile isn't
+        // silent — every other RPC call in this file checks its error.
         if (data.user) {
-            await supa.rpc('upsert_profile', {
+            const { error: profileErr } = await supa.rpc('upsert_profile', {
                 user_id: data.user.id,
                 user_email: email,
                 user_name: name,
             });
+            if (profileErr) console.warn('[signUp] upsert_profile failed:', profileErr.message);
         }
 
         return data;
@@ -172,6 +175,9 @@ const db = {
     // Profile name lookup cache — populated once at login, consumed by
     // "last edited by X" labels across detail pages. Returns a plain
     // object { <id>: <display name>, ... }.
+    // Non-fatal getter: returns null on error rather than throwing, because the
+    // "last edited by X on Y" metadata is decorative — a failure here must not
+    // break a page load.
     async getAppSettingMeta(key) {
         const { data, error } = await supa
             .from('app_settings')
@@ -182,6 +188,9 @@ const db = {
         return data || null;
     },
 
+    // Non-fatal getter: returns {} on error. This populates the display-name
+    // cache for "edited by" labels; a failure degrades labels to blank rather
+    // than blocking app load.
     async getProfileNames() {
         const { data, error } = await supa.from('profiles').select('id, name');
         if (error) return {};
@@ -282,8 +291,12 @@ const db = {
             row.id = contact.id;
         }
         let { data, error } = await supa.from('contacts').upsert(row).select();
-        // Retry without any column that doesn't exist yet on this DB (communities
-        // is new; email_list/primary_contact were earlier additions).
+        // MIGRATION SHIM (safe to delete once the schema is stable): during the
+        // rollout of the communities / email_list / primary_contact columns, a DB
+        // that hadn't applied them yet would error. This retries without those
+        // columns. All three columns now exist in production, so this branch is
+        // effectively dead — kept only as a belt-and-suspenders during the MS SQL
+        // transition. Remove it (and this comment) after the handoff.
         if (error && error.message && /communities|email_list|primary_contact/.test(error.message)) {
             const { communities, email_list, primary_contact, ...rowWithout } = row;
             ({ data, error } = await supa.from('contacts').upsert(rowWithout).select());
@@ -551,7 +564,11 @@ const db = {
     },
 
     async deleteFile(fileId, storagePath) {
-        await supa.storage.from('community-files').remove([storagePath]);
+        // Surface a failed blob removal so we don't leave an orphaned file in the
+        // bucket while the DB row vanishes (asymmetric delete). Non-fatal: still
+        // remove the DB row even if the storage delete reported an error.
+        const { error: storageErr } = await supa.storage.from('community-files').remove([storagePath]);
+        if (storageErr) console.warn('[deleteFile] storage removal failed:', storageErr.message);
         const { error } = await supa.from('community_files').delete().eq('id', fileId);
         if (error) throw error;
     },
