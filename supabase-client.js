@@ -342,10 +342,11 @@ const db = {
         const data = await fetchAllRows((from, to) => supa
             .from('notes')
             .select('*, note_tags(*), profiles:created_by(name)')
+            .is('deleted_at', null)   // don't download trash on every load (Trash Bin loads separately)
             .order('date', { ascending: false })
             .range(from, to));
-        // Filter soft-deleted rows client-side — robust against PostgREST
-        // schema-cache hiccups where a just-added column isn't visible yet.
+        // Belt-and-suspenders client filter too, in case the server filter is
+        // ever bypassed by a PostgREST schema-cache hiccup.
         const live = (data || []).filter(r => !r.deleted_at);
 
         return live.map(note => {
@@ -463,6 +464,7 @@ const db = {
         const data = await fetchAllRows((from, to) => supa
             .from('comms')
             .select('*, comm_tags(*), profiles:created_by(name)')
+            .is('deleted_at', null)   // don't download trash on every load (Trash Bin loads separately)
             .order('date', { ascending: false })
             .range(from, to));
         const live = (data || []).filter(r => !r.deleted_at);

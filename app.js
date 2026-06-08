@@ -3112,6 +3112,17 @@ function recordSensorMove(sensorId, fromCommunityId, toCommunityId, dateStr) {
     }
 }
 
+// Close any still-open install stays for a sensor. Used when a pod is retired
+// (or otherwise no longer installed anywhere) so it doesn't keep showing as
+// "currently installed" in a community's Install History.
+function closeOpenStays(sensorId, dateStr) {
+    const day = (dateStr || nowDatetime()).split('T')[0];
+    installHistory.filter(r => r.sensorId === sensorId && !r.removedDate).forEach(r => {
+        r.removedDate = day;
+        if (r.id) db.updateInstallRecord(r.id, { removed_date: day }).catch(() => {});
+    });
+}
+
 // Live "install reference" — a quick-glance grid of every pod, where it is,
 // and when it was installed (a live version of the master device sheet).
 function renderInstallReferenceTable() {
@@ -7383,6 +7394,9 @@ async function archiveSensor(sensorId) {
             await db.archiveSensor(sensorId);
             s.active = false;
             s.archived_at = new Date().toISOString();
+            // A retired pod is no longer installed anywhere: close its open stays
+            // so it doesn't linger as "currently installed" in a community.
+            closeOpenStays(sensorId);
             // Move from active → archived pool.
             const idx = sensors.indexOf(s);
             if (idx >= 0) sensors.splice(idx, 1);
