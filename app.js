@@ -8096,7 +8096,12 @@ function editProgressNote(parentKind, itemId, origIdx) {
     body.querySelector('textarea').focus();
 }
 
-function saveProgressNoteEdit(parentKind, itemId, origIdx) {
+// 'ticket' in the UI is 'service_ticket' to the progress-note RPCs.
+function _pnRecordKind(parentKind) {
+    return parentKind === 'ticket' ? 'service_ticket' : parentKind;
+}
+
+async function saveProgressNoteEdit(parentKind, itemId, origIdx) {
     const ctx = _pnParentAccess(parentKind, itemId);
     if (!ctx) return;
     const row = document.getElementById(`pn-row-${itemId}-${origIdx}`);
@@ -8110,9 +8115,17 @@ function saveProgressNoteEdit(parentKind, itemId, origIdx) {
         return;
     }
     if (newText === note.text) { ctx.reopen(); return; }
-    note.text = newText;
-    note.taggedContacts = parseMentionedContacts(newText);
-    ctx.persist({ progressNotes: ctx.record.progressNotes });
+    const mentions = parseMentionedContacts(newText);
+    try {
+        // Race-free server-side edit, matched by the note's (at, by, text) identity
+        // so a concurrent append to the same record isn't clobbered.
+        const rebuilt = await db.editProgressNote(
+            _pnRecordKind(parentKind), itemId, note.at, note.by, note.text, newText, mentions);
+        if (Array.isArray(rebuilt)) ctx.record.progressNotes = rebuilt;
+        else { note.text = newText; note.taggedContacts = mentions; }
+    } catch (err) {
+        handleSaveError(err);
+    }
     ctx.reopen();
 }
 
@@ -8121,9 +8134,16 @@ function deleteProgressNote(parentKind, itemId, origIdx) {
     if (!ctx) return;
     const note = (ctx.record.progressNotes || [])[origIdx];
     if (!note) return;
-    showConfirm('Delete Progress Note', `Delete this progress note?<br><br><em>${escapeHtml(note.text).slice(0, 240)}${note.text.length > 240 ? '…' : ''}</em>`, () => {
-        ctx.record.progressNotes.splice(origIdx, 1);
-        ctx.persist({ progressNotes: ctx.record.progressNotes });
+    showConfirm('Delete Progress Note', `Delete this progress note?<br><br><em>${escapeHtml(note.text).slice(0, 240)}${note.text.length > 240 ? '…' : ''}</em>`, async () => {
+        try {
+            // Race-free server-side delete (same identity match as edit).
+            const rebuilt = await db.deleteProgressNote(
+                _pnRecordKind(parentKind), itemId, note.at, note.by, note.text);
+            if (Array.isArray(rebuilt)) ctx.record.progressNotes = rebuilt;
+            else ctx.record.progressNotes.splice(origIdx, 1);
+        } catch (err) {
+            handleSaveError(err);
+        }
         ctx.reopen();
     }, { danger: true, confirmText: 'Delete' });
 }

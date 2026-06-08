@@ -866,6 +866,33 @@ const db = {
         if (error) throw error;
         return data;
     },
+    // Race-free edit of a single progress note, matched by its (at, by, text)
+    // identity so a concurrent append to the same record isn't clobbered.
+    async editProgressNote(recordKind, recordId, noteAt, noteBy, oldText, newText, taggedContacts) {
+        const { data, error } = await supa.rpc('edit_progress_note', {
+            record_kind: recordKind,
+            record_id: recordId,
+            note_at: noteAt || null,
+            note_by: noteBy || null,
+            old_text: oldText || null,
+            new_text: newText,
+            tagged_contacts: (taggedContacts || []).map(String),
+        });
+        if (error) throw error;
+        return data;
+    },
+    // Race-free delete of a single progress note (same identity match).
+    async deleteProgressNote(recordKind, recordId, noteAt, noteBy, oldText) {
+        const { data, error } = await supa.rpc('delete_progress_note', {
+            record_kind: recordKind,
+            record_id: recordId,
+            note_at: noteAt || null,
+            note_by: noteBy || null,
+            old_text: oldText || null,
+        });
+        if (error) throw error;
+        return data;
+    },
 
     async updateServiceTicket(id, updates) {
         const row = { updated_at: new Date().toISOString() };
