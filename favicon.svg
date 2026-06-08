@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="14" fill="#1e2a4a"/>
+  <!-- signal arcs radiating from a sensor node -->
+  <g fill="none" stroke="#C9A84C" stroke-width="4" stroke-linecap="round">
+    <path d="M32 44 A 12 12 0 0 1 44 32"/>
+    <path d="M32 44 A 20 20 0 0 1 52 24" opacity="0.75"/>
+    <path d="M32 44 A 28 28 0 0 1 60 16" opacity="0.5"/>
+  </g>
+  <circle cx="32" cy="44" r="5" fill="#C9A84C"/>
+</svg>
