@@ -2340,7 +2340,7 @@ function openEditSensorModal(sensorId) {
 let pendingAnnotations = [];
 let currentAnnotationSensorId = null;
 
-function saveSensor(e) {
+async function saveSensor(e) {
     e.preventDefault();
     const editId = document.getElementById('sensor-edit-id').value;
     const sensorClass = document.getElementById('sensor-class-input')?.value || 'quant';
@@ -2444,8 +2444,15 @@ function saveSensor(e) {
             showAlert('Duplicate Sensor', 'A sensor with that ID already exists.');
             return;
         }
+        // New record: confirm the write succeeded before closing or claiming
+        // success, so a failed save doesn't silently lose the entry.
+        try {
+            await db.upsertSensor(data);
+        } catch (err) {
+            handleSaveError(err);
+            return;
+        }
         sensors.push(data);
-        persistSensor(data);
         closeModal('modal-add-sensor'); showSuccessToast('Sensor saved');
         renderSensors();
     }
@@ -4560,7 +4567,7 @@ function getNoteActionsType() {
     return unique.length ? unique.join(' + ') : 'General';
 }
 
-function saveNote(e) {
+async function saveNote(e) {
     e.preventDefault();
     // New Log: a pure communication (comm chip with no note actions) saves as a
     // comm. Anything involving a note action saves as a note (which can also
@@ -4696,13 +4703,21 @@ function saveNote(e) {
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
     };
-    notes.push(note); persistNote(note);
-
+    notes.push(note);
     closeModal('modal-add-note');
-    let toastMsg = 'Note added';
-    if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
-    if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
-    showSuccessToast(toastMsg);
+    // Any status/move actions above already persisted to their own rows, so the
+    // note is shown optimistically. Await its insert to report the REAL outcome
+    // instead of a blanket "added" toast that could mask a failed save.
+    try {
+        const saved = await db.insertNote(note);
+        if (saved?.id) note.id = saved.id;
+        let toastMsg = 'Note added';
+        if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
+        if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
+        showSuccessToast(toastMsg);
+    } catch (err) {
+        handleSaveError(err);
+    }
     refreshCurrentView();
 }
 
@@ -4731,7 +4746,7 @@ function openCommModal(communityId, presetType) {
 }
 
 
-function saveComm(e) {
+async function saveComm(e) {
     e.preventDefault();
 
     const communityId = document.getElementById('comm-community-id').value;
@@ -4779,10 +4794,17 @@ function saveComm(e) {
         taggedCommunities: [communityId],
     };
 
+    // New record: confirm the write before closing or claiming success, so a
+    // failed save doesn't leave a phantom entry that vanishes on refresh.
+    let saved;
+    try {
+        saved = await db.insertComm(comm);
+    } catch (err) {
+        handleSaveError(err);
+        return;
+    }
+    if (saved?.id) comm.id = saved.id;
     comms.push(comm);
-    db.insertComm(comm).then(saved => {
-        if (saved?.id) comm.id = saved.id;
-    }).catch(handleSaveError);
     closeModal('modal-comm'); showSuccessToast('Communication logged');
     refreshCurrentView();
 }
@@ -5702,7 +5724,7 @@ function toggleNewCommunityTag(tag) {
     renderNewCommunityTags();
 }
 
-function saveCommunity(e) {
+async function saveCommunity(e) {
     e.preventDefault();
     const name = document.getElementById('community-name-input').value.trim();
     if (!name) return;
@@ -5726,6 +5748,17 @@ function saveCommunity(e) {
         return;
     }
 
+    const parentId = document.getElementById('community-parent-input').value;
+
+    // New record: confirm the write before mutating local state or closing, so a
+    // failed save doesn't leave a community that disappears on the next refresh.
+    try {
+        await db.insertCommunity({ id, name, parent_id: parentId || null });
+    } catch (err) {
+        handleSaveError(err);
+        return;
+    }
+
     // Add to communities list (sorted)
     COMMUNITIES.push({ id, name });
     COMMUNITIES.sort((a, b) => a.name.localeCompare(b.name));
@@ -5737,13 +5770,10 @@ function saveCommunity(e) {
     }
 
     // Set parent if selected
-    const parentId = document.getElementById('community-parent-input').value;
     if (parentId) {
         communityParents[id] = parentId;
     }
 
-    // Persist to Supabase
-    persistCommunity({ id, name, parent_id: parentId || null });
     if (newCommunitySelectedTags.length > 0) {
         persistCommunityTags(id, newCommunitySelectedTags);
     }
