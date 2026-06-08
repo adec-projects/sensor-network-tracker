@@ -29,11 +29,14 @@ See `ARCHITECTURE.md` for the data-flow diagram and `docs/data-model.md` for tab
 - **`app.js`** (~11k lines) — main app logic: rendering, sensors, communities, contacts, notes, comms, files, auth UI.
 - **`supabase-client.js`** — Supabase JS client setup and the `db` helper object (all CRUD, auth, RPC calls go through here). Keys are the public anon key — RLS enforces security.
 
-### Supabase project
+### Supabase project / schema reference
+- **`schema/current-schema.sql`** — ⭐ AUTHORITATIVE current schema (reverse-engineered from live prod; the single source of truth for table structure, with inline MS SQL translation notes).
+- **`docs/data-dictionary.md`** — plain-English meaning of every table and column.
+- **`docs/mssql-migration-guide.md`** — Postgres→Microsoft SQL Server translation guide (for the State of Alaska handoff).
 - **`supabase/config.toml`** — local Supabase CLI config.
-- **`supabase/migrations/`** — SQL migrations, timestamped. Run via `supabase db push`.
-- **`supabase-schema.sql`** — original full schema dump. Historical reference; prefer `supabase/migrations/` going forward.
-- **`seed-data.sql`**, **`seed-data-clean.sql`**, **`collocation-schema.sql`** — one-shot SQL scripts used during initial setup. Don't rerun blindly.
+- **`supabase/migrations/`** — SQL migrations, timestamped. Run via `supabase db push`. (Note: several later migrations were applied by hand in the SQL editor, so the live `schema_migrations` ledger lags the repo — the live schema is current regardless.)
+- **`supabase-schema.sql`** — ⚠️ ARCHIVED/STALE April-2026 dump. Do not use as the schema reference; see `schema/current-schema.sql`.
+- **`archive/legacy-sql/`** — retired one-off setup scripts (seed data, original collocations DDL). Historical only — never re-run.
 
 ### One-off importer tools (standalone HTML pages)
 Each is a self-contained page that reads a CSV/paste and writes to Supabase. Open them directly in a browser when needed; they are not linked from the main app. See `docs/importers.md`.
