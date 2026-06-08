@@ -742,7 +742,9 @@ async function deleteAutoNotes(noteType, sensorIds) {
 
 function escapeHtml(str) {
     if (!str) return '';
-    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+    // Also escape single quotes so values placed in single-quoted attribute or
+    // inline-handler contexts (onclick="...('${x}')") can't break out.
+    return String(str).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
 // Abbreviate sensor ID: MOD-00471 → Mod-471, MOD-X-PM-01656 → Mod-X-PM-1656
@@ -1111,7 +1113,7 @@ async function enterApp() {
     document.getElementById('login-screen').style.display = 'none';
     document.getElementById('app').style.display = 'flex';
     document.getElementById('sidebar-user').innerHTML =
-        `<span class="user-name">${currentUser}</span><span class="sidebar-user-actions"><span class="sidebar-settings-btn" onclick="event.stopPropagation(); showView('settings')" title="Settings">&#9881;</span><span class="user-logout" onclick="logoutUser()">Sign out</span></span>`;
+        `<span class="user-name">${escapeHtml(currentUser)}</span><span class="sidebar-user-actions"><span class="sidebar-settings-btn" onclick="event.stopPropagation(); showView('settings')" title="Settings">&#9881;</span><span class="user-logout" onclick="logoutUser()">Sign out</span></span>`;
     renderModeIndicators();
     buildSidebar();
     buildSensorSidebar();
@@ -1718,7 +1720,7 @@ function renderCommunityCard(c) {
     const commSensors = sensors.filter(s => s.community === c.id).sort((a, b) => a.id.localeCompare(b.id));
     const tags = getCommunityTags(c.id);
     const tagsHtml = tags.map(t =>
-        `<span class="community-type-badge clickable-badge" onclick="event.stopPropagation(); filterCommunitiesByTag('${t}')">${t}</span>`
+        `<span class="community-type-badge clickable-badge" onclick="event.stopPropagation(); filterCommunitiesByTag('${escapeHtml(t)}')">${escapeHtml(t)}</span>`
     ).join(' ');
 
     if (hasChildren) {
@@ -1730,7 +1732,7 @@ function renderCommunityCard(c) {
             <div class="community-row parent-row" onclick="showCommunity('${c.id}')">
                 <span class="parent-expand-arrow open" onclick="event.stopPropagation(); toggleChildList('${c.id}')">&#9654;</span>
                 <div class="community-row-info">
-                    <span class="community-row-name">${c.name}</span>
+                    <span class="community-row-name">${escapeHtml(c.name)}</span>
                     ${tagsHtml}
                     <span class="community-row-meta">${childCount} site${childCount !== 1 ? 's' : ''} &middot; ${totalSensors} sensor${totalSensors !== 1 ? 's' : ''}</span>
                 </div>
@@ -1751,7 +1753,7 @@ function renderCommunityCard(c) {
         return `
             <div class="community-row child-row" onclick="showCommunity('${c.id}')">
                 <div class="community-row-info">
-                    <span class="community-row-name">${c.name}</span>
+                    <span class="community-row-name">${escapeHtml(c.name)}</span>
                     ${tagsHtml}
                 </div>
                 <div class="community-row-sensors">${sensorListStr}</div>
@@ -1768,7 +1770,7 @@ function renderCommunityCard(c) {
     return `
         <div class="community-row" onclick="showCommunity('${c.id}')">
             <div class="community-row-info">
-                <span class="community-row-name">${c.name}</span>
+                <span class="community-row-name">${escapeHtml(c.name)}</span>
                 ${tagsHtml}
             </div>
             <div class="community-row-sensors">${sensorListStr}</div>
@@ -2107,14 +2109,14 @@ function renderSensorCell(s, col) {
             </select></td>`;
         }
         if (key === 'dateInstalled') return `<td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${val}" onblur="inlineSaveSensor(this)"></td>`;
-        if (col.isCustom) return `<td><input class="inline-edit-input" value="${val}" placeholder="${col.label}" onblur="editCustomFieldInline('${s.id}','${key}',this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>`;
-        if (key === 'datePurchased') return `<td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="${key}" value="${val}" onblur="inlineSaveSensor(this)"></td>`;
-        return `<td><input class="inline-edit-input" data-sensor="${s.id}" data-field="${key}" value="${val}" placeholder="${col.label}" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>`;
+        if (col.isCustom) return `<td><input class="inline-edit-input" value="${escapeHtml(val)}" placeholder="${escapeHtml(col.label)}" onblur="editCustomFieldInline('${s.id}','${key}',this.value)" onkeydown="if(event.key==='Enter')this.blur()"></td>`;
+        if (key === 'datePurchased') return `<td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="${key}" value="${escapeHtml(val)}" onblur="inlineSaveSensor(this)"></td>`;
+        return `<td><input class="inline-edit-input" data-sensor="${s.id}" data-field="${key}" value="${escapeHtml(val)}" placeholder="${escapeHtml(col.label)}" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>`;
     }
 
     if (key === 'status') return `<td>${renderStatusBadges(s, true)}</td>`;
-    if (key === 'community') return `<td><span class="clickable" onclick="showCommunity('${s.community}')">${getCommunityName(s.community)}</span></td>`;
-    return `<td>${val || '—'}</td>`;
+    if (key === 'community') return `<td><span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span></td>`;
+    return `<td>${escapeHtml(val) || '—'}</td>`;
 }
 
 function renderSensors() {
@@ -2719,12 +2721,12 @@ function showSensorView(sensorId) {
                 </select>
             </div>
             <div class="info-item"><label>Address/Coordinates</label>
-                <input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${s.location || ''}" placeholder="Address or GPS coordinates" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                <input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${escapeHtml(s.location || '')}" placeholder="Address or GPS coordinates" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
             </div>
             <div class="info-item soa-purchase-item">
                 <div class="soa-purchase-pair">
                     <div><label>SOA Tag ID</label>
-                        <input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
+                        <input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${escapeHtml(s.soaTagId || '')}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()">
                     </div>
                     <div><label>Purchase Date</label>
                         <input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)">
@@ -2740,14 +2742,14 @@ function showSensorView(sensorId) {
         const d = s.details || '';
         document.getElementById('sensor-info-card').innerHTML = `
             ${(lastEdited || s.active === false) ? `<div class="info-item" style="grid-column:1/-1;text-align:right;font-size:11px;color:var(--slate-400);margin-bottom:-6px">${lastEdited || ''}${s.active === false ? `${lastEdited ? ' · ' : ''}<span style="color:var(--aurora-rose);font-weight:600">RETIRED</span>` : ''}</div>` : ''}
-            <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${s.type}</p></div>
+            <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${escapeHtml(s.type)}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
-            <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : getCommunityName(s.community)}</p></div>
-            <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location || '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
+            <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : escapeHtml(getCommunityName(s.community))}</p></div>
+            <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location ? escapeHtml(s.location) : '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
 
             <div class="info-item soa-purchase-item">
                 <div class="soa-purchase-pair">
-                    <div><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId || '—'}</p></div>
+                    <div><label>SOA Tag ID</label><p title="SOA Tag IDs can only be changed in Setup Mode">${s.soaTagId ? escapeHtml(s.soaTagId) : '—'}</p></div>
                     <div><label>Purchase Date</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'datePurchased')">${s.datePurchased || '—'}</p></div>
                 </div>
             </div>
@@ -2921,7 +2923,7 @@ function showCommunityView(communityId) {
     const tags = getCommunityTags(communityId);
     const badgeContainer = document.getElementById('community-type-badge');
     badgeContainer.innerHTML = tags.map(t =>
-        `<span class="community-type-badge clickable-badge" onclick="filterCommunitiesByTag('${t}')">${t}</span>`
+        `<span class="community-type-badge clickable-badge" onclick="filterCommunitiesByTag('${escapeHtml(t)}')">${escapeHtml(t)}</span>`
     ).join(' ') +
     ` <span class="community-tag-edit" onclick="openEditCommunityTags('${communityId}')">+ Edit Tags</span>`;
 
@@ -2967,10 +2969,10 @@ function showCommunityView(communityId) {
                         <option value="" ${currentStatuses.length === 0 ? 'selected' : ''}>— No Status —</option>
                         ${ALL_STATUSES.map(st => `<option value="${st}" ${currentStatuses.includes(st) ? 'selected' : ''}>${st}</option>`).join('')}
                     </select></td>
-                    <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${s.location || ''}" placeholder="Address or GPS" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
+                    <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="location" value="${escapeHtml(s.location || '')}" placeholder="Address or GPS" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
                     <td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="dateInstalled" value="${s.dateInstalled || ''}" onblur="inlineSaveSensor(this)"></td>
 
-                    <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${s.soaTagId || ''}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
+                    <td><input class="inline-edit-input" data-sensor="${s.id}" data-field="soaTagId" value="${escapeHtml(s.soaTagId || '')}" placeholder="SOA Tag" onblur="inlineSaveSensor(this)" onkeydown="if(event.key==='Enter')this.blur()"></td>
                     <td><input class="inline-edit-input" type="date" data-sensor="${s.id}" data-field="datePurchased" value="${s.datePurchased || ''}" onblur="inlineSaveSensor(this)"></td>
                     <td><button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button></td>
                 </tr>`;
@@ -2982,7 +2984,7 @@ function showCommunityView(communityId) {
             <td>${s.location || '—'}</td>
             <td>${s.dateInstalled || '—'}</td>
 
-            <td>${s.soaTagId || '—'}</td>
+            <td>${s.soaTagId ? escapeHtml(s.soaTagId) : '—'}</td>
             <td>${s.datePurchased || '—'}</td>
             <td>
                 <button class="btn btn-sm" onclick="openEditSensorModal('${s.id}')">Edit</button>
@@ -3365,8 +3367,8 @@ function renderContactRow(c) {
         <td class="col-name"><span class="clickable">${c.name}</span>${primaryBadge}</td>
         <td class="col-role" title="${escapeHtml(c.role || '')}">${c.role || '—'}</td>
         <td class="col-org" title="${escapeHtml(c.org || '')}">${c.org || '—'}</td>
-        <td class="col-email"><span class="email-cell">${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${c.email}</a>` : '<span class="no-email">—</span>'}<label class="email-list-toggle" onclick="event.stopPropagation()" title="${c.emailList ? 'On Mass Email List — click to remove' : 'Not on Mass Email List — click to add'}"><input type="checkbox" class="email-list-checkbox" ${c.emailList ? 'checked' : ''} onchange="toggleContactEmailList('${c.id}')"><span class="email-list-label">Mass Email List</span></label></span></td>
-        <td class="col-phone">${c.phone ? `<a href="tel:${c.phone}" class="clickable" onclick="event.stopPropagation()">${c.phone}</a>` : '—'}</td>
+        <td class="col-email"><span class="email-cell">${c.email ? `<a href="#" class="clickable" onclick="event.stopPropagation(); openQuickEmail('${c.id}')">${escapeHtml(c.email)}</a>` : '<span class="no-email">—</span>'}<label class="email-list-toggle" onclick="event.stopPropagation()" title="${c.emailList ? 'On Mass Email List — click to remove' : 'Not on Mass Email List — click to add'}"><input type="checkbox" class="email-list-checkbox" ${c.emailList ? 'checked' : ''} onchange="toggleContactEmailList('${c.id}')"><span class="email-list-label">Mass Email List</span></label></span></td>
+        <td class="col-phone">${c.phone ? `<a href="tel:${encodeURIComponent(c.phone)}" class="clickable" onclick="event.stopPropagation()">${escapeHtml(c.phone)}</a>` : '—'}</td>
         <td class="col-status">${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-size:11px;font-weight:600">Active</span>'}</td>
         <td class="col-actions"><button class="contact-delete-btn" onclick="event.stopPropagation(); confirmDeleteContact('${c.id}')" title="Delete contact">&#128465;</button></td>
     </tr>`;
@@ -3759,16 +3761,16 @@ function showContactView(contactId) {
         `;
     } else {
         document.getElementById('contact-info-card').innerHTML = `
-            <div class="info-item"><label>Role</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'role')">${c.role || '<span class="field-placeholder">Role / Title</span>'}</p></div>
+            <div class="info-item"><label>Role</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'role')">${c.role ? escapeHtml(c.role) : '<span class="field-placeholder">Role / Title</span>'}</p></div>
             <div class="info-item"><label>Communities</label><p class="editable-field" onclick="inlineEditContactCommunity('${c.id}')">${(() => {
                 const ids = (c.communities && c.communities.length) ? c.communities : (c.community ? [c.community] : []);
                 return ids.length
                     ? ids.map(id => `<span class="clickable" onclick="event.stopPropagation(); showCommunity('${id}')">${escapeHtml(getCommunityName(id))}</span>`).join(', ')
                     : '<span class="field-placeholder">No community</span>';
             })()}</p></div>
-            <div class="info-item"><label>Organization</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'org')">${c.org || '<span class="field-placeholder">Organization</span>'}</p></div>
-            <div class="info-item"><label>Email</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'email')">${c.email || '<span class="field-placeholder">Email</span>'}</p></div>
-            <div class="info-item"><label>Phone</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'phone')">${c.phone || '<span class="field-placeholder">Phone</span>'}</p></div>
+            <div class="info-item"><label>Organization</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'org')">${c.org ? escapeHtml(c.org) : '<span class="field-placeholder">Organization</span>'}</p></div>
+            <div class="info-item"><label>Email</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'email')">${c.email ? escapeHtml(c.email) : '<span class="field-placeholder">Email</span>'}</p></div>
+            <div class="info-item"><label>Phone</label><p class="editable-field" onclick="inlineEditContact('${c.id}', 'phone')">${c.phone ? escapeHtml(c.phone) : '<span class="field-placeholder">Phone</span>'}</p></div>
             <div class="info-item"><label>Status</label><p class="editable-field" onclick="toggleContactActive('${c.id}')" title="Click to toggle active / inactive">${c.active === false ? '<span class="contact-inactive-badge">Inactive</span>' : '<span style="color:var(--aurora-green);font-weight:600">Active</span>'}</p></div>
             <div class="info-item"><label>Primary Contact</label><p class="editable-field" onclick="togglePrimaryContact('${c.id}')">${c.primaryContact ? '<span class="contact-primary-badge">Primary</span>' : '<span class="field-placeholder">No</span>'}</p></div>
             <div class="info-item"><label>Mass Email List</label><p class="editable-field" onclick="toggleContactEmailList('${c.id}')">${c.emailList ? '<span style="color:var(--aurora-green);font-weight:600">Included</span>' : '<span class="field-placeholder">Not included</span>'}</p></div>
@@ -3778,7 +3780,7 @@ function showContactView(contactId) {
     // Reset contact history filter
     const contactFilterEl = document.getElementById('contact-history-filter');
     if (contactFilterEl) contactFilterEl.value = '';
-    const contactSearchEl = document.getElementById('contact-search');
+    const contactSearchEl = document.getElementById('contact-history-search');
     if (contactSearchEl) contactSearchEl.value = '';
 
     // Combine notes, comms, and progress-note mentions into one list
@@ -4133,8 +4135,8 @@ function renderEmailRecipients(filter) {
                 return `
                 <div class="email-recipient-row">
                     <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" ${isChecked ? 'checked' : ''}>
-                    <label for="email-cb-${c.id}">${c.name}${badge}</label>
-                    <span class="recipient-community">${c.email || 'no email'}</span>
+                    <label for="email-cb-${c.id}">${escapeHtml(c.name)}${badge}</label>
+                    <span class="recipient-community">${c.email ? escapeHtml(c.email) : 'no email'}</span>
                 </div>`;
             }).join('')}
         `;
@@ -4188,8 +4190,8 @@ function emailFilterByCommunity() {
             return `
             <div class="email-recipient-row">
                 <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" checked>
-                <label for="email-cb-${c.id}">${c.name}${badge}</label>
-                <span class="recipient-community">${c.email || 'no email'}</span>
+                <label for="email-cb-${c.id}">${escapeHtml(c.name)}${badge}</label>
+                <span class="recipient-community">${c.email ? escapeHtml(c.email) : 'no email'}</span>
             </div>`;
         }).join('')}
     `;
@@ -4291,8 +4293,8 @@ function openQuickEmail(contactId) {
         <div class="email-community-header">${getCommunityName(c.community)}</div>
         <div class="email-recipient-row">
             <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" checked>
-            <label for="email-cb-${c.id}">${c.name}${badge}</label>
-            <span class="recipient-community">${c.email}</span>
+            <label for="email-cb-${c.id}">${escapeHtml(c.name)}${badge}</label>
+            <span class="recipient-community">${escapeHtml(c.email)}</span>
         </div>
     `;
 
@@ -4765,7 +4767,7 @@ function openCommunityLog(filter) {
     const f = document.getElementById('community-log-filter');
     if (f) { f.value = filter || 'all'; filterCommunityLog(); }
 }
-function filterContactTimeline() { filterTimelineSearch('contact-all-timeline', document.getElementById('contact-search')?.value); }
+function filterContactTimeline() { filterTimelineSearch('contact-all-timeline', document.getElementById('contact-history-search')?.value); }
 
 // ===== TIMELINE RENDERER =====
 function renderTimeline(containerId, items) {
@@ -4830,7 +4832,7 @@ function renderTimeline(containerId, items) {
         const attribution = item.source === 'salesforce_import'
             ? `<div class="timeline-attribution">Created by ${item.loggedBy ? escapeHtml(item.loggedBy) : 'Unknown'}, SF import</div>`
             : item.createdBy
-                ? `<div class="timeline-attribution">Logged by ${item.createdBy}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
+                ? `<div class="timeline-attribution">Logged by ${escapeHtml(item.createdBy)}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
                 : '';
 
         const isNote = !item.commType;
@@ -4993,20 +4995,21 @@ function editFollowUp(noteId, followUpIdx) {
 function deleteFollowUp(noteId, followUpIdx) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
+    showConfirm('Delete Follow-Up', 'Delete this follow-up comment? This cannot be undone.', () => {
+        const lines = note.text.split('\n');
+        const followUps = [];
+        const mainLines = [];
+        for (const line of lines) {
+            if (line.startsWith('—')) followUps.push(line);
+            else mainLines.push(line);
+        }
+        if (followUpIdx >= followUps.length) return;
+        followUps.splice(followUpIdx, 1);
 
-    const lines = note.text.split('\n');
-    const followUps = [];
-    const mainLines = [];
-    for (const line of lines) {
-        if (line.startsWith('—')) followUps.push(line);
-        else mainLines.push(line);
-    }
-    if (followUpIdx >= followUps.length) return;
-    followUps.splice(followUpIdx, 1);
-
-    note.text = [...mainLines, ...followUps].join('\n');
-    refreshCurrentView();
-    db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
+        note.text = [...mainLines, ...followUps].join('\n');
+        refreshCurrentView();
+        db.updateNote(noteId, { text: note.text }).catch(handleSaveError);
+    }, { danger: true });
 }
 
 function toggleTimelineNotePanel(noteId) {
@@ -5311,13 +5314,13 @@ function buildTagsHTML(item) {
     }
     if (item.taggedCommunities) {
         tags += item.taggedCommunities.map(c =>
-            `<span class="tag tag-community" onclick="event.stopPropagation(); showCommunity('${c}')">${getCommunityName(c)}</span>`
+            `<span class="tag tag-community" onclick="event.stopPropagation(); showCommunity('${escapeHtml(c)}')">${escapeHtml(getCommunityName(c))}</span>`
         ).join('');
     }
     if (item.taggedContacts) {
         tags += item.taggedContacts.map(cId => {
             const contact = contactMap[cId];
-            return contact ? `<span class="tag tag-contact" onclick="event.stopPropagation(); showContactDetail('${cId}')">${contact.name}</span>` : '';
+            return contact ? `<span class="tag tag-contact" onclick="event.stopPropagation(); showContactDetail('${escapeHtml(cId)}')">${escapeHtml(contact.name)}</span>` : '';
         }).join('');
     }
     return tags;
@@ -8354,8 +8357,16 @@ function confirmCloseTicket() {
             if (t.id === ticketId || t.status === 'Closed') return false;
             return ticketSensorIds(t).includes(sid);
         });
-        let finalStatuses = newStatuses.length > 0 ? [...newStatuses] : getStatusArray(s);
-        if (otherActive.length === 0) finalStatuses = finalStatuses.filter(st => st !== 'Quant Ticket in Progress');
+        // Strip ALL service-related statuses on close so none get stranded
+        // (e.g. "Service at Quant" left on a sensor that no longer has a ticket).
+        const serviceStatuses = ['Quant Ticket in Progress', 'Shipped to Quant', 'Service at Quant', 'Shipped from Quant'];
+        let finalStatuses = newStatuses.length > 0
+            ? [...newStatuses]
+            : getStatusArray(s).filter(st => !serviceStatuses.includes(st));
+        // If another open ticket still covers this sensor, keep it flagged.
+        if (otherActive.length > 0 && !finalStatuses.includes('Quant Ticket in Progress')) {
+            finalStatuses.push('Quant Ticket in Progress');
+        }
         s.status = finalStatuses.length > 0 ? finalStatuses : ['Online'];
         persistSensor(s);
     }
