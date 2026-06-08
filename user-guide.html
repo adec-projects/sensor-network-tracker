@@ -202,10 +202,10 @@
   <ol>
     <li><a href="#overview">What Is This App?</a></li>
     <li><a href="#getting-started">Getting Started</a></li>
-    <li><a href="#dashboard">Dashboard &amp; QuantAQ Alerts</a></li>
+    <li><a href="#dashboard">Dashboard</a></li>
     <li><a href="#sensors">Working with Sensors</a></li>
     <li><a href="#communities">Communities</a></li>
-    <li><a href="#notes">Notes &amp; Event History</a></li>
+    <li><a href="#notes">Logging &amp; Event History</a></li>
     <li><a href="#tickets">Service Tickets</a></li>
     <li><a href="#collocations">Collocations</a></li>
     <li><a href="#audits">Audits</a></li>
@@ -248,7 +248,7 @@
 <h3>The Layout</h3>
 <p>The app has a sidebar on the left with everything organized under:</p>
 <ul>
-  <li><strong>Dashboard</strong> — Quick overview with network stat cards and linked QuantAQ sensor performance alerts</li>
+  <li><strong>Dashboard</strong> — Quick overview of the network with summary tiles, sensors needing attention, open tickets, audits in progress, a pod install reference, and a recent activity feed</li>
   <li><strong>Sensors</strong> — Full list of all sensors with search/filter</li>
   <li><strong>Audits</strong> — The audit pipeline (scheduled → in progress → finished, analysis pending&nbsp;→ complete)</li>
   <li><strong>Collocations</strong> — The collocation pipeline (in progress&nbsp;→ finished, analysis pending → complete)</li>
@@ -262,128 +262,75 @@
   You can pin frequently-used communities or sensors to the sidebar for quick access. Just click the star icon on any sensor or community detail page.
 </div>
 
-<h2 id="dashboard">3. Dashboard &amp; QuantAQ Alerts</h2>
+<h2 id="dashboard">3. Dashboard</h2>
 
-<p>The Dashboard is the landing page when you open the app. It gives you a quick network health snapshot: counts of active sensors, deployed communities, open service tickets, audits in progress, and the live feed of QuantAQ performance alerts.</p>
+<p>The Dashboard is the landing page when you open the app. It's a quick-glance overview of the whole network and a starting point for logging.</p>
 
-<h3>How QuantAQ Alerts Work</h3>
-<p>The app automatically scans QuantAQ's API <strong>every 2 hours, every day</strong> to catch and record sensor component malfunctions and power failures. Every scan pulls a window of recent raw readings per sensor and translates the QuantAQ flag bitmask into a defined sensor status.</p>
+<h3>Summary tiles</h3>
+<p>Across the top are tiles showing total Sensors, how many are Online, the number of Communities, open Service Tickets, and Active Audits. Click any tile to jump straight to that list.</p>
 
-<p>Four kinds of alerts can fire:</p>
+<h3>Needs-attention cards</h3>
 <ul>
-  <li><strong>PM Sensor Issue</strong> (critical) — The optical particle counter or nephelometer is malfunctioning. Fires immediately when detected.</li>
-  <li><strong>SD Card Issue</strong> (critical) — The pod's onboard microSD card is faulting. Fires immediately.</li>
-  <li><strong>Gaseous Sensor Issue</strong> (warning) — One or more gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is flagged. Sits in a pending state for a 6-hour grace window before escalating, since gas sensors look "off" during warm-up periods after any power cycle or power blip.</li>
-  <li><strong>Lost Connection</strong> (info) — The sensor hasn't reported to QuantAQ in over an hour. Also has a 2-hour grace window to filter out brief network blips.</li>
+  <li><strong>Sensors needing attention:</strong> pods carrying an issue status (PM, gaseous, SD card, needs repair, lost connection, or firmware). It shows the top few, with a "+ X more" link that opens the sensor list filtered to just the flagged pods. SD card issues sort to the bottom since they're lower priority.</li>
+  <li><strong>Open service tickets:</strong> tickets currently in progress with Quant.</li>
+  <li><strong>Audits in progress:</strong> audits that are scheduled or underway.</li>
 </ul>
 
-<h3>Pending vs. Active vs. Resolved</h3>
-<p>Alerts with a grace period start in <strong>pending</strong> and only promote to <strong>active</strong> if the issue is still present after the window elapses. If the problem clears before the grace window ends, the alert silently disappears. This makes it so routine power cycles or brief power outages don't get flagged as a lost connection if they persisted for a short time.&nbsp;</p>
+<h3>Pod install reference</h3>
+<p>A compact, two-column quick-reference of every MOD pod with its current location, install date, and status shown as small colored dots (hover over them to read the status names). Click <strong>Enlarge</strong> for a full, searchable popup.</p>
 
-<p>Active alerts stay on the dashboard until the underlying issue clears in QuantAQ's data, at which point the alert is marked <strong>resolved</strong>.</p>
+<h3>Recent activity</h3>
+<p>Down the right side, a running feed of the latest notes and communications across the network, newest first. Click any item to open it.</p>
 
-<h3>Sensors Can Have More Than One Alert at Once</h3>
-<p>Lost Connection and PM/SD/Gas alerts fire independently. A sensor that's offline right now but whose last reported batch of readings was flagged for a PM fault will show <em>both</em> a Lost Connection alert and a PM Sensor Issue alert, one won't mask the other.</p>
-
-<h3>What Happens to the Sensor's Status</h3>
-<p>When a PM, SD, or Gas alert becomes active, the corresponding status tag (e.g., "PM Sensor Issue") is automatically added to the sensor's status — but <strong>"Online" stays</strong>. The sensor is still reporting data, just with a fault flagged alongside. Only a Lost Connection alert (or a manual status change you make yourself) removes the "Online" tag.</p>
-
-<p>When the underlying issue clears, the alert is marked resolved and the matching status tag is <strong>automatically removed from the sensor</strong>. So a sensor whose Gaseous Sensor Issue gets sorted out will lose that status tag on the next scan with no manual cleanup needed.</p>
-
-<h3>Dismissing Alerts</h3>
-<p>If you want to silence an alert that's still active in QuantAQ but you've handled in the field, click <strong>Dismiss</strong> on the alert card. The dismiss panel includes:</p>
-<ul>
-  <li>An optional note explaining why you dismissed it.</li>
-  <li>A checkbox: <strong>"Also clear [Issue Type] from [Sensor] status"</strong> — checked by default whenever the sensor currently carries that status flag. Leaving it on wipes the status from the sensor in the same click; uncheck if you want the alert hidden but the status to remain visible.</li>
-</ul>
-
-<h3>Acknowledging &amp; Linking to History</h3>
-<p>Click an alert card to write a follow-up note or jump to the sensor's detail page. Writing a follow-up creates a row in the sensor's event history so the alert and your response are linked — useful when you're reviewing a sensor weeks later and want to know what happened or what actions were taken to resolve the issue.</p>
-
-<h3>Run Check Now</h3>
-<p>The dashboard has a "Run Check Now" button that kicks off a scan on demand if you don't want to wait for the next scheduled run. The scan runs server-side and takes a minute or two. The "last check" / "next check" timestamps next to the button reflect the live cron schedule.</p>
-
-<div class="callout tip">
-  <div class="callout-label">Expected Offline Statuses</div>
-  Sensors in "Lab Storage," "In Transit," "Service at Quant," "Ready for Deployment," or "Needs Repair" are <strong>never</strong> alerted about. The app assumes these are deliberately offline or have known issues and skips them during the scan.
-</div>
+<h3>Quick logging</h3>
+<p>The <strong>+ New Log</strong> button at the top lets you log an action from the dashboard without first navigating to the right sensor or community. See <a href="#notes">Section 6. Logging &amp; Event History</a> for how logging works.</p>
 
 <h2 id="sensors">4. Working with Sensors</h2>
 
 <p>The All Sensors page is the main view. You can search by sensor ID, filter by status, and click any sensor to see its full detail page.</p>
 
-<h3>Active &amp; Archived Tabs</h3>
-<p>At the top of the All Sensors page, two tabs separate the live fleet from retired pods:</p>
+<h3>Quant, Retired, and Other LCS tabs</h3>
+<p>The All Sensors page has three tabs:</p>
 <ul>
-  <li><strong>Active</strong> — Every sensor currently in use. This is what you usually want.</li>
-  <li><strong>Archived</strong> — Sensors that have been pulled out of service (decommissioned, retired, etc). Their full history is preserved and they can be restored at any time.</li>
+  <li><strong>Active Quants:</strong> the QuantAQ MOD pods currently in use. This is the default view.</li>
+  <li><strong>Retired Quants:</strong> MOD pods pulled out of service. Their full history is kept and they can be restored at any time.</li>
+  <li><strong>Other LCS:</strong> other low-cost sensors that aren't QuantAQ MODs (for example AQMesh units).</li>
+</ul>
+<p>When you click <strong>+ Add Sensor</strong>, you first choose whether you're adding a Quant (MOD) pod or an Other LCS sensor, then fill in the details.</p>
+
+<h3>Retiring a sensor</h3>
+<p>On a sensor's detail page, click <strong>Retire Sensor</strong>. The popup has an optional <strong>"Reason for retiring"</strong> box where you can explain why (for example, "Shipped back to Quant after a 4-year deployment"). Type @ to tag a contact. What you write is logged on the sensor's history, and the pod moves to the Retired Quants tab. It isn't deleted, and you can restore it from that tab or from the Trash Bin in Settings.</p>
+
+<h3>Sensor statuses</h3>
+<p>A sensor can carry one or more status tags at the same time (for example "Online" plus "SD Card Issue"). You change a sensor's status in only two ways: in Setup Mode, or through the <strong>New Log</strong> button using the <strong>Status Change</strong> action (see <a href="#notes">Section 6</a>).</p>
+
+<h4>Statuses you set</h4>
+<ul>
+  <li><strong>Online:</strong> deployed and reporting data.</li>
+  <li><strong>Offline:</strong> not reporting data.</li>
+  <li><strong>Lost Connection:</strong> the pod has stopped reporting.</li>
+  <li><strong>Lab Storage:</strong> sitting at a lab, not currently deployed.</li>
+  <li><strong>Needs Repair:</strong> has a known problem and shouldn't be deployed until it's fixed.</li>
+  <li><strong>PM Sensor Issue:</strong> the particulate matter sensor (OPC or nephelometer) is malfunctioning.</li>
+  <li><strong>Gaseous Sensor Issue:</strong> one or more gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is malfunctioning.</li>
+  <li><strong>SD Card Issue:</strong> the pod's microSD card is faulting.</li>
+  <li><strong>Possible Auto Shutoff Firmware Issue:</strong> the pod may be shutting itself off because of a firmware bug.</li>
 </ul>
 
-<h3>Archiving a Sensor</h3>
-<p>From the sensor's detail page, click <strong>Archive Sensor</strong>. The confirm popup includes an optional <strong>"Reason for archiving"</strong> textarea where you can explain why (e.g., "Shipped back to Quant after 4-year deployment"). Type @ to tag a contact in the reason. Whatever you write gets logged as a Status Change note on the sensor's history, so future-you knows what happened.</p>
-
-<p>Archived sensors aren't deleted — they're hidden from the active list. Restore them from the Archived tab or from the Trash Bin in Settings.</p>
-
-<h3>Sensor Statuses</h3>
-<p>Each sensor can have one or more status tags. Statuses fall into two groups: ones you apply manually, and ones that get applied automatically by workflows (collocations, audits, QuantAQ alerts, and service tickets).</p>
-
-<h4>Manually applied statuses</h4>
-<p>You pick these from the status list on a sensor or in a Mass Action note.</p>
+<h4>Statuses the workflows set</h4>
+<p>These are added and removed automatically as you use the collocation tool, the audit workflow, and Quant service tickets. You can pick them by hand, but it's better to let the tools manage them so the history, dates, and related records stay in sync.</p>
 <ul>
-  <li><strong>Online</strong> — The sensor is deployed and reporting data. Mutually exclusive with Offline.</li>
-  <li><strong>Offline</strong> — The sensor is not reporting data. Mutually exclusive with Online.</li>
-  <li><strong>Lab Storage</strong> — The sensor is sitting at one of our lab locations, not currently deployed.</li>
-  <li><strong>Ready for Deployment</strong> — The sensor has been checked out and is ready for use.</li>
-  <li><strong>Needs Repair</strong> — The sensor has a known problem and shouldn't be deployed until it's fixed.</li>
+  <li><strong>Collocation:</strong> the pod is part of an active collocation.</li>
+  <li><strong>Auditing a Community:</strong> the pod is actively auditing a community.</li>
+  <li><strong>Service at Quant:</strong> the pod has arrived at Quant on a service ticket.</li>
+  <li><strong>Quant Ticket in Progress:</strong> an open service ticket exists for the pod. Clicking this tag opens the ticket.</li>
 </ul>
 
-<h4>Auto-applied by the QuantAQ alert system</h4>
-<p>These statuses are normally set and cleared automatically by the alert scanner described in <a href="#dashboard">Section 3. Dashboard &amp; QuantAQ Alerts</a>. You <em>can</em> set them by hand, but the scanner will generally drive them on its own.</p>
-<ul>
-  <li><strong>PM Sensor Issue</strong> — The particulate matter sensor (OPC or nephelometer) is malfunctioning.</li>
-  <li><strong>Gaseous Sensor Issue</strong> — One or more of the gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is malfunctioning.</li>
-  <li><strong>SD Card Issue</strong> — The pod's microSD card is malfunctioning.</li>
-  <li><strong>Lost Connection</strong> — The sensor hasn't reported to QuantAQ in over an hour.&nbsp;</li><li>PM/Gas/SD faults keep "Online" alongside the fault tag; only Lost Connection removes "Online."</li>
-</ul>
-
-<h4>Auto-applied statuses</h4>
-<p>These get added and removed automatically as you move sensors through the collocation tool, audit workflow, and Quant service tickets. You <em>can</em> still pick them from the status list, but the app will show a warning asking you to use the proper tool instead — the workflows keep everything in sync (history notes, dates, related records), and applying these by hand can leave the data out of step.</p>
-<ul>
-  <li><strong>Collocation</strong> — Automatically applied when a sensor is part of an active collocation. Removed when the collocation completes. <em>Use the Collocation tool to start one.</em></li>
-  <li><strong>Auditing a Community</strong> — Automatically applied when an audit pod is actively auditing a community. <em>Use the audit workflow (inside the Collocation tool) to start an audit.</em></li>
-  <li><strong>In Transit Between Audits</strong> — Automatically applied to audit pods as they move between community audits. <em>Managed by the audit workflow.</em></li>
-  <li><strong>Service at Quant</strong> — Automatically applied by Quant service ticket progression when a sensor arrives at Quant. <em>Advance the Quant ticket instead of setting this by hand.</em></li>
-  <li><strong>Quant Ticket in Progress</strong> — Automatically applied whenever a Quant service ticket is open for the sensor. Removed when the ticket closes. <em>Open a ticket from the Service section instead.</em></li>
-</ul>
-
-<h3>Moving a Sensor</h3>
-<p>When you need to move a single sensor to a different community, click "Move" on the sensor detail page. You can:</p>
-<ul>
-  <li>Select the destination community</li>
-  <li>Set the date of the move</li>
-  <li>Optionally change the sensor's status at the same time</li>
-  <li>Tag contacts who helped with the move</li>
-  <li>Add notes about the move</li>
-</ul>
-<p>The app will ask if you want to update the install date (unless you're moving to a lab location — it skips the prompt for those since lab moves aren't installations).</p>
-
-<h3>Mass Action — Working with Multiple Sensors at Once</h3>
-<p>If you need to do something with several sensors at once — like installing 5 sensors at Garden after a collocation, or marking a batch of pods as Offline — use the <strong>Mass Action</strong> button at the top of the All Sensors page. It opens a note modal with bulk actions you can apply to all the sensors you tag.</p>
-
-<p>Inside the Mass Action modal:</p>
-<ul>
-  <li><strong>Move Sensors</strong> — Pick a destination community from the dropdown and every tagged sensor moves there in one click</li>
-  <li><strong>Sensor Status Change</strong> — Pick statuses and they get added to every tagged sensor (existing tags like Collocation are preserved)</li>
-  <li><strong>Troubleshooting</strong> / <strong>Site Work</strong> — Tag the action type for tracking</li>
-  <li>Tag the sensors, communities, and contacts involved</li>
-  <li>Write one note that gets attached to all of them</li>
-</ul>
-
-<div class="callout tip">
-  <div class="callout-label">When to use Mass Action vs. the individual Move button</div>
-  <strong>Use Mass Action</strong> when you're doing the same thing to multiple sensors at once — installing a batch at a site, taking a group offline for service, applying the same status change to several pods.<br><br>
-  <strong>Use the individual Move button</strong> on a single sensor's detail page when you're handling just one sensor and want the install-date prompt and per-sensor context.
-</div>
+<h3>Moving a sensor</h3>
+<p>To move a pod to a different community, use the <strong>New Log</strong> button and choose <strong>Move Sensor</strong>. You fill in a plain-language row:</p>
+<p style="margin-left:1.5em"><em>[sensor] removed from [community] and installed in [community]</em></p>
+<p>Pick the sensor and the destination. The "removed from" community fills in automatically to wherever the pod currently is, and the install date updates on its own.</p>
+<p>To <strong>swap</strong> two pods at a site (one leaves for the lab or Quant, another takes its place), click <strong>+ Add sensor</strong> to get a second row and fill in the other pod's move. One log entry then records both moves, and the sensors and communities you choose are added to the log's tags automatically so everything shows up in the right histories.</p>
 
 <h3>Sensor Detail Page</h3>
 <p>Each sensor has tabs for:</p>
@@ -405,20 +352,23 @@
   The community event history only shows notes that are <em>explicitly tagged to that community</em>. If a sensor moves to your community, only the movement note (and future notes tagged to your community) will show — not the sensor's entire history from previous communities; that will be visible under the sensor's individual history.
 </div>
 
-<h2 id="notes">6. Notes &amp; Event History</h2>
+<h2 id="notes">6. Logging &amp; Event History</h2>
 
-<p>Notes are how everything gets documented in the app. When you add a note, you can:</p>
+<p>Everything that happens to a sensor or community gets recorded with the <strong>+ New Log</strong> button, which is on the dashboard and on every sensor, community, and contact page. It opens with a row of action chips. Pick one or more:</p>
 <ul>
-  <li>Select <strong>Actions</strong> — Sensor Install, Sensor Removal, Troubleshooting, Site Work, and/or Sensor Status Change</li>
-  <li>If you check <strong>Sensor Status Change</strong>, you'll get a status picker and the status change gets merged into your note</li>
-  <li>Tag sensors, communities, and contacts so the note shows up in the right places</li>
-  <li>Use <strong>@mentions</strong> in the note text to tag contacts inline</li>
+  <li><strong>Call / Email / Site Visit:</strong> log a communication with a contact.</li>
+  <li><strong>Sensor Issue:</strong> record a problem with a pod (a malfunction, an outage, or troubleshooting you did).</li>
+  <li><strong>Status Change:</strong> change a sensor's status. Picking this shows a status list, and the new status is applied to the sensors you tag.</li>
+  <li><strong>Move Sensor:</strong> move or swap pods between communities (see <a href="#sensors">Section 4</a>).</li>
+  <li><strong>General Note:</strong> anything else.</li>
 </ul>
+<p>You can combine chips. Then tag the sensors and communities the log is about, write your note, and type <strong>@</strong> to tag any contacts involved. When you save, the entry appears in the history of everything it's tagged to.</p>
 
-<p>The "Add Mass Note" button on the All Sensors page lets you create a note and tag multiple sensors/communities at once — handy for logging things like "Installed 3 sensors at NCore for collocation following their Quant calibration"</p>
+<h3>Logging a sensor issue</h3>
+<p>Open <strong>New Log</strong>, pick <strong>Sensor Issue</strong>, tag the affected pod, and describe what's wrong and what you did. If the pod should also carry an issue status (PM, gaseous, SD card, lost connection, needs repair, or firmware), add the <strong>Status Change</strong> chip in the same log and set it. The flagged pod then shows up under "Sensors needing attention" on the dashboard.</p>
 
-<h3>Editing Notes &amp; Communications</h3>
-<p>Click the pencil icon on any note or communication log in the timeline. It re-opens the <strong>full Add Note / Log Communication modal</strong> prefilled with everything that was originally entered — type, date, text, sensor/community tags, and contact @mentions. Edit anything, click <strong>Save Changes</strong>, and the timeline entry updates in place. The action checkboxes (Move Sensors / Status Change / etc.) are hidden during edit since those are creation-time actions and shouldn't re-fire on every save.</p>
+<h3>Editing a log</h3>
+<p>Click the pencil icon on any note or communication in the timeline. It reopens the <strong>New Log</strong> form prefilled with what was originally entered (type, date, text, sensor and community tags, and contact @mentions). Edit anything and save, and the timeline entry updates in place. The action chips are hidden during an edit since those are creation-time actions and shouldn't re-fire on every save.</p>
 
 <h3>Adding a Follow-Up to an Existing Note</h3>
 <p>Each note in the timeline has an <strong>Add Note</strong> button that lets you append a follow-up directly under that note. Follow-ups are timestamped with your name and date and stay visually grouped with the parent. Type @ inside a follow-up to tag a contact, and they'll be added to the parent note's tags so the follow-up shows up on their contact page too.</p>
@@ -521,7 +471,7 @@
 <p>Each audit tracks the audit pod, community pod, community, dates, and who installed/removed the equipment. Like collocations, audits have progress notes and a full analysis pipeline.</p>
 
 <h3>Updating the Audit Pod's Status</h3>
-<p>From the audit detail view, click <strong>Update Audit Pod Status</strong> to change what the audit pod is doing between or during audits. The picker is a multi-select — you can flip the pod between "In Transit Between Audits," "Offline," "Auditing a Community," etc. — and includes a note textarea with @mention autocomplete for tagging contacts who shipped or received the pod. The note posts to:</p>
+<p>From the audit detail view, click <strong>Update Audit Pod Status</strong> to change what the audit pod is doing between or during audits. The picker is a multi-select where you can flip the pod between "Auditing a Community," "Offline," and "Lab Storage," and it includes a note textarea with @mention autocomplete for tagging contacts who shipped or received the pod. The note posts to:</p>
 <ul>
   <li>The audit's progress notes</li>
   <li>The audit pod sensor's event history</li>
