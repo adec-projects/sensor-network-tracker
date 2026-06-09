@@ -268,6 +268,9 @@ async function loadAllData() {
         archived_by: s.archived_by || null,
     }));
 
+    // Record each freshly-loaded sensor's DB baseline for the snapshot-diff save.
+    sensors.forEach(s => { sensorDbSnapshots[s.id] = snapshotSensorFields(s); });
+
     // Load custom field values from localStorage
     const savedCustomData = loadData('sensorCustomData', {});
     sensors.forEach(s => {
@@ -641,7 +644,66 @@ function showSuccessToast(text) {
     setTimeout(() => msg.remove(), 3000);
 }
 
-function persistSensor(s) { return db.upsertSensor(s).catch(handleSaveError); }
+// The nine sensor columns persistSensor is responsible for saving.
+const SENSOR_PERSIST_FIELDS = ['soaTagId', 'type', 'status', 'community',
+    'location', 'datePurchased', 'collocationDates', 'dateInstalled', 'details'];
+
+// Per-sensor baseline of those nine fields as they were last known to be in the
+// database (captured at load and after each successful save). persistSensor
+// diffs against this so it writes ONLY the columns this browser changed, leaving
+// columns another user may have changed untouched (no last-write-wins clobber).
+const sensorDbSnapshots = {};
+
+// Canonical, comparable view of the nine persisted fields. Same normalization is
+// used for both the stored snapshot and the live value, so a field only counts
+// as "changed" when its real content differs (no false diffs from '' vs
+// undefined, or array identity). status is stringified so arrays compare by value.
+function snapshotSensorFields(s) {
+    return {
+        soaTagId: s.soaTagId || '',
+        // Default matches the two row mappers ('Community Pod'), so a snapshot
+        // built from any sensor object is consistent with the loaded value.
+        type: s.type || 'Community Pod',
+        status: JSON.stringify(s.status || []),
+        community: s.community || '',
+        location: s.location || '',
+        datePurchased: s.datePurchased || '',
+        collocationDates: s.collocationDates || '',
+        dateInstalled: s.dateInstalled || '',
+        details: s.details || '',
+    };
+}
+
+// Returns an object of just the fields that differ from the snapshot, with their
+// real (un-stringified) current values, ready to hand to db.updateSensorFields.
+function diffSensorFields(snap, s) {
+    const cur = snapshotSensorFields(s);
+    const changed = {};
+    for (const k of SENSOR_PERSIST_FIELDS) {
+        if (cur[k] !== snap[k]) {
+            changed[k] = (k === 'status') ? (s.status || []) : s[k];
+        }
+    }
+    return changed;
+}
+
+function persistSensor(s) {
+    const snap = sensorDbSnapshots[s.id];
+    // No baseline (brand-new row, or a sensor that never came through a mapper):
+    // fall back to the original full-row write, then record the baseline. This
+    // keeps behavior identical to before whenever the snapshot is unavailable.
+    if (!snap) {
+        return db.upsertSensor(s)
+            .then(() => { sensorDbSnapshots[s.id] = snapshotSensorFields(s); })
+            .catch(handleSaveError);
+    }
+    const changed = diffSensorFields(snap, s);
+    // Nothing actually changed among the persisted fields: skip the write.
+    if (Object.keys(changed).length === 0) return Promise.resolve();
+    return db.updateSensorFields(s.id, changed)
+        .then(() => { sensorDbSnapshots[s.id] = snapshotSensorFields(s); })
+        .catch(handleSaveError);
+}
 
 // Notes/Details boxes: hover-to-edit. The view shows the saved text; clicking
 // it (or "Edit") swaps in textareas + Save/Cancel.
@@ -2453,6 +2515,8 @@ async function saveSensor(e) {
             return;
         }
         sensors.push(data);
+        // We just wrote the full row, so its DB baseline is exactly `data`.
+        sensorDbSnapshots[data.id] = snapshotSensorFields(data);
         closeModal('modal-add-sensor'); showSuccessToast('Sensor saved');
         renderSensors();
     }
@@ -6957,7 +7021,7 @@ function findSensor(id) {
 }
 
 function _mapSensorRow(s) {
-    return {
+    const obj = {
         id: s.id, soaTagId: s.soa_tag_id || '', type: s.type || 'Community Pod',
         status: s.status || [], community: s.community_id || '',
         location: s.location || '', datePurchased: s.date_purchased || '',
@@ -6968,6 +7032,10 @@ function _mapSensorRow(s) {
         active: s.active !== false,
         archived_at: s.archived_at || null, archived_by: s.archived_by || null,
     };
+    // Record this row's DB baseline so the snapshot-diff save engages for
+    // archived/lazy-loaded sensors too (not just the initial load batch).
+    sensorDbSnapshots[obj.id] = snapshotSensorFields(obj);
+    return obj;
 }
 
 async function switchSensorsTab(tab) {

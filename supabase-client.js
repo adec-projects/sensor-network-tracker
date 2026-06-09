@@ -240,6 +240,31 @@ const db = {
         if (error) throw error;
     },
 
+    // Partial save: write ONLY the given fields (camelCase keys) to one sensor
+    // row, leaving every other column untouched. Used by the snapshot-diff path
+    // in persistSensor so a save can't clobber a column another user changed.
+    // Per-field normalization MUST match upsertSensor above so a partial write
+    // produces the identical stored value upsert would have for that field.
+    async updateSensorFields(id, fields) {
+        const colMap = {
+            soaTagId: 'soa_tag_id', type: 'type', status: 'status',
+            community: 'community_id', location: 'location',
+            datePurchased: 'date_purchased', collocationDates: 'collocation_dates',
+            dateInstalled: 'date_installed', details: 'details',
+        };
+        const row = { updated_at: new Date().toISOString() };
+        for (const [k, v] of Object.entries(fields)) {
+            const col = colMap[k];
+            if (!col) continue;   // ignore anything not a known sensor column
+            if (k === 'community') row[col] = v || null;
+            else if (k === 'status') row[col] = v || [];
+            else if (k === 'type') row[col] = v;
+            else row[col] = v || '';
+        }
+        const { error } = await supa.from('sensors').update(row).eq('id', id);
+        if (error) throw error;
+    },
+
     async archiveSensor(id) {
         const { error } = await supa.from('sensors').update({
             active: false,
