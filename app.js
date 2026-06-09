@@ -8802,6 +8802,9 @@ async function saveNewAudit(event) {
 function openAuditDetail(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
+    // DQI table reads the same live-recomputed numbers as the charts (never the
+    // possibly-stale stored values) so the two can't disagree on screen.
+    const dqiResults = getAuditDisplayResults(audit);
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
     const idx = auditStepIdx(audit.status);
     const flowIdx = AUDIT_STATUSES.indexOf(audit.status);
@@ -8816,9 +8819,9 @@ function openAuditDetail(auditId) {
         return `<div class="ticket-step ${state}"><div class="ticket-step-dot"></div><div class="ticket-step-label">${st}</div></div>`;
     }).join('');
 
-    const analysisHtml = Object.keys(audit.analysisResults || {}).length > 0
+    const analysisHtml = Object.keys(dqiResults).length > 0
         ? `<table class="analysis-results-table"><thead><tr><th>Parameter<br><span style="font-weight:400;font-size:10px;text-transform:none">(DQI Threshold)</span></th><th>R\u00B2</th><th>Slope</th><th>Intercept</th><th>SD</th><th>RMSE</th><th>n</th></tr></thead><tbody>
-            ${AUDIT_PARAMETERS.map(p => { const r = (audit.analysisResults || {})[p.key]; if (!r) return `<tr><td>${p.label} (${p.unit})</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400);text-align:center">—</td></tr>`; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td><td style="${mc(d && d.sd)}">${r.sd ?? '—'}</td><td style="${mc(d && d.rmse)}">${r.rmse ?? '—'}</td><td style="text-align:center">${r.n ?? '—'}</td></tr>`; }).join('')}
+            ${AUDIT_PARAMETERS.map(p => { const r = dqiResults[p.key]; if (!r) return `<tr><td>${p.label} (${p.unit})</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400)">—</td><td style="color:var(--slate-400);text-align:center">—</td></tr>`; const d = r.dqo; const mc = (ok) => d ? dqiCellStyle(ok) : ''; return `<tr><td>${p.label} (${p.unit})</td><td style="${mc(d && d.r2)}">${r.r2 ?? '—'}</td><td style="${mc(d && d.slope)}">${r.slope ?? '—'}</td><td style="${mc(d && d.intercept)}">${r.intercept ?? '—'}</td><td style="${mc(d && d.sd)}">${r.sd ?? '—'}</td><td style="${mc(d && d.rmse)}">${r.rmse ?? '—'}</td><td style="text-align:center">${r.n ?? '—'}</td></tr>`; }).join('')}
            </tbody></table>`
         : '<p style="font-size:13px;color:var(--slate-400)">No analysis results yet.</p>';
 
@@ -10573,6 +10576,22 @@ function rebuildCacheFromSaved(audit) {
     return parsed;
 }
 
+// Single source of truth for an audit's DQI numbers WHEREVER they are displayed
+// (detail table, generated report, DQI overview). Always prefer a live recompute
+// from the saved raw rows — the exact same path the scatter charts use — so a
+// stale or old-axis-convention stored value can never be shown next to a correct
+// graph (this was the "wrong DQIs, right graphs" symptom). Falls back to the
+// stored results only for legacy/Excel-upload audits that have no saved raw rows
+// to recompute from. (rebuildCacheFromSaved also refreshes audit.analysisResults
+// in memory as a side effect, which heals the stale value.)
+function getAuditDisplayResults(audit) {
+    if (audit && audit.analysisChartData && audit.analysisChartData.rows && audit.analysisChartData.rows.length) {
+        const rebuilt = rebuildCacheFromSaved(audit);
+        if (rebuilt && rebuilt.regressionResults) return rebuilt.regressionResults;
+    }
+    return (audit && audit.analysisResults) || {};
+}
+
 function runAllAnalyses(parsed) {
     // Convention: community (local) pod on X, audit pod on Y. This
     // matches how Ayla and the team read these plots — the local
@@ -11313,8 +11332,12 @@ function renderAuditListCard(audit, context, sensorRole) {
 function generateAuditReport(auditId) {
     const audit = audits.find(a => a.id === auditId);
     if (!audit) return;
-    const cached = analysisDataCache[auditId];
-    const results = audit.analysisResults || {};
+    // Charts and the DQI table must read ONE source. Prefer a live recompute from
+    // the saved raw rows (the same numbers the charts plot) so an external report
+    // can never show stale stored DQIs; fall back to stored results only for
+    // legacy/Excel audits that have no saved rows to recompute from.
+    const cached = analysisDataCache[auditId] || ((audit.analysisChartData && audit.analysisChartData.rows && audit.analysisChartData.rows.length) ? rebuildCacheFromSaved(audit) : null);
+    const results = (cached && cached.regressionResults) || audit.analysisResults || {};
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
 
     // Build descriptive sensor labels
@@ -11375,43 +11398,10 @@ function generateAuditReport(auditId) {
         ? `First 24 hours excluded (${cached.trimIndex} of ${cached.allRows.length} rows trimmed) \u2014 regression on ${cached.trimmedRows.length} rows`
         : `Analysis based on ${results[AUDIT_PARAMETERS[0]?.key]?.n || '\u2014'} valid hourly data pairs`;
 
-    // Raw data table
-    let rawDataHtml = '';
-    if (cached) {
-        const paramKeys = Object.keys(PARAM_COLUMN_MAP);
-        const paramLabels = AUDIT_PARAMETERS.reduce((m, p) => { m[p.key] = `${p.labelHtml} (${p.unit})`; return m; }, {});
-        rawDataHtml = `
-            <div class="print-page-break">
-            <div class="section-page-header">
-                <div><div class="sph-title">${escapeHtml(communityName)} Sensor Audit Report</div><div class="sph-sub">${dateRange} &mdash; ${escapeHtml(labelB)} &amp; ${escapeHtml(labelA)}</div></div>
-                <div class="sph-right"><div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div><img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC"></div>
-            </div>
-            <h2 class="section-start-heading">Hourly Data</h2>
-            <p style="font-size:11px;color:#8a6d20;background:#fff8e8;display:inline-block;padding:3px 10px;border-radius:6px;margin-bottom:8px">* = first 24 hours (excluded from regression). PM<sub>10</sub> values &gt; 1000 invalidated.</p>
-            <table style="width:100%;border-collapse:collapse;font-size:9px;font-family:'JetBrains Mono',monospace">
-                <thead><tr style="background:#1B2A4A;color:white">
-                    <th style="padding:4px 6px;text-align:left">Date/Time</th>
-                    ${paramKeys.map(k => `<th style="padding:4px 6px">${escapeHtml(labelA)}<br>${paramLabels[k] || k}</th><th style="padding:4px 6px">${escapeHtml(labelB)}<br>${paramLabels[k] || k}</th>`).join('')}
-                </tr></thead>
-                <tbody>
-                    ${cached.allRows.map((r, i) => {
-                        const isTrimmed = i < cached.trimIndex;
-                        const dateStr = r.timestamp.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit', hour12: false, timeZone: AK_TZ });
-                        return `<tr style="${isTrimmed ? 'color:#6b7280;background:#fffbf0' : (i % 2 === 0 ? '' : 'background:#fafbfc')}">
-                            <td style="padding:3px 6px;border-bottom:1px solid #e2e8f0">${dateStr}${isTrimmed ? ' *' : ''}</td>
-                            ${paramKeys.map(k => {
-                                const va = r.values[k]?.a;
-                                const vb = r.values[k]?.b;
-                                return `<td style="padding:3px 6px;border-bottom:1px solid #e2e8f0;text-align:right">${isNaN(va) ? '\u2014' : va}</td><td style="padding:3px 6px;border-bottom:1px solid #e2e8f0;text-align:right">${isNaN(vb) ? '\u2014' : vb}</td>`;
-                            }).join('')}
-                        </tr>`;
-                    }).join('')}
-                </tbody>
-            </table>
-            <p style="font-size:10px;color:#64748b;margin-top:4px">${cached.allRows.length} total hourly observations</p>
-            </div>
-        `;
-    }
+    // The raw hourly dataset is intentionally NOT included in the generated
+    // report. These reports are sent to external recipients, who get the DQI
+    // summary and the scatter charts \u2014 not the full row-by-row data. (Removed so
+    // the data isn't even embedded-but-hidden in the shared HTML file.)
 
     // Render charts as images using existing in-page Chart.js, then build the HTML file
     const chartImages = {};
@@ -11712,14 +11702,11 @@ function generateAuditReport(auditId) {
         return out;
     })() : ''}
 
-    <div id="report-dataset-section">${rawDataHtml}</div>
-
     <div class="report-footer">
         ADEC \u2014 Sensor Collocation Audit \u2014 ${escapeHtml(communityName)} \u2014 ${dateRange}
     </div>
 
     <div class="no-print print-controls" style="position:fixed;bottom:20px;right:20px;background:white;padding:12px 20px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);border:1px solid #e2e8f0">
-        <label><input type="checkbox" checked onchange="document.getElementById('report-dataset-section').style.display=this.checked?'':'none'"> Include dataset</label>
         <button onclick="window.print()">Print / Save as PDF</button>
     </div>
 </body></html>`;
@@ -11769,7 +11756,7 @@ function _audDqoCellColor(pass, inactive) {
 // Renders the DQI row for one audit's analysisResults. `audit` is the
 // in-memory record. Returns HTML for one table.
 function _renderAuditDqiTable(audit) {
-    const results = audit.analysisResults || {};
+    const results = getAuditDisplayResults(audit);
     if (!Object.keys(results).length) {
         return '<div style="font-size:12px;color:#64748b;font-style:italic">No analysis data uploaded.</div>';
     }
@@ -11941,7 +11928,7 @@ async function exportAuditDqiOverviewHtml() {
         }
 
         const renderDqoTableForPrint = (audit) => {
-            const results = audit.analysisResults || {};
+            const results = getAuditDisplayResults(audit);
             const rows = AUDIT_PARAMETERS.map(p => {
                 const r = results[p.key];
                 if (!r) return `<tr><td>${p.label} (${p.unit})</td><td colspan="6" style="color:#94a3b8;text-align:center;font-style:italic">no data</td></tr>`;
