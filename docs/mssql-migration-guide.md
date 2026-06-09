@@ -132,6 +132,14 @@ These PostgreSQL/Supabase server-side pieces exist (definitions in
   append of a progress note to a ticket/audit/collocation; stamps the note `at`
   time in **America/Anchorage** wall-clock. Keep both the atomicity and the AK-time.
   (`20260423213800_progress_note_ak_time.sql`)
+- **`edit_progress_note(kind, id, at, by, old_text, new_text, contacts)`** and
+  **`delete_progress_note(kind, id, at, by, old_text)`** — race-free single-UPDATE
+  edit/delete of one progress note inside the same JSON array. They locate the
+  target by its `(at, by, text)` identity (not by array index) and rebuild the
+  array server-side, so a concurrent append isn't clobbered. The client falls
+  back to a full-array rewrite if these aren't present, but reproduce them in
+  T-SQL (`OPENJSON` to find the element + `JSON_MODIFY` to rewrite, same approach
+  as append) for the same safety. (`20260608040000_edit_delete_progress_note.sql`)
 - **`send_user_invite`, `delete_auth_user`, `admin_reset_mfa`** — admin-only user
   management. `delete_auth_user` and `admin_reset_mfa` reach into Supabase's
   `auth.users` / `auth.mfa_factors` schema, so they're tied to Supabase Auth and
