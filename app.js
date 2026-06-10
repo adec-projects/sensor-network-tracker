@@ -11576,6 +11576,10 @@ function generateAuditReport(auditId) {
     /* Report footer */
     .report-footer { margin-top: 40px; padding-top: 16px; border-top: 1px solid #e2e8f0; font-size: 11px; color: #94a3b8; text-align: center; }
 
+    /* Running header/footer — table thead/tfoot repeat on every printed page (print only) */
+    .report-page { width: 100%; border-collapse: collapse; }
+    .running-header, .running-footer { display: none; }
+
     /* Print controls (screen only) */
     .print-controls { margin-bottom: 20px; display: flex; align-items: center; gap: 16px; }
     .print-controls button { padding: 10px 24px; font-size: 14px; font-family: 'DM Sans', sans-serif; font-weight: 600; background: #1B2A4A; color: white; border: none; border-radius: 8px; cursor: pointer; }
@@ -11584,22 +11588,36 @@ function generateAuditReport(auditId) {
     .report-section { break-inside: avoid; page-break-inside: avoid; }
 
     @media print {
-        @page { margin: 1in; }
+        /* margin:0 removes the browser-injected date/title/URL at the page edges */
+        @page { margin: 0; }
         body { margin: 0; max-width: none; padding: 0; }
         .no-print { display: none !important; }
         .print-only { display: block; }
 
-        /* Section page headers — shown in print at each forced page break */
-        .section-page-header {
+        /* Running header/footer repeat on EVERY printed page via table thead/tfoot */
+        .report-page > thead { display: table-header-group; }
+        .report-page > tfoot { display: table-footer-group; }
+        .running-header {
             display: flex; align-items: center; justify-content: space-between;
-            padding: 0 0 8px 0; margin-bottom: 20px;
-            border-bottom: 2px solid #C9A84C;
+            height: 0.6in; padding: 0 0.6in; border-bottom: 2px solid #C9A84C; background: #fff;
         }
-        .section-page-header .sph-title { font-size: 11px; font-weight: 700; color: #1B2A4A; letter-spacing: 0.2px; }
-        .section-page-header .sph-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
-        .section-page-header .sph-right { display: flex; align-items: center; gap: 10px; }
-        .section-page-header .sph-dept { font-size: 8px; color: #64748b; text-align: right; line-height: 1.5; }
-        .section-page-header .sph-logo { height: 22px; width: auto; }
+        .running-header .sph-title { font-size: 11px; font-weight: 700; color: #1B2A4A; letter-spacing: 0.2px; }
+        .running-header .sph-sub { font-size: 9px; color: #64748b; margin-top: 2px; }
+        .running-header .sph-right { display: flex; align-items: center; gap: 10px; }
+        .running-header .sph-dept { font-size: 8px; color: #64748b; text-align: right; line-height: 1.5; }
+        .running-header .sph-logo { height: 26px; width: auto; }
+        .running-footer {
+            display: flex; align-items: center; justify-content: center;
+            height: 0.5in; padding: 0 0.6in; font-size: 9px; color: #94a3b8;
+            border-top: 1px solid #e2e8f0; background: #fff;
+        }
+        .report-body { padding: 0.16in 0.6in 0; }
+        /* Page 1: pull the hero up to cover the running header band so page 1 shows only the hero */
+        .report-body > .report-header-bar:first-child {
+            margin: -0.78in -0.6in 28px -0.6in; background: #fff; position: relative; z-index: 3;
+            padding: 0.3in 0.6in 18px 0.6in;
+        }
+        .report-footer { display: none; }
 
         /* Forced page breaks before sections that start new pages */
         .print-page-break { break-before: page; page-break-before: always; }
@@ -11629,6 +11647,23 @@ function generateAuditReport(auditId) {
     }
 </style>
 </head><body>
+<table class="report-page">
+<thead><tr><td>
+    <div class="running-header">
+        <div>
+            <div class="sph-title">${escapeHtml(communityName)} Sensor Audit Report</div>
+            <div class="sph-sub">${dateRange}${labelB || labelA ? ' — ' + escapeHtml(labelB) + ' & ' + escapeHtml(labelA) : ''}</div>
+        </div>
+        <div class="sph-right">
+            <div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div>
+            <img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC" onerror="this.style.display='none'">
+        </div>
+    </div>
+</td></tr></thead>
+<tfoot><tr><td>
+    <div class="running-footer">ADEC — Sensor Collocation Audit — ${escapeHtml(communityName)} — ${dateRange}</div>
+</td></tr></tfoot>
+<tbody><tr><td class="report-body">
 
     <div class="report-header-bar">
         <div>
@@ -11676,16 +11711,11 @@ function generateAuditReport(auditId) {
 
     ${tsHtml ? `
     <div class="print-page-break">
-        <div class="section-page-header">
-            <div><div class="sph-title">${escapeHtml(communityName)} Sensor Audit Report</div><div class="sph-sub">${dateRange} &mdash; ${escapeHtml(labelB)} &amp; ${escapeHtml(labelA)}</div></div>
-            <div class="sph-right"><div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div><img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC" onerror="this.style.display='none'"></div>
-        </div>
         <h2 class="section-start-heading">PM Timeseries</h2>
         <div class="chart-grid" style="grid-template-columns:1fr">${tsHtml}</div>
     </div>` : ''}
 
     ${scatterCards.length > 0 ? (() => {
-        const sphHeader = '<div class="section-page-header"><div><div class="sph-title">' + escapeHtml(communityName) + ' Sensor Audit Report</div><div class="sph-sub">' + dateRange + ' &mdash; ' + escapeHtml(labelB) + ' &amp; ' + escapeHtml(labelA) + '</div></div><div class="sph-right"><div class="sph-dept"><div>ADEC Division of Air Quality</div><div>Air Monitoring &amp; Quality Assurance</div></div><img class="sph-logo" src="https://dec.alaska.gov/media/1029/dec-logo.png" alt="ADEC"></div></div>';
         let out = '';
         for (let i = 0; i < scatterCards.length; i += 4) {
             if (i === 0) {
@@ -11693,7 +11723,6 @@ function generateAuditReport(auditId) {
                 out += '<div class="chart-grid">' + scatterCards.slice(i, i + 4).join('') + '</div>';
             } else {
                 out += '<div class="print-page-break">';
-                out += sphHeader;
                 out += '<h2 class="print-only section-start-heading">Regression Plots (continued)</h2>';
                 out += '<div class="chart-grid">' + scatterCards.slice(i, i + 4).join('') + '</div>';
                 out += '</div>';
@@ -11705,6 +11734,9 @@ function generateAuditReport(auditId) {
     <div class="report-footer">
         ADEC \u2014 Sensor Collocation Audit \u2014 ${escapeHtml(communityName)} \u2014 ${dateRange}
     </div>
+
+</td></tr></tbody>
+</table>
 
     <div class="no-print print-controls" style="position:fixed;bottom:20px;right:20px;background:white;padding:12px 20px;border-radius:10px;box-shadow:0 4px 20px rgba(0,0,0,0.15);border:1px solid #e2e8f0">
         <button onclick="window.print()">Print / Save as PDF</button>
