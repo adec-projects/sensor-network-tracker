@@ -1,0 +1,36 @@
+name: Supabase keep-alive
+
+# Supabase pauses free-tier projects after 7 days with no API activity.
+# This job sends a tiny, harmless read request to the project on a schedule
+# so it always registers as "active" and never gets paused.
+# It does NOT change the app or the data — it's a read that returns nothing
+# (all tables are locked to logged-in users; the request still counts as activity).
+
+on:
+  schedule:
+    # Every 2 days at 12:00 UTC. Well inside the 7-day window even if GitHub
+    # skips or delays a run.
+    - cron: '0 12 */2 * *'
+  workflow_dispatch:   # lets you trigger it manually from the Actions tab
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping Supabase REST API
+        env:
+          # The anon key is public by design (it's already in supabase-client.js);
+          # RLS protects the data, so it's safe to keep here.
+          SUPABASE_URL: 'https://uejryzioxogquflijgyf.supabase.co'
+          SUPABASE_ANON_KEY: 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM'
+        run: |
+          code=$(curl -s -o /dev/null -w "%{http_code}" \
+            "$SUPABASE_URL/rest/v1/sensors?select=id&limit=1" \
+            -H "apikey: $SUPABASE_ANON_KEY" \
+            -H "Authorization: Bearer $SUPABASE_ANON_KEY")
+          echo "Supabase responded: HTTP $code"
+          if [ "$code" != "200" ]; then
+            echo "Unexpected response — keep-alive ping may have failed."
+            exit 1
+          fi
+          echo "Keep-alive ping OK."
