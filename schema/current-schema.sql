@@ -268,6 +268,7 @@ CREATE TABLE public.audits (
     analysis_file_name   text DEFAULT '',
     analysis_upload_date timestamptz,
     analysis_uploaded_by text DEFAULT '',
+    analysis_notes       text NOT NULL DEFAULT '', -- "Proceed Anyway" explanation shown in reports
     source               text DEFAULT 'manual',
     created_by           uuid REFERENCES public.profiles(id),
     created_at           timestamptz DEFAULT now(),
