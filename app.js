@@ -752,8 +752,12 @@ async function saveCommunityDetailsBtn(id) {
     }
 }
 function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
-function persistNote(n) { return db.insertNote(n).then(saved => { if (saved && saved.id) n.id = saved.id; }).catch(handleSaveError); }
-function persistComm(c) { return db.insertComm(c).catch(handleSaveError); }
+// After the insert returns the real DB id, re-render so any timeline row already
+// showing this record swaps its temporary client id for the real one. Without the
+// re-render the DOM keeps the temp id and the record's first edit/delete/follow-up
+// silently no-ops until a page refresh.
+function persistNote(n) { return db.insertNote(n).then(saved => { if (saved && saved.id) { n.id = saved.id; refreshCurrentView(); } }).catch(handleSaveError); }
+function persistComm(c) { return db.insertComm(c).then(saved => { if (saved && saved.id) { c.id = saved.id; refreshCurrentView(); } }).catch(handleSaveError); }
 function persistCommunityTags(id, tags) { db.setCommunityTags(id, tags).catch(handleSaveError); }
 function persistCommunity(c) { db.insertCommunity(c).catch(handleSaveError); }
 function persistServiceTicketUpdate(id, updates) { db.updateServiceTicket(id, updates).catch(handleSaveError); }
@@ -781,9 +785,11 @@ function createNote(type, text, tags, additionalInfo) {
         taggedContacts: tags?.contacts || [],
     };
     notes.push(note);
-    // Persist and update in-memory ID with Supabase-generated UUID
+    // Persist and update in-memory ID with Supabase-generated UUID, then re-render
+    // so the timeline row swaps its temp id for the real one (otherwise the note's
+    // first edit/delete/follow-up silently no-ops until a page refresh).
     db.insertNote(note).then(saved => {
-        if (saved?.id) note.id = saved.id;
+        if (saved?.id) { note.id = saved.id; refreshCurrentView(); }
     }).catch(handleSaveError);
     return note;
 }
@@ -2519,6 +2525,8 @@ async function saveSensor(e) {
         sensorDbSnapshots[data.id] = snapshotSensorFields(data);
         closeModal('modal-add-sensor'); showSuccessToast('Sensor saved');
         renderSensors();
+        buildSensorSidebar();               // refresh left-nav status/tag counts
+        if (currentCommunity) showCommunityView(currentCommunity); // show it in an open community
     }
 }
 
@@ -3171,13 +3179,15 @@ function recordSensorMove(sensorId, fromCommunityId, toCommunityId, dateStr) {
     // Close any open stay for this sensor at the community it left.
     if (fromCommunityId) {
         const open = installHistory.find(r => r.sensorId === sensorId && r.communityId === fromCommunityId && !r.removedDate);
-        if (open) { open.removedDate = day; db.updateInstallRecord(open.id, { removed_date: day }).catch(() => {}); }
+        if (open) { open.removedDate = day; db.updateInstallRecord(open.id, { removed_date: day }).catch(handleSaveError); }
     }
     // Open a new stay at the destination (skip lab storage — not an install).
     if (toCommunityId && !LAB_COMMUNITY_IDS.has(toCommunityId)) {
         const rec = { communityId: toCommunityId, sensorId, installedDate: day, removedDate: '' };
         installHistory.unshift(rec);
-        db.insertInstallRecord(rec).then(saved => { if (saved && saved.id) rec.id = saved.id; }).catch(() => {});
+        // Track the pending insert so a fast revert can wait for the real id
+        // instead of leaking the DB row (see revertInstallForMove).
+        rec._pending = db.insertInstallRecord(rec).then(saved => { if (saved && saved.id) rec.id = saved.id; }).catch(handleSaveError);
         const s = findSensor(sensorId);
         if (s) { s.dateInstalled = day; persistSensor(s); }   // auto-update install date
     }
@@ -3190,7 +3200,7 @@ function closeOpenStays(sensorId, dateStr) {
     const day = (dateStr || nowDatetime()).split('T')[0];
     installHistory.filter(r => r.sensorId === sensorId && !r.removedDate).forEach(r => {
         r.removedDate = day;
-        if (r.id) db.updateInstallRecord(r.id, { removed_date: day }).catch(() => {});
+        if (r.id) db.updateInstallRecord(r.id, { removed_date: day }).catch(handleSaveError);
     });
 }
 
@@ -3208,7 +3218,11 @@ function revertInstallForMove(sensorId, fromCommunityId, toCommunityId, moveDay)
         if (idx >= 0) {
             const rec = installHistory[idx];
             installHistory.splice(idx, 1);
-            if (rec.id) db.deleteInstallRecord(rec.id).catch(() => {});
+            // The insert that opened this stay may still be in flight (no id yet).
+            // Wait for it so we delete the real row instead of leaking a phantom
+            // "installed" stay that reappears on refresh.
+            if (rec.id) db.deleteInstallRecord(rec.id).catch(handleSaveError);
+            else if (rec._pending) rec._pending.then(() => { if (rec.id) db.deleteInstallRecord(rec.id).catch(handleSaveError); });
         }
     }
     // Reopen the origin stay the move closed (removedDate set to the move day).
@@ -3218,7 +3232,7 @@ function revertInstallForMove(sensorId, fromCommunityId, toCommunityId, moveDay)
             && (!day || r.removedDate === day));
         if (closed) {
             closed.removedDate = '';
-            if (closed.id) db.updateInstallRecord(closed.id, { removed_date: null }).catch(() => {});
+            if (closed.id) db.updateInstallRecord(closed.id, { removed_date: null }).catch(handleSaveError);
         }
     }
 }
@@ -3714,8 +3728,11 @@ async function doSaveContact(data, editId, isActive) {
             const saved = await db.upsertContact(data);
             if (saved?.id) data.id = saved.id;
         } catch (err) {
+            // Don't fabricate a temp id and fall through — that showed a false
+            // "Contact saved" toast, left a ghost contact that vanished on refresh,
+            // and tagged the "added" note to a contact id that never existed.
             handleSaveError(err);
-            data.id = generateId('c'); // fallback for offline
+            return;
         }
         contacts.push(data);
         trackRecent('contacts', data.id, 'edited');
@@ -4525,7 +4542,7 @@ function syncMoveRowTags(row) {
     });
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
-function saveLogAsComm(commType) {
+async function saveLogAsComm(commType) {
     const text = document.getElementById('note-text-input').value.trim();
     if (!text) { document.getElementById('note-text-input').focus(); return; }
     commType = commType || getActiveLogChips().find(c => c.dataset.kind === 'comm')?.dataset.commtype || 'Phone Call';
@@ -4542,8 +4559,16 @@ function saveLogAsComm(commType) {
         createdBy: getCurrentUserName(), createdById: currentUserId,
         community: communityIds[0] || null, taggedContacts, taggedCommunities: communityIds,
     };
+    // Insert first (mirrors saveComm): get the real DB id before the comm enters
+    // the shared array / timeline, and don't claim success on a failed write.
+    try {
+        const saved = await db.insertComm(comm);
+        if (saved?.id) comm.id = saved.id;
+    } catch (err) {
+        handleSaveError(err);
+        return;
+    }
     comms.push(comm);
-    db.insertComm(comm).then(saved => { if (saved?.id) comm.id = saved.id; }).catch(handleSaveError);
     closeModal('modal-add-note');
     showSuccessToast('Communication logged');
     refreshCurrentView();
@@ -4767,21 +4792,27 @@ async function saveNote(e) {
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
     };
-    notes.push(note);
     closeModal('modal-add-note');
-    // Any status/move actions above already persisted to their own rows, so the
-    // note is shown optimistically. Await its insert to report the REAL outcome
-    // instead of a blanket "added" toast that could mask a failed save.
+    // Insert FIRST, then push into the shared `notes` array (mirrors saveComm).
+    // Pushing before the insert resolved let the timeline render with the note's
+    // temporary client id baked into the DOM (e.g. saveTimelineFollowUp('n-...')).
+    // Once the insert returned the real DB UUID and we reassigned note.id, that
+    // stale button matched nothing, so adding a follow-up note to a just-logged
+    // event silently did nothing until a page refresh. Awaiting the id first
+    // guarantees every render carries the real id, and a failed insert no longer
+    // leaves a phantom note that vanishes on refresh.
     try {
         const saved = await db.insertNote(note);
         if (saved?.id) note.id = saved.id;
-        let toastMsg = 'Note added';
-        if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
-        if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
-        showSuccessToast(toastMsg);
     } catch (err) {
         handleSaveError(err);
+        return;
     }
+    notes.push(note);
+    let toastMsg = 'Note added';
+    if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
+    if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
+    showSuccessToast(toastMsg);
     refreshCurrentView();
 }
 
@@ -5164,7 +5195,12 @@ async function saveTimelineFollowUp(noteId) {
     if (!text) return;
 
     const note = notes.find(n => n.id === noteId);
-    if (!note) return;
+    if (!note) {
+        // The parent record isn't in memory under this id — almost always because
+        // it's still saving. Tell the user instead of silently doing nothing.
+        showAlert('Still saving', 'This entry is still being saved. Give it a moment, then add your note again.');
+        return;
+    }
 
     const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     const userName = currentUser || 'Unknown';
@@ -7477,14 +7513,13 @@ async function saveGlobalCollocation(e) {
         conductedBy: conductedBy,
     });
 
-    createNote('Collocation', noteText, {
-        sensors: taggedSensors,
-        communities: [communityId],
-    }, structuredInfo);
-
-    // Create collocation record
+    // Create the collocation record FIRST. If it fails, bail out before writing
+    // the history note, flipping sensor statuses, or claiming success — otherwise
+    // a failed save left every tagged sensor stuck showing "Collocation" with no
+    // record to ever clear it, plus a misleading "Collocation logged" toast.
+    let newColloc;
     try {
-        const newColloc = await db.insertCollocation({
+        newColloc = await db.insertCollocation({
             locationId: communityId,
             status: 'In Progress',
             startDate: startDate,
@@ -7494,11 +7529,17 @@ async function saveGlobalCollocation(e) {
             progressNotes: extraNotes ? [{ text: extraNotes, by: getCurrentUserName(), at: nowDatetime() }] : [],
             createdById: currentUserId,
         });
-        collocations.push(newColloc);
-        updateSidebarCollocationCount();
     } catch (err) {
-        console.error('Insert collocation error:', err);
+        handleSaveError(err);
+        return;
     }
+    collocations.push(newColloc);
+    updateSidebarCollocationCount();
+
+    createNote('Collocation', noteText, {
+        sensors: taggedSensors,
+        communities: [communityId],
+    }, structuredInfo);
 
     // Add Collocation status to each tagged sensor
     taggedSensors.forEach(sId => {

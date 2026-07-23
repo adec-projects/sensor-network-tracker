@@ -897,9 +897,12 @@ const db = {
         const { data, error } = await supa.rpc('edit_progress_note', {
             record_kind: recordKind,
             record_id: recordId,
-            note_at: noteAt || null,
-            note_by: noteBy || null,
-            old_text: oldText || null,
+            // Match the stored value exactly. Legacy/imported notes (and appends by
+            // a user with no profile name) store at/by as '' — coercing '' to null
+            // here made the identity match fail, so their edits silently errored.
+            note_at: noteAt ?? '',
+            note_by: noteBy ?? '',
+            old_text: oldText ?? '',
             new_text: newText,
             tagged_contacts: (taggedContacts || []).map(String),
         });
@@ -911,9 +914,10 @@ const db = {
         const { data, error } = await supa.rpc('delete_progress_note', {
             record_kind: recordKind,
             record_id: recordId,
-            note_at: noteAt || null,
-            note_by: noteBy || null,
-            old_text: oldText || null,
+            // See editProgressNote: match the stored '' rather than coercing to null.
+            note_at: noteAt ?? '',
+            note_by: noteBy ?? '',
+            old_text: oldText ?? '',
         });
         if (error) throw error;
         return data;
