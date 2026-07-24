@@ -4863,8 +4863,10 @@ async function saveComm(e) {
         existing.commType = commType;
         existing.community = communityId || existing.community;
         existing.taggedContacts = taggedContacts;
-        if (communityId) existing.taggedCommunities = [communityId];
-        const taggedCommunities = existing.taggedCommunities || (communityId ? [communityId] : []);
+        // Set the community tag from the current selection unconditionally — if the
+        // community was cleared, drop the tag instead of leaving the old one behind.
+        existing.taggedCommunities = communityId ? [communityId] : [];
+        const taggedCommunities = existing.taggedCommunities;
         Promise.all([
             db.updateComm(editId, { text, date: commDate, commType, community: communityId || null }),
             db.replaceCommTags(editId, taggedCommunities, taggedContacts),
@@ -6530,7 +6532,10 @@ function editProfileName(el) {
         if (newName !== current) {
             const session = await db.getSession();
             if (session?.user?.id) {
-                await supa.from('profiles').update({ name: newName }).eq('id', session.user.id);
+                if (!window.SANDBOX_MODE) {
+                    const { error } = await supa.from('profiles').update({ name: newName }).eq('id', session.user.id);
+                    if (error) { showAlert('Error', 'Could not save your name: ' + error.message); renderSettings(); return; }
+                }
                 currentUser = newName;
                 document.querySelector('#sidebar-user .user-name').textContent = newName;
             }
@@ -6737,9 +6742,10 @@ async function sendUserInvite(event) {
 async function archiveUser(id) {
     if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can archive users.'); return; }
     showConfirm('Archive User', 'Archive this user? They will no longer be able to sign in, but their history and edits will be preserved. You can reactivate them later.', async () => {
-        const { error } = await supa.from('allowed_emails').update({ status: 'archived' }).eq('id', id);
-        if (error) { showAlert('Error', error.message); return; }
-
+        if (!window.SANDBOX_MODE) {
+            const { error } = await supa.from('allowed_emails').update({ status: 'archived' }).eq('id', id);
+            if (error) { showAlert('Error', error.message); return; }
+        }
         const session = await db.getSession();
         await renderAllowedUsers(session?.user?.email || '');
     });
@@ -6747,9 +6753,10 @@ async function archiveUser(id) {
 
 async function reactivateUser(id) {
     if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can reactivate users.'); return; }
-    const { error } = await supa.from('allowed_emails').update({ status: 'active' }).eq('id', id);
-    if (error) { showAlert('Error', error.message); return; }
-
+    if (!window.SANDBOX_MODE) {
+        const { error } = await supa.from('allowed_emails').update({ status: 'active' }).eq('id', id);
+        if (error) { showAlert('Error', error.message); return; }
+    }
     const session = await db.getSession();
     await renderAllowedUsers(session?.user?.email || '');
 }
@@ -6770,8 +6777,10 @@ async function permanentlyDeleteUser(id, email) {
                 }
 
                 // Delete auth user, profile, and allowed_emails entry via RPC
-                await supa.rpc('delete_auth_user', { user_email: email });
-                await supa.from('allowed_emails').delete().eq('id', id);
+                if (!window.SANDBOX_MODE) {
+                    await supa.rpc('delete_auth_user', { user_email: email });
+                    await supa.from('allowed_emails').delete().eq('id', id);
+                }
 
                 const session = await db.getSession();
                 await renderAllowedUsers(session?.user?.email || '');
@@ -6784,13 +6793,17 @@ async function permanentlyDeleteUser(id, email) {
 
 async function changeUserRole(id, newRole) {
     if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can change roles.'); return; }
-    const { error } = await supa.from('allowed_emails').update({ role: newRole }).eq('id', id);
-    if (error) { showAlert('Error', error.message); return; }
+    if (!window.SANDBOX_MODE) {
+        const { error } = await supa.from('allowed_emails').update({ role: newRole }).eq('id', id);
+        if (error) { showAlert('Error', error.message); return; }
 
-    // Also update the profile if the user has one
-    const { data: emailRow } = await supa.from('allowed_emails').select('email').eq('id', id).maybeSingle();
-    if (emailRow) {
-        await supa.from('profiles').update({ role: newRole }).eq('email', emailRow.email);
+        // Also update the profile if the user has one (check this write too, so a
+        // partial failure doesn't leave allowed_emails and profiles out of sync).
+        const { data: emailRow } = await supa.from('allowed_emails').select('email').eq('id', id).maybeSingle();
+        if (emailRow) {
+            const { error: pErr } = await supa.from('profiles').update({ role: newRole }).eq('email', emailRow.email);
+            if (pErr) { showAlert('Error', pErr.message); return; }
+        }
     }
 
     const session = await db.getSession();
@@ -6799,8 +6812,10 @@ async function changeUserRole(id, newRole) {
 
 async function toggleUserGuideEditor(id, enabled) {
     if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can change permissions.'); return; }
-    const { error } = await supa.from('allowed_emails').update({ can_edit_user_guide: enabled }).eq('id', id);
-    if (error) { showAlert('Error', error.message); return; }
+    if (!window.SANDBOX_MODE) {
+        const { error } = await supa.from('allowed_emails').update({ can_edit_user_guide: enabled }).eq('id', id);
+        if (error) { showAlert('Error', error.message); return; }
+    }
 
     // If you just toggled your own flag, refresh the in-memory value so the
     // Edit button on the User Guide view appears/disappears without a reload.
@@ -7902,36 +7917,40 @@ function confirmDeleteCommunity(communityId) {
     warning += '\n\nThis cannot be undone.';
 
     showConfirm('Delete Community', warning, async () => {
+        // Delete from the DB FIRST (handles all FK cleanup). Only if it succeeds
+        // do we touch local state — otherwise a failed delete used to leave the
+        // community gone from the screen with its contacts/sensors already
+        // unassigned and no way to undo.
         try {
-            // Unassign contacts — remove just this community from their set,
-            // and recompute the primary from whatever remains.
-            commContacts.forEach(c => {
-                c.communities = (c.communities || []).filter(id => id !== communityId);
-                c.community = c.communities[0] || '';
-                persistContact(c);
-            });
-            // Unassign sensors
-            commSensors.forEach(s => { s.community = ''; persistSensor(s); });
-            // Detach child communities (make them standalone)
-            const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
-            children.forEach(child => { delete communityParents[child.id]; });
-            // Remove from COMMUNITIES array
-            const idx = COMMUNITIES.findIndex(c => c.id === communityId);
-            if (idx >= 0) COMMUNITIES.splice(idx, 1);
-            delete communityNameMap[communityId];
-            // Remove from deactivated list
-            deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
-            // Delete from DB (handles all FK cleanup)
             await db.deleteCommunity(communityId);
-            // Close any open tabs for this community
-            openTabs = openTabs.filter(t => t.id !== getTabId('community', communityId));
-            renderOpenTabs();
-            showSuccessToast(`"${communityName}" deleted`);
-            showView('communities');
         } catch (err) {
             console.error('Delete community error:', err);
             showAlert('Error', 'Failed to delete community: ' + err.message);
+            return;
         }
+        // Unassign contacts — remove just this community from their set,
+        // and recompute the primary from whatever remains.
+        commContacts.forEach(c => {
+            c.communities = (c.communities || []).filter(id => id !== communityId);
+            c.community = c.communities[0] || '';
+            persistContact(c);
+        });
+        // Unassign sensors
+        commSensors.forEach(s => { s.community = ''; persistSensor(s); });
+        // Detach child communities (make them standalone)
+        const children = COMMUNITIES.filter(c => communityParents[c.id] === communityId);
+        children.forEach(child => { delete communityParents[child.id]; });
+        // Remove from COMMUNITIES array
+        const idx = COMMUNITIES.findIndex(c => c.id === communityId);
+        if (idx >= 0) COMMUNITIES.splice(idx, 1);
+        delete communityNameMap[communityId];
+        // Remove from deactivated list
+        deactivatedCommunities = deactivatedCommunities.filter(id => id !== communityId);
+        // Close any open tabs for this community
+        openTabs = openTabs.filter(t => t.id !== getTabId('community', communityId));
+        renderOpenTabs();
+        showSuccessToast(`"${communityName}" deleted`);
+        showView('communities');
     }, { danger: true });
 }
 
@@ -9140,8 +9159,10 @@ async function createAuditFromExcel() {
     try {
         const safe = s.file.name.replace(/[^\w.\-]+/g, '_');
         const path = `${communityId}/audit_${Date.now()}_${safe}`;
-        const up = await supa.storage.from('community-files').upload(path, s.file, { upsert: false });
-        if (up.error) throw up.error;
+        if (!window.SANDBOX_MODE) {   // storage upload bypasses the db.* sandbox shim
+            const up = await supa.storage.from('community-files').upload(path, s.file, { upsert: false });
+            if (up.error) throw up.error;
+        }
         msg.textContent = 'Saving audit…';
         const saved = await db.insertAudit({
             auditPodId: apod || null, communityPodId: cpod || null, communityId,
@@ -12158,8 +12179,10 @@ async function loadAuditPhotoUrls(auditId, communityId, files) {
 async function deleteAuditPhoto(communityId, fileId, storagePath, auditId) {
     showConfirm('Delete Photo', 'Delete this photo? This cannot be undone.', async () => {
         try {
-            await supa.storage.from('community-files').remove([storagePath]);
-            await supa.from('community_files').delete().eq('id', fileId);
+            if (!window.SANDBOX_MODE) {
+                await supa.storage.from('community-files').remove([storagePath]);
+                await supa.from('community_files').delete().eq('id', fileId);
+            }
             const arr = communityFiles[communityId];
             if (arr) {
                 const idx = arr.findIndex(f => f.id === fileId);
@@ -12213,6 +12236,17 @@ async function uploadAuditPhotos(auditId, communityId, files) {
             grid.appendChild(thumb);
         }
         pending.push({ file, pendingId, previewUrl });
+    }
+
+    // Sandbox/testing mode: these writes bypass the db.* no-op shim, so skip the
+    // real upload. Leave the preview thumbs visible so the UI still behaves.
+    if (window.SANDBOX_MODE) {
+        pending.forEach(({ pendingId }) => {
+            const t = grid?.querySelector(`[data-pending-id="${pendingId}"]`);
+            if (t) t.classList.remove('is-uploading');
+        });
+        showSuccessToast('Sandbox: photos not saved');
+        return;
     }
 
     let anyFailed = false;
