@@ -2248,7 +2248,7 @@ function renderSensors() {
         const dataCells = cols.map(col => renderSensorCell(s, col)).join('');
         const actions = setupMode
             ? `<td><button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button></td>`
-            : `<td><button class="btn btn-sm" onclick="openEditSensorModal('${s.id}')">Edit</button> <button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button></td>`;
+            : `<td><button class="btn btn-sm" onclick="openNewLog('sensor', '${s.id}')">+ Log</button></td>`;
         return `<tr>${idCell}${dataCells}${actions}</tr>`;
     }).join('') || `<tr><td colspan="${totalCols}" class="empty-state">No sensors found.</td></tr>`;
 
@@ -2828,10 +2828,10 @@ function showSensorView(sensorId) {
         const d = s.details || '';
         document.getElementById('sensor-info-card').innerHTML = `
             ${(lastEdited || s.active === false) ? `<div class="info-item" style="grid-column:1/-1;text-align:right;font-size:11px;color:var(--slate-400);margin-bottom:-6px">${lastEdited || ''}${s.active === false ? `${lastEdited ? ' · ' : ''}<span style="color:var(--aurora-rose);font-weight:600">RETIRED</span>` : ''}</div>` : ''}
-            <div class="info-item"><label>Type</label><p class="editable-field" onclick="inlineEditSensorType('${s.id}')">${escapeHtml(s.type)}</p></div>
+            <div class="info-item"><label>Type</label><p title="Change type with + New Log">${escapeHtml(s.type)}</p></div>
             <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
             <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : escapeHtml(getCommunityName(s.community))}</p></div>
-            <div class="info-item"><label>Address/Coordinates</label><p class="editable-field" onclick="inlineEditSensor('${s.id}', 'location')">${s.location ? escapeHtml(s.location) : '<span class="field-placeholder">Address or GPS coordinates</span>'}</p></div>
+            <div class="info-item"><label>Address/Coordinates</label><p title="Change location with + New Log">${s.location ? escapeHtml(s.location) : '<span class="field-placeholder">Set with + New Log</span>'}</p></div>
 
             <div class="info-item soa-purchase-item">
                 <div class="soa-purchase-pair">
@@ -3074,8 +3074,7 @@ function showCommunityView(communityId) {
             <td>${s.soaTagId ? escapeHtml(s.soaTagId) : '—'}</td>
             <td>${s.datePurchased || '—'}</td>
             <td>
-                <button class="btn btn-sm" onclick="openEditSensorModal('${s.id}')">Edit</button>
-                <button class="btn btn-sm" onclick="openMoveSensorModal('${s.id}')">Move</button>
+                <button class="btn btn-sm" onclick="openNewLog('sensor', '${s.id}')">+ Log</button>
             </td>
         </tr>`).join('');
     }
