@@ -779,6 +779,19 @@
       #modal-add-note .log-preview .pv-text{font-size:12.5px;white-space:pre-wrap;padding:4px 12px 12px}
       #modal-add-note .log-preview .pv-text .auto{color:#5a6b82}
       #modal-add-note .log-preview .pv-text .free{color:var(--ink,#1e293b);font-weight:500}
+      #modal-add-note .log-preview .pv-tags{padding:0 12px 6px;font-size:11px;color:var(--slate-500,#64748b)}
+      #modal-add-note .log-preview .pv-tags:empty{display:none}
+      #modal-add-note .log-preview .pv-tag{display:inline-block;border-radius:20px;padding:2px 9px;margin:2px 3px 0 0;font-size:11px}
+      #modal-add-note .log-preview .pv-tag.s{background:#eef2fb;color:var(--navy-700,#1B2A4A);font-family:var(--font-mono,'JetBrains Mono',monospace)}
+      #modal-add-note .log-preview .pv-tag.c{background:var(--gold-soft,#fbf3dc);color:#7a5f18}
+      #modal-add-note .log-preview .pv-note{padding:9px 12px 12px;font-size:11px;color:var(--slate-500,#64748b);border-top:1px solid var(--slate-100,#f1f5f9)}
+      #modal-add-note .log-preview .pv-note b{color:var(--navy-700,#1B2A4A)}
+      @media (max-width:600px){
+        #modal-add-note .logrow-form{grid-template-columns:1fr;gap:8px}
+        #modal-add-note .log-applyall .aa-grid{grid-template-columns:1fr}
+        #modal-add-note .logrow-movewrap{flex-wrap:wrap}
+        #modal-add-note .log-addbar{flex-direction:column;align-items:stretch}
+      }
     </style>
     <div id="modal-add-note" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content">
@@ -873,6 +886,8 @@
                     <div class="ph"><span class="pill">1 NOTE</span><span class="lbl">Live preview</span></div>
                     <div class="pv-type" id="log-pv-type">General</div>
                     <div class="pv-text" id="log-pv-text"></div>
+                    <div class="pv-tags" id="log-pv-tags"></div>
+                    <div class="pv-note">Everything above becomes <b>one note</b>, tagged to every sensor and community involved — so it shows up in each of their histories, with no duplicate &ldquo;add note&rdquo; pop-ups.</div>
                 </div>
 
                 <div class="modal-footer">

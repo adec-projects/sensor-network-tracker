@@ -4517,7 +4517,7 @@ function logSummary(r) {
 function logRowCardHTML(r) {
     const s = findSensor(r.sensorId);
     const roleTag = r.role ? `<span class="logrow-role">${escapeHtml(r.role)}</span>` : '';
-    const head = `<div class="logrow-top" onclick="logToggleRow('${r.uid}')">
+    const head = `<div class="logrow-top" role="button" tabindex="0" aria-expanded="${r.open ? 'true' : 'false'}" onclick="logToggleRow('${r.uid}')" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===event.currentTarget){event.preventDefault();logToggleRow('${r.uid}')}">
         <span class="logrow-caret">${r.open ? '▾' : '▸'}</span>
         <span class="logrow-id">${escapeHtml(r.sensorId || 'New sensor row')}</span>${roleTag}
         <span class="logrow-sum" id="logsum-${r.uid}">${logSummary(r)}</span>
@@ -4591,15 +4591,16 @@ function logAddReplacement(uid) {
     if (!r.moveTo) { const lab = logDefaultLab(); if (lab) r.moveTo = lab; }
     logRows.splice(logRowIndex(uid) + 1, 0, logNewRow({ role: 'Replacement sensor', statuses: new Set(['Online']), type: 'Community Pod', moveTo: community }));
     logRenderAll();
+    showSuccessToast('Added a replacement row. The outgoing (local) pod is set to return to the lab — pick the incoming pod for the new "Replacement sensor" row.');
 }
 function logPullSite(cid) {
     if (!cid) return;
     const here = sensors.filter(s => s.community === cid && !logRows.some(r => r.sensorId === s.id));
     if (!here.length) { showAlert('No pods to add', 'No sensors at that site (or they’re already in this log).'); return; }
     const lab = logDefaultLab();
-    here.forEach(s => logRows.push(logNewRow({ sensorId: s.id, statuses: new Set(['Offline', 'Lab Storage']), moveTo: lab, type: 'Not Assigned', open: false })));
+    here.forEach((s, i) => logRows.push(logNewRow({ sensorId: s.id, statuses: new Set(['Offline', 'Lab Storage']), moveTo: lab, type: 'Not Assigned', open: i === 0 })));
     logRenderAll();
-    showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)}`);
+    showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)} — each staged to go Offline + Lab Storage and return to the lab. Expand any row to adjust before saving.`);
 }
 function logToggleApplyAll() { const a = document.getElementById('log-applyall'); if (a) a.style.display = a.style.display === 'none' ? 'block' : 'none'; }
 function logApplyToAll() {
@@ -4661,6 +4662,13 @@ function logRenderPreview() {
     c.lines.forEach(l => parts.push(`<span class="auto">${escapeHtml(l)}</span>`));
     const pv = document.getElementById('log-pv-text');
     if (pv) pv.innerHTML = parts.length ? parts.join('\n') : '<span style="color:#94a3b8">Your note will appear here as you make changes…</span>';
+    const pvTags = document.getElementById('log-pv-tags');
+    if (pvTags) {
+        const commIds = [...c.commSet];
+        const tagHTML = c.sensorTags.map(s => `<span class="pv-tag s">${escapeHtml(s)}</span>`).join('')
+            + commIds.map(id => `<span class="pv-tag c">${escapeHtml(getCommunityName(id))}</span>`).join('');
+        pvTags.innerHTML = (c.sensorTags.length || commIds.length) ? ('Tagged: ' + tagHTML) : '';
+    }
 }
 function logRenderAll() { logRenderRows(); logRenderSelects(); logRenderPreview(); }
 
@@ -4690,7 +4698,14 @@ function logComposeNote() {
         const mut = { s };
         logRowChanges(r).forEach(c => {
             if (c.kind === 'status') { kinds.add('Status Change'); mut.newStatus = c.to; statusChanges.push({ before: c.from, after: c.to }); lines.push(`${r.sensorId} status changed from "${c.from.join(', ') || '(none)'}" to "${c.to.join(', ') || '(none)'}".`); }
-            else if (c.kind === 'move') { kinds.add('Movement'); mut.newCommunity = c.to; moves.push({ sId: r.sensorId, fromId: c.from || null, toId: c.to }); commSet.add(c.to); if (c.from) commSet.add(c.from); lines.push(c.from ? `${r.sensorId} removed from ${getCommunityName(c.from) || '(none)'} and installed in ${getCommunityName(c.to)}.` : `${r.sensorId} installed in ${getCommunityName(c.to)}.`); }
+            else if (c.kind === 'move') {
+                kinds.add('Movement'); mut.newCommunity = c.to; moves.push({ sId: r.sensorId, fromId: c.from || null, toId: c.to });
+                commSet.add(c.to); if (c.from) commSet.add(c.from);
+                const toName = getCommunityName(c.to);
+                const toIsLab = LAB_COMMUNITY_IDS.has(c.to);  // moving to a lab is storage, not an install
+                if (c.from) lines.push(toIsLab ? `${r.sensorId} removed from ${getCommunityName(c.from) || '(none)'} and returned to the lab (${toName}).` : `${r.sensorId} removed from ${getCommunityName(c.from) || '(none)'} and installed in ${toName}.`);
+                else lines.push(toIsLab ? `${r.sensorId} sent to the lab (${toName}).` : `${r.sensorId} installed in ${toName}.`);
+            }
             else if (c.kind === 'type') { kinds.add('Info Edit'); mut.newType = c.to; lines.push(`${r.sensorId} type changed from "${c.from || '(none)'}" to "${c.to}".`); }
             else if (c.kind === 'location') { kinds.add('Info Edit'); mut.newLocation = c.to; lines.push(c.to ? `${r.sensorId} location set to "${c.to}".` : `${r.sensorId} location cleared.`); }
         });
@@ -4711,7 +4726,7 @@ function logComposeNote() {
 // New Log communication types save as a comm (reuses insertComm + tags).
 async function saveLogAsComm(commType) {
     const text = document.getElementById('note-text-input').value.trim();
-    if (!text) { document.getElementById('note-text-input').focus(); return; }
+    if (!text) { showAlert('Add a description', 'Type a short description of the call, email, or visit before saving.'); document.getElementById('note-text-input').focus(); return; }
     commType = commType || getActiveLogChips().find(c => c.dataset.kind === 'comm')?.dataset.commtype || 'Phone Call';
     const date = document.getElementById('note-date-input').value || nowDatetime();
     const ctxId = document.getElementById('note-context-id').value;
