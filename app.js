@@ -4700,6 +4700,10 @@ async function saveNote(e) {
         existing.taggedSensors = sensorTags;
         existing.taggedCommunities = noteCommunityTags;
         existing.taggedContacts = contactTags;
+        // Stamp the edit locally so the "edited <date> by <user>" line shows now,
+        // not just after a reload (the DB trigger sets updated_at/updated_by too).
+        existing.updatedAt = new Date().toISOString();
+        existing.updatedBy = currentUserId;
         Promise.all([
             db.updateNote(editId, { text, date: noteDate }),
             db.replaceNoteTags(editId, sensorTags, noteCommunityTags, contactTags),
@@ -4997,11 +5001,17 @@ function renderTimeline(containerId, items) {
         }
 
         const createdAt = item.createdAt || item.created_at || '';
-        const attribution = item.source === 'salesforce_import'
+        // "edited <date> by <user>" shows only once a note has actually been edited
+        // (updated_at is null until then). Editor name resolves via profileNames.
+        const _editedName = item.updatedBy ? (profileNames[item.updatedBy] || item.updatedByName || '') : (item.updatedByName || '');
+        const _editedLine = item.updatedAt
+            ? `<div class="timeline-attribution" style="font-size:10px;color:var(--slate-400,#94a3b8);margin-top:1px">edited ${formatDate(item.updatedAt)}${_editedName ? ' by ' + escapeHtml(_editedName) : ''}</div>`
+            : '';
+        const attribution = (item.source === 'salesforce_import'
             ? `<div class="timeline-attribution">Created by ${item.loggedBy ? escapeHtml(item.loggedBy) : 'Unknown'}, SF import</div>`
             : item.createdBy
                 ? `<div class="timeline-attribution">Logged by ${escapeHtml(item.createdBy)}${createdAt ? ', ' + formatDate(createdAt) : ''}</div>`
-                : '';
+                : '') + _editedLine;
 
         const isNote = !item.commType;
         const isProgressNote = !!item._source;
@@ -5207,6 +5217,8 @@ async function saveTimelineFollowUp(noteId) {
     const timestamp = new Date().toLocaleString('en-US', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit', timeZone: AK_TZ });
     const userName = currentUser || 'Unknown';
     note.text += `\n— ${userName} (${timestamp}): ${text}`;
+    note.updatedAt = new Date().toISOString();
+    note.updatedBy = currentUserId;
 
     try {
         await db.updateNote(noteId, { text: note.text });

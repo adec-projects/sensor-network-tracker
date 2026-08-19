@@ -389,6 +389,8 @@ const db = {
                 createdBy: note.profiles?.name || (note.created_by ? '[Deleted User]' : ''),
                 createdById: note.created_by,
                 createdAt: note.created_at,
+                updatedAt: note.updated_at || null,   // null until the note is actually edited
+                updatedBy: note.updated_by || null,   // editor's profile id; name via profileNames
                 source: note.source || 'manual',
                 loggedBy: note.logged_by || '',
                 taggedSensors: tags.filter(t => t.tag_type === 'sensor').map(t => t.tag_id),
