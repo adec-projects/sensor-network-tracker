@@ -4438,108 +4438,256 @@ function openQuickEmail(contactId) {
 // type picker on. Communication types route to a comm on save; everything
 // else is a note (with its existing actions). Cross-tags via the chip fields.
 function openNewLog(contextType, contextId) {
+    // openAddNoteModal sets up New-Log mode (per-sensor rows + details + preview).
     openAddNoteModal(contextId, contextType);
-    document.getElementById('modal-add-note-title').textContent = 'New Log';
-    document.getElementById('log-type-group').style.display = '';
-    const chips = [...document.querySelectorAll('#log-type-group .log-type-chip')];
-    chips.forEach(c => c.classList.remove('active'));
-    // Default by where you launched it: sensor → General Note, otherwise → Call.
-    const def = contextType === 'sensor'
-        ? chips.find(c => c.dataset.type === 'General')
-        : chips.find(c => c.dataset.commtype === 'Phone Call');
-    if (def) def.classList.add('active');
-    updateLogTypeUI();
-    if (contextType === 'contact') {
-        const ta = document.getElementById('note-text-input');
-        if (ta) setTimeout(() => { ta.focus(); const n = ta.value.length; ta.setSelectionRange(n, n); }, 0);
-    }
+    setTimeout(() => {
+        if (contextType === 'contact') {
+            const ta = document.getElementById('note-text-input');
+            if (ta) { ta.focus(); const n = ta.value.length; ta.setSelectionRange(n, n); }
+        } else {
+            document.getElementById('log-add-input')?.focus();
+        }
+    }, 0);
 }
+// Only comm chips (Call/Email/Site Visit) remain in the log — they add a
+// communication label to the note. Sensor changes are captured per-row below.
 function getActiveLogChips() {
-    return [...document.querySelectorAll('#log-type-group .log-type-chip.active')];
+    return [...document.querySelectorAll('#log-comm-chips .log-type-chip.active')];
 }
-// Chips are multi-select: clicking toggles. The selection drives which
-// expandable sections (status list / move dropdown) and the sensor-tag field
-// are shown.
 function selectLogType(btn) {
     btn.classList.toggle('active');
-    updateLogTypeUI();
-}
-function updateLogTypeUI() {
-    const active = getActiveLogChips();
-    const hasNoteAction = active.some(c => c.dataset.kind === 'note');
-    const wantStatus = active.some(c => c.dataset.expand === 'status');
-    const wantMove = active.some(c => c.dataset.expand === 'move');
-    // Sensor tags only apply to note-type logs (comms can't carry sensors).
-    const sensorGroup = document.getElementById('tag-sensors-container')?.closest('.form-group');
-    if (sensorGroup) sensorGroup.style.display = hasNoteAction ? '' : 'none';
-    const statusGroup = document.getElementById('note-status-change-group');
-    if (statusGroup) statusGroup.style.display = wantStatus ? '' : 'none';
-    const moveGroup = document.getElementById('note-move-group');
-    if (moveGroup) moveGroup.style.display = wantMove ? '' : 'none';
-    // Seed the first movement row (prefilled with the tagged sensor + its
-    // current community) the first time the move panel is shown.
-    if (wantMove) {
-        const cont = document.getElementById('note-move-rows');
-        if (cont && !cont.querySelector('.move-row')) {
-            const firstTagged = getChipValues('tag-sensors-container')[0] || '';
-            const s = firstTagged ? sensors.find(x => x.id === firstTagged) : null;
-            addMoveRow({ sensor: firstTagged, from: s ? s.community : '' });
-        }
-    }
-    const sb = document.getElementById('modal-add-note-submit'); if (sb) sb.textContent = 'Save Log';
+    logRenderPreview();
 }
 
-// Sensor movements are entered as fill-in-the-blank sentence rows:
-//   [sensor] removed from [community] and installed in [community]
-// A swap is just two rows. "+ Add sensor" appends another.
-function moveCommunityOptions(selectedId) {
-    const regulatoryIds = ['anc-garden', 'fbx-ncore', 'jnu-floyd-dryden'];
-    const reg = COMMUNITIES.filter(c => regulatoryIds.includes(c.id));
-    const others = COMMUNITIES.filter(c => !regulatoryIds.includes(c.id)).sort((a, b) => a.name.localeCompare(b.name));
-    const opt = c => `<option value="${c.id}" ${c.id === selectedId ? 'selected' : ''}>${escapeHtml(c.name)}</option>`;
-    return '<option value="">— select —</option>' +
-        (reg.length ? `<optgroup label="Regulatory Sites">${reg.map(opt).join('')}</optgroup>` : '') +
-        `<optgroup label="Communities">${others.map(opt).join('')}</optgroup>`;
+// ===================== NEW LOG — per-sensor rows =====================
+// One real-world event (swap, site pull, install, status change) = ONE note.
+// Each sensor you add becomes a row with inline Status / Move / Type / Location
+// controls. On save, all changes apply (persistSensor + recordSensorMove, exactly
+// as the old flow did) and compose into a single note. No schema/timeline change:
+// the note is text lines + tags, plus the same single-sensor structured badge the
+// timeline already renders, so every existing note is untouched.
+let logRows = [];
+let logUid = 1;
+function logNewRow(over) { return Object.assign({ uid: logUid++, sensorId: '', role: '', statuses: null, moveTo: '', type: '', location: null, open: true }, over || {}); }
+function logRow(id) { return logRows.find(r => String(r.uid) === String(id)); }
+function logRowIndex(id) { return logRows.findIndex(r => String(r.uid) === String(id)); }
+function logDefaultLab() { return [...LAB_COMMUNITY_IDS].find(id => COMMUNITIES.some(c => c.id === id)) || ''; }
+
+// Current per-row selection (defaults to the sensor's live values).
+function logRowStatuses(r) { if (r.statuses) return r.statuses; const s = findSensor(r.sensorId); return new Set(s ? getStatusArray(s) : []); }
+function logRowType(r) { const s = findSensor(r.sensorId); return r.type || (s ? (s.type || '') : ''); }
+function logRowLoc(r) { if (r.location !== null) return r.location; const s = findSensor(r.sensorId); return s ? (s.location || '') : ''; }
+function logRowChanges(r) {
+    const s = findSensor(r.sensorId); const ch = []; if (!s) return ch;
+    const cur = new Set(getStatusArray(s)), nxt = logRowStatuses(r);
+    const same = cur.size === nxt.size && [...cur].every(x => nxt.has(x));
+    if (!same) ch.push({ kind: 'status', from: [...cur], to: [...nxt] });
+    if (r.moveTo && r.moveTo !== s.community) ch.push({ kind: 'move', from: s.community, to: r.moveTo });
+    const t = logRowType(r); if (t && t !== (s.type || '')) ch.push({ kind: 'type', from: s.type || '', to: t });
+    const loc = logRowLoc(r); if (loc !== (s.location || '')) ch.push({ kind: 'location', from: s.location || '', to: loc });
+    return ch;
 }
-function moveSensorOptions(selectedId) {
-    return '<option value="">— sensor —</option>' + [...sensors].sort((a, b) => a.id.localeCompare(b.id))
-        .map(s => `<option value="${s.id}" ${s.id === selectedId ? 'selected' : ''}>${escapeHtml(s.id)}</option>`).join('');
+function logHas(r, kind) { return logRowChanges(r).some(c => c.kind === kind); }
+
+function logCommunityOptions(selectedId) {
+    const opts = [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name));
+    return '<option value="">(no move — stays put)</option>' +
+        opts.map(c => `<option value="${c.id}" ${selectedId === c.id ? 'selected' : ''}>${escapeHtml(c.name)}${LAB_COMMUNITY_IDS.has(c.id) ? ' — lab' : ''}</option>`).join('');
 }
-function addMoveRow(prefill) {
-    prefill = prefill || {};
-    const cont = document.getElementById('note-move-rows');
-    if (!cont) return;
-    const row = document.createElement('div');
-    row.className = 'move-row';
-    row.innerHTML = `
-        <select class="move-row-sensor" onchange="onMoveSensorChange(this)">${moveSensorOptions(prefill.sensor)}</select>
-        <span class="move-row-word">removed from</span>
-        <select class="move-row-from" onchange="syncMoveRowTags(this.closest('.move-row'))">${moveCommunityOptions(prefill.from)}</select>
-        <span class="move-row-word">and installed in</span>
-        <select class="move-row-to" onchange="syncMoveRowTags(this.closest('.move-row'))">${moveCommunityOptions(prefill.to)}</select>
-        <button type="button" class="move-row-remove" onclick="this.closest('.move-row').remove()" title="Remove this row">&times;</button>`;
-    cont.appendChild(row);
-    syncMoveRowTags(row);
+function logCommunityOptionsFlat() {
+    return [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name))
+        .map(c => `<option value="${c.id}">${escapeHtml(c.name)}${LAB_COMMUNITY_IDS.has(c.id) ? ' — lab' : ''}</option>`).join('');
 }
-// When a row's sensor is picked, auto-fill its "removed from" to that sensor's
-// current community so the user doesn't have to look it up.
-function onMoveSensorChange(sel) {
-    const row = sel.closest('.move-row');
-    const s = sensors.find(x => x.id === sel.value);
-    const fromSel = row?.querySelector('.move-row-from');
-    if (fromSel && s && s.community) fromSel.value = s.community;
-    syncMoveRowTags(row);
+
+function logSummary(r) {
+    if (!r.sensorId) return '<span style="color:#b45309">choose a sensor</span>';
+    const ch = logRowChanges(r); if (!ch.length) return '<span style="color:#94a3b8">no changes yet</span>';
+    return '<span class="chg">' + ch.map(c => c.kind === 'status' ? (c.to.join(', ') || 'no status') : c.kind === 'move' ? ('→ ' + getCommunityName(c.to)) : c.kind === 'type' ? c.to : 'location').map(escapeHtml).join(' · ') + '</span>';
 }
-// Mirror a row's sensor + both communities into the Tag sensors / Tag
-// communities chip boxes so the user doesn't think they must add them by hand.
-function syncMoveRowTags(row) {
-    if (!row) return;
-    const sId = row.querySelector('.move-row-sensor')?.value;
-    if (sId) addChip('tag-sensors-container', sId);
-    ['.move-row-from', '.move-row-to'].forEach(sel => {
-        const cid = row.querySelector(sel)?.value;
-        if (cid) { const name = getCommunityName(cid); if (name) addChip('tag-communities-container', name); }
+
+function logRowCardHTML(r) {
+    const s = findSensor(r.sensorId);
+    const roleTag = r.role ? `<span class="logrow-role">${escapeHtml(r.role)}</span>` : '';
+    const head = `<div class="logrow-top" onclick="logToggleRow('${r.uid}')">
+        <span class="logrow-caret">${r.open ? '▾' : '▸'}</span>
+        <span class="logrow-id">${escapeHtml(r.sensorId || 'New sensor row')}</span>${roleTag}
+        <span class="logrow-sum" id="logsum-${r.uid}">${logSummary(r)}</span>
+        <button type="button" class="logrow-x" title="Remove" onclick="event.stopPropagation(); logRemoveRow('${r.uid}')">&times;</button></div>`;
+    if (!r.open) return `<div class="logrow">${head}</div>`;
+    if (!r.sensorId) {
+        return `<div class="logrow">${head}<div class="logrow-body picker"><div class="log-combo">
+            <input type="text" class="tag-chip-input log-combo-input" style="width:100%" placeholder="Type a sensor ID to search…" autocomplete="off"
+                oninput="logRenderRowList('${r.uid}', this.value)" onfocus="logRenderRowList('${r.uid}', this.value)" onblur="logHideRowListSoon('${r.uid}')">
+            <div class="log-combo-list" id="log-rowlist-${r.uid}"></div></div></div></div>`;
+    }
+    const sel = logRowStatuses(r);
+    const chips = sel.size
+        ? [...sel].map(x => `<span class="logrow-schip">${escapeHtml(x)}<span class="rm" title="remove" onclick="logRemoveStatus('${r.uid}','${x.replace(/'/g, "\\'")}')">&times;</span></span>`).join('')
+        : '<span class="logrow-schip none">no status</span>';
+    const addOpts = '<option value="">+ add status</option>' + ALL_STATUSES.filter(x => !sel.has(x)).map(x => `<option>${escapeHtml(x)}</option>`).join('');
+    const typeOpts = SENSOR_TYPES.map(t => `<option value="${escapeHtml(t)}" ${logRowType(r) === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
+    const fromName = s.community ? getCommunityName(s.community) : 'unassigned';
+    const qas = [];
+    if (!sel.has('Online')) qas.push(`<button type="button" class="logrow-qa" onclick="logQa('${r.uid}','online')">Bring online</button>`);
+    if (!(sel.has('Lab Storage') && sel.has('Offline'))) qas.push(`<button type="button" class="logrow-qa" onclick="logQa('${r.uid}','lab')">Send to lab</button>`);
+    if (!sel.has('Needs Repair')) qas.push(`<button type="button" class="logrow-qa" onclick="logQa('${r.uid}','repair')">Flag for repair</button>`);
+    const quick = qas.length ? `<div class="logrow-quick">${qas.join('')}</div>` : '';
+    const replace = (s.community && !LAB_COMMUNITY_IDS.has(s.community) && r.role !== 'Local sensor')
+        ? `<div class="logrow-foot"><button type="button" class="logrow-replace" onclick="logAddReplacement('${r.uid}')">↔ Replacing this pod? Add the incoming replacement</button></div>` : '';
+    return `<div class="logrow">${head}<div class="logrow-body">
+        <div class="logrow-now">Now: ${escapeHtml(s.type || '—')} · ${s.community ? escapeHtml(getCommunityName(s.community)) : 'no community'} · ${escapeHtml(getStatusArray(s).join(', ') || 'no status')}</div>
+        ${quick}
+        <div class="logrow-form">
+            <div class="logrow-k ${logHas(r, 'status') ? 'changed' : ''}">Status<span class="dot"></span></div>
+            <div class="logrow-statusline">${chips}<select class="logrow-addstatus" onchange="logAddStatus('${r.uid}', this.value); this.value='';">${addOpts}</select></div>
+            <div class="logrow-k ${logHas(r, 'move') ? 'changed' : ''}">Move to<span class="dot"></span></div>
+            <div class="logrow-movewrap"><span class="from">from ${escapeHtml(fromName)} →</span><select onchange="logSetMove('${r.uid}', this.value)">${logCommunityOptions(r.moveTo)}</select></div>
+            <div class="logrow-k ${logHas(r, 'type') ? 'changed' : ''}">Type<span class="dot"></span></div>
+            <div><select onchange="logSetType('${r.uid}', this.value)">${typeOpts}</select></div>
+            <div class="logrow-k ${logHas(r, 'location') ? 'changed' : ''}">Location<span class="dot"></span></div>
+            <div><input type="text" value="${escapeHtml(logRowLoc(r))}" placeholder="Where the pod is mounted (optional)" oninput="logSetLoc('${r.uid}', this.value)"></div>
+        </div>${replace}</div></div>`;
+}
+
+// row mutations
+function logToggleRow(uid) { const r = logRow(uid); if (r) { r.open = !r.open; logRenderRows(); } }
+function logRemoveRow(uid) { logRows = logRows.filter(r => String(r.uid) !== String(uid)); logRenderAll(); }
+function logSetMove(uid, val) { const r = logRow(uid); if (r) { r.moveTo = val; logRenderRows(); logRenderPreview(); } }
+function logSetType(uid, val) { const r = logRow(uid); if (r) { r.type = val; logRenderRows(); logRenderPreview(); } }
+function logSetLoc(uid, val) { const r = logRow(uid); if (r) { r.location = val; logRenderPreview(); const el = document.getElementById('logsum-' + uid); if (el) el.innerHTML = logSummary(r); } }
+function logRemoveStatus(uid, st) { const r = logRow(uid); if (!r) return; const set = new Set(logRowStatuses(r)); set.delete(st); r.statuses = set; logRenderRows(); logRenderPreview(); }
+function logAddStatus(uid, val) {
+    if (!val) return; const r = logRow(uid); if (!r) return;
+    const apply = () => { const set = new Set(logRowStatuses(r)); set.add(val); if (val === 'Offline') set.delete('Online'); if (val === 'Online') set.delete('Offline'); r.statuses = set; logRenderRows(); logRenderPreview(); };
+    if (AUTO_STATUS_WARNINGS[val]) showConfirm('Auto-applied status', AUTO_STATUS_WARNINGS[val], apply, { confirmText: 'Apply manually', cancelText: 'Cancel' });
+    else apply();
+}
+function logQa(uid, kind) {
+    const r = logRow(uid); if (!r) return; const set = new Set(logRowStatuses(r));
+    if (kind === 'online') { set.add('Online'); set.delete('Offline'); set.delete('Lab Storage'); }
+    else if (kind === 'lab') { set.add('Offline'); set.add('Lab Storage'); set.delete('Online'); const lab = logDefaultLab(); if (lab) r.moveTo = lab; }
+    else if (kind === 'repair') { set.add('Needs Repair'); }
+    r.statuses = set; logRenderRows(); logRenderPreview();
+}
+function logAddReplacement(uid) {
+    const r = logRow(uid); const s = findSensor(r && r.sensorId); if (!s) return;
+    const community = s.community; r.role = 'Local sensor';
+    const set = new Set(logRowStatuses(r)); set.add('Offline'); set.add('Lab Storage'); set.delete('Online'); r.statuses = set;
+    if (!r.moveTo) { const lab = logDefaultLab(); if (lab) r.moveTo = lab; }
+    logRows.splice(logRowIndex(uid) + 1, 0, logNewRow({ role: 'Replacement sensor', statuses: new Set(['Online']), type: 'Community Pod', moveTo: community }));
+    logRenderAll();
+}
+function logPullSite(cid) {
+    if (!cid) return;
+    const here = sensors.filter(s => s.community === cid && !logRows.some(r => r.sensorId === s.id));
+    if (!here.length) { showAlert('No pods to add', 'No sensors at that site (or they’re already in this log).'); return; }
+    const lab = logDefaultLab();
+    here.forEach(s => logRows.push(logNewRow({ sensorId: s.id, statuses: new Set(['Offline', 'Lab Storage']), moveTo: lab, type: 'Not Assigned', open: false })));
+    logRenderAll();
+    showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)}`);
+}
+function logToggleApplyAll() { const a = document.getElementById('log-applyall'); if (a) a.style.display = a.style.display === 'none' ? 'block' : 'none'; }
+function logApplyToAll() {
+    const st = document.getElementById('log-aa-status').value, mv = document.getElementById('log-aa-move').value;
+    logRows.forEach(r => { if (!r.sensorId) return; if (st) { const set = new Set(logRowStatuses(r)); set.add(st); if (st === 'Offline') set.delete('Online'); if (st === 'Online') set.delete('Offline'); r.statuses = set; } if (mv) r.moveTo = mv; });
+    document.getElementById('log-applyall').style.display = 'none';
+    logRenderAll(); showSuccessToast('Applied to all sensors');
+}
+
+// searchable sensor pickers (type-to-filter)
+function logAvailableSensors() { const used = new Set(logRows.map(r => r.sensorId).filter(Boolean)); return sensors.filter(s => !used.has(s.id)); }
+function logMatchSensors(q) { const ql = (q || '').toLowerCase().trim(); return logAvailableSensors().filter(s => !ql || s.id.toLowerCase().includes(ql) || (s.community && getCommunityName(s.community).toLowerCase().includes(ql))); }
+function logComboOptHTML(s, pickFn) { const meta = s.community ? getCommunityName(s.community) : 'unassigned'; return `<div class="log-combo-opt" data-id="${escapeHtml(s.id)}" onmousedown="event.preventDefault(); ${pickFn}"><span class="logrow-id">${escapeHtml(s.id)}</span><span class="meta">${escapeHtml(meta)}</span></div>`; }
+function logRenderAddList(q) { const el = document.getElementById('log-add-list'); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickAdd('${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
+function logPickAdd(id) { logRows.push(logNewRow({ sensorId: id })); const inp = document.getElementById('log-add-input'); if (inp) inp.value = ''; const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); logRenderAll(); if (inp) inp.focus(); }
+function logRenderRowList(uid, q) { const el = document.getElementById('log-rowlist-' + uid); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickRow('${uid}','${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
+function logPickRow(uid, id) { const r = logRow(uid); if (r) r.sensorId = id; logRenderAll(); }
+function logHideRowListSoon(uid) { setTimeout(() => { const l = document.getElementById('log-rowlist-' + uid); if (l) l.classList.remove('show'); }, 150); }
+
+// wire the persistent top "add sensor" search box once
+function logSetupEvents() {
+    if (logSetupEvents._done) return;
+    const inp = document.getElementById('log-add-input'); if (!inp) return;
+    logSetupEvents._done = true;
+    inp.addEventListener('input', () => logRenderAddList(inp.value));
+    inp.addEventListener('focus', () => logRenderAddList(inp.value));
+    inp.addEventListener('blur', () => setTimeout(() => { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }, 150));
+    inp.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector('#log-add-list .log-combo-opt'); if (f && f.dataset.id) logPickAdd(f.dataset.id); }
+        else if (e.key === 'Escape') { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }
     });
+}
+
+function logRenderRows() {
+    const el = document.getElementById('log-rows'); if (!el) return;
+    el.innerHTML = logRows.length ? logRows.map(logRowCardHTML).join('')
+        : '<div class="log-empty"><b>Start by adding the sensors involved.</b><br>Use “+ Add a sensor” above — add as many as the event touches.</div>';
+    const btn = document.getElementById('log-applyall-btn');
+    if (btn) btn.style.display = logRows.filter(r => r.sensorId).length > 1 ? 'inline-block' : 'none';
+}
+function logRenderSelects() {
+    const sites = [...new Set(sensors.filter(s => s.community && !LAB_COMMUNITY_IDS.has(s.community)).map(s => s.community))].filter(c => COMMUNITIES.some(x => x.id === c));
+    const siteSel = document.getElementById('log-site-select');
+    if (siteSel) siteSel.innerHTML = '<option value="">Pull a whole site…</option>' + sites.sort((a, b) => getCommunityName(a).localeCompare(getCommunityName(b))).map(c => `<option value="${c}">${escapeHtml(getCommunityName(c))} (${sensors.filter(s => s.community === c).length})</option>`).join('');
+    const aaS = document.getElementById('log-aa-status');
+    if (aaS) aaS.innerHTML = '<option value="">(leave status)</option>' + MANUAL_STATUSES.map(s => `<option>${escapeHtml(s)}</option>`).join('');
+    const aaM = document.getElementById('log-aa-move');
+    if (aaM) aaM.innerHTML = '<option value="">(leave community)</option>' + logCommunityOptionsFlat();
+}
+function logRenderPreview() {
+    const c = logComposeNote();
+    const t = document.getElementById('log-pv-type'); if (t) t.textContent = c.typeStr;
+    const parts = [];
+    if (c.free) parts.push(`<span class="free">${escapeHtml(c.free)}</span>`);
+    c.lines.forEach(l => parts.push(`<span class="auto">${escapeHtml(l)}</span>`));
+    const pv = document.getElementById('log-pv-text');
+    if (pv) pv.innerHTML = parts.length ? parts.join('\n') : '<span style="color:#94a3b8">Your note will appear here as you make changes…</span>';
+}
+function logRenderAll() { logRenderRows(); logRenderSelects(); logRenderPreview(); }
+
+// Show the sensor-rows step (new log) vs the edit-only sensor-chip field.
+function _logSetMode(mode) {
+    const isEdit = mode === 'edit';
+    const show = (id, on) => { const el = document.getElementById(id); if (el) el.style.display = on ? '' : 'none'; };
+    show('log-step-sensors', !isEdit);
+    show('log-preview', !isEdit);
+    show('log-comm-group', !isEdit);
+    show('edit-tag-sensors-group', isEdit);
+    const s2 = document.querySelector('#log-step-details .log-step');
+    if (s2) s2.style.display = isEdit ? 'none' : 'flex';
+}
+
+// Read all the rows + free text into a single composed note (pure read — the
+// caller applies the sensor mutations and inserts the note).
+function logComposeNote() {
+    const free = (document.getElementById('note-text-input')?.value || '').trim();
+    const lines = []; const sensorTags = []; const commSet = new Set(); const kinds = new Set();
+    const mutations = []; const moves = []; const statusChanges = [];
+    logRows.forEach(r => {
+        if (!r.sensorId) return;
+        const s = findSensor(r.sensorId); if (!s) return;
+        if (!sensorTags.includes(r.sensorId)) sensorTags.push(r.sensorId);
+        if (s.community) commSet.add(s.community);
+        const mut = { s };
+        logRowChanges(r).forEach(c => {
+            if (c.kind === 'status') { kinds.add('Status Change'); mut.newStatus = c.to; statusChanges.push({ before: c.from, after: c.to }); lines.push(`${r.sensorId} status changed from "${c.from.join(', ') || '(none)'}" to "${c.to.join(', ') || '(none)'}".`); }
+            else if (c.kind === 'move') { kinds.add('Movement'); mut.newCommunity = c.to; moves.push({ sId: r.sensorId, fromId: c.from || null, toId: c.to }); commSet.add(c.to); if (c.from) commSet.add(c.from); lines.push(c.from ? `${r.sensorId} removed from ${getCommunityName(c.from) || '(none)'} and installed in ${getCommunityName(c.to)}.` : `${r.sensorId} installed in ${getCommunityName(c.to)}.`); }
+            else if (c.kind === 'type') { kinds.add('Info Edit'); mut.newType = c.to; lines.push(`${r.sensorId} type changed from "${c.from || '(none)'}" to "${c.to}".`); }
+            else if (c.kind === 'location') { kinds.add('Info Edit'); mut.newLocation = c.to; lines.push(c.to ? `${r.sensorId} location set to "${c.to}".` : `${r.sensorId} location cleared.`); }
+        });
+        if ('newStatus' in mut || 'newType' in mut || 'newCommunity' in mut || 'newLocation' in mut) mutations.push(mut);
+    });
+    const commChip = getActiveLogChips().find(c => c.dataset.kind === 'comm');
+    const commType = commChip ? commChip.dataset.commtype : '';
+    let typeStr = [...kinds].join(' + ');
+    if (commType) typeStr = typeStr ? (commType + ' + ' + typeStr) : commType;
+    if (!typeStr) typeStr = 'General';
+    // Preserve the color-coded before/after badge for the single-sensor case, so
+    // those notes render exactly like today's. Multi-sensor events rely on the text.
+    let additionalInfo = '';
+    if (sensorTags.length === 1 && statusChanges.length === 1) additionalInfo = JSON.stringify({ beforeStatus: statusChanges[0].before, afterStatus: statusChanges[0].after });
+    else if (moves.length === 1) additionalInfo = JSON.stringify({ sensorId: moves[0].sId, fromCommunity: moves[0].fromId || '', toCommunity: moves[0].toId });
+    return { free, lines, sensorTags, commSet, typeStr, mutations, moves, additionalInfo };
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
 async function saveLogAsComm(commType) {
@@ -4576,123 +4724,63 @@ async function saveLogAsComm(commType) {
 
 function openAddNoteModal(contextId, contextType) {
     document.getElementById('note-form').reset();
-    document.getElementById('note-context-id').value = contextId;
-    document.getElementById('note-context-type').value = contextType;
+    document.getElementById('note-context-id').value = contextId || '';
+    document.getElementById('note-context-type').value = contextType || '';
     document.getElementById('note-edit-id').value = '';
     document.getElementById('note-date-input').value = nowDatetime();
-    // Default to plain-note mode; openNewLog() turns on the action chips.
-    const ltg = document.getElementById('log-type-group'); if (ltg) ltg.style.display = 'none';
-    const sg0 = document.getElementById('tag-sensors-container')?.closest('.form-group'); if (sg0) sg0.style.display = '';
-    // Reset modal chrome to "Add Note" mode (in case it was just used for an edit).
-    const titleEl = document.getElementById('modal-add-note-title');
-    if (titleEl) titleEl.textContent = 'Add Note';
-    const submitBtn = document.getElementById('modal-add-note-submit');
-    if (submitBtn) submitBtn.textContent = 'Save Note';
-    // Reset the New-Log action chips (multi-select).
-    document.querySelectorAll('#log-type-group .log-type-chip').forEach(c => c.classList.remove('active'));
 
-    // Clear all chip containers
+    const titleEl = document.getElementById('modal-add-note-title'); if (titleEl) titleEl.textContent = 'New Log';
+    const submitBtn = document.getElementById('modal-add-note-submit'); if (submitBtn) submitBtn.textContent = 'Save Log';
+
+    // New-Log mode: per-sensor rows + live preview (openEditNoteModal flips this).
+    _logSetMode('new');
+    document.querySelectorAll('#log-comm-chips .log-type-chip').forEach(c => c.classList.remove('active'));
+    document.getElementById('note-audit-link-group').style.display = 'none';
+
+    // Fresh state
+    logRows = [];
+    const addInput = document.getElementById('log-add-input'); if (addInput) addInput.value = '';
+    const applyAll = document.getElementById('log-applyall'); if (applyAll) applyAll.style.display = 'none';
+    const ta = document.getElementById('note-text-input'); if (ta) { ta.value = ''; ta.placeholder = 'Describe what happened (optional). Type @ to tag contacts.'; }
+
+    // Clear chip containers, wire the (edit-only) sensor chips + community chips.
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
+    setupTagChipInput('tag-sensors-container', () => sensors, s => s.id);
+    setupTagChipInput('tag-communities-container', () => COMMUNITIES, c => c.name);
 
-    // Pre-fill based on context
-    if (contextType === 'community') {
+    // Context pre-fill: a sensor seeds a row; a community/contact tags the community.
+    if (contextType === 'sensor' && contextId) {
+        if (findSensor(contextId)) logRows.push(logNewRow({ sensorId: contextId }));
+    } else if (contextType === 'community' && contextId) {
         prefillChip('tag-communities-container', getCommunityName(contextId));
-    } else if (contextType === 'sensor') {
-        prefillChip('tag-sensors-container', contextId);
-    } else if (contextType === 'contact') {
-        // Tag the contact's community, and seed the note with "@Name — " so the
-        // contact is tagged via mention (same pattern as the old comm modal).
+    } else if (contextType === 'contact' && contextId) {
         const ct = contacts.find(x => x.id === contextId);
         if (ct) {
             if (ct.community) prefillChip('tag-communities-container', getCommunityName(ct.community));
-            const ta = document.getElementById('note-text-input');
             if (ta) ta.value = `@${ct.name} — `;
         }
     }
 
-    // Init tag chip inputs
-    setupTagChipInput('tag-sensors-container',
-        () => sensors,
-        s => s.id
-    );
-    setupTagChipInput('tag-communities-container',
-        () => COMMUNITIES,
-        c => c.name
-    );
-    // Tag-contacts chip was removed — contacts are tagged via @mentions in
-    // the note body now. Keep sensor + community chips.
-
-    // Hide the expandable action panels until their chip is selected.
-    document.getElementById('note-status-change-group').style.display = 'none';
-    document.getElementById('note-audit-link-group').style.display = 'none';
-    document.getElementById('note-move-group').style.display = 'none';
-    // Clear any movement rows from a previous open; a fresh one is seeded
-    // when the Move Sensor chip is selected.
-    const moveRows = document.getElementById('note-move-rows');
-    if (moveRows) moveRows.innerHTML = '';
-
-    // Pre-populate status list with current sensor's statuses if available
-    if (contextType === 'sensor') {
-        const s = sensors.find(x => x.id === contextId);
-        renderStatusToggleList('note-status-list', s ? getStatusArray(s) : []);
-    } else {
-        renderStatusToggleList('note-status-list', []);
-    }
-
+    logSetupEvents();
+    logRenderAll();
     openModal('modal-add-note');
-}
-
-// Build the note's type string from the active action chips. A pure
-// communication is handled separately (saved as a comm); this only runs when
-// at least one note-type chip is selected.
-function getNoteActionsType() {
-    const active = getActiveLogChips();
-    const types = [];
-    // Include a comm label first if one is combined with note actions.
-    const commChip = active.find(c => c.dataset.kind === 'comm');
-    if (commChip) types.push(commChip.dataset.commtype);
-    active.filter(c => c.dataset.kind === 'note').forEach(c => types.push(c.dataset.type));
-    const unique = [...new Set(types)].filter(Boolean);
-    return unique.length ? unique.join(' + ') : 'General';
 }
 
 async function saveNote(e) {
     e.preventDefault();
-    // New Log: a pure communication (comm chip with no note actions) saves as a
-    // comm. Anything involving a note action saves as a note (which can also
-    // carry the comm label in its type).
-    const activeChips = getActiveLogChips();
-    const hasNoteAction = activeChips.some(c => c.dataset.kind === 'note');
-    const commChip = activeChips.find(c => c.dataset.kind === 'comm');
-    const editingNow = !!(document.getElementById('note-edit-id')?.value);
-    if (!editingNow && commChip && !hasNoteAction) { saveLogAsComm(commChip.dataset.commtype); return; }
-
-    const text = document.getElementById('note-text-input').value.trim();
-    // A plain note must have a description. Status-change / move actions
-    // auto-generate the note text, so empty typed text is fine for those.
-    const hasGeneratingAction = activeChips.some(c => c.dataset.expand === 'status' || c.dataset.expand === 'move');
-    if (!text && !hasGeneratingAction && !editingNow) {
-        showAlert('Add a description', 'Please type a description for this log.');
-        document.getElementById('note-text-input').focus();
-        return;
-    }
+    const editId = document.getElementById('note-edit-id')?.value || '';
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();
 
-    const sensorTags = getChipValues('tag-sensors-container');
-
+    // Community tags from the chip box (names → ids).
     const noteCommunityTags = getChipValues('tag-communities-container')
-        .map(name => {
-            const c = COMMUNITIES.find(c => c.name.toLowerCase() === name.toLowerCase());
-            return c ? c.id : null;
-        }).filter(Boolean);
+        .map(name => { const c = COMMUNITIES.find(c => c.name.toLowerCase() === name.toLowerCase()); return c ? c.id : null; })
+        .filter(Boolean);
 
-    // Contacts come from @mentions in the note body — the separate chip
-    // input was removed so there's a single source of truth.
-    const contactTags = parseMentionedContacts(text);
-
-    // --- Edit mode: update existing note in place ---
-    const editId = document.getElementById('note-edit-id')?.value || '';
+    // --- Edit mode: update an existing note's text / date / tags in place. ---
     if (editId) {
+        const text = document.getElementById('note-text-input').value.trim();
+        const sensorTags = getChipValues('tag-sensors-container');
+        const contactTags = parseMentionedContacts(text);
         const existing = notes.find(n => n.id === editId);
         if (!existing) { closeModal('modal-add-note'); return; }
         existing.text = text;
@@ -4700,8 +4788,8 @@ async function saveNote(e) {
         existing.taggedSensors = sensorTags;
         existing.taggedCommunities = noteCommunityTags;
         existing.taggedContacts = contactTags;
-        // Stamp the edit locally so the "edited <date> by <user>" line shows now,
-        // not just after a reload (the DB trigger sets updated_at/updated_by too).
+        // Stamp the edit locally so "edited <date> by <user>" shows now (the DB
+        // trigger also sets updated_at/updated_by).
         existing.updatedAt = new Date().toISOString();
         existing.updatedBy = currentUserId;
         Promise.all([
@@ -4714,97 +4802,56 @@ async function saveNote(e) {
         return;
     }
 
-    const type = getNoteActionsType();
+    // --- New log: compose ONE note from the per-sensor rows + free text. ---
+    const composed = logComposeNote();
+    const commChip = getActiveLogChips().find(c => c.dataset.kind === 'comm');
 
-    // Build everything up FIRST, then persist once. (The note's real DB id is
-    // assigned on insert, so we must not fire follow-up updates with the local
-    // temporary id — that caused "invalid input syntax for type uuid".)
-    let noteText = text;
-    let additionalInfo = '';
+    // A pure communication (comm chip + no sensors involved) saves as a comm.
+    if (commChip && composed.sensorTags.length === 0) { saveLogAsComm(commChip.dataset.commtype); return; }
+
+    // Need at least one sensor change or some free text.
+    if (!composed.lines.length && !composed.free) {
+        showAlert('Nothing to log', 'Add a sensor and a change, or type a note, before saving.');
+        return;
+    }
+
+    // Note text = free text first, then the auto-written change lines.
+    let noteText = composed.free;
+    composed.lines.forEach(l => { noteText += (noteText ? '\n' : '') + l; });
+
+    // Community tags = explicit chips + every community the rows touch.
     const communityTags = [...noteCommunityTags];
+    composed.commSet.forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
+    const contactTags = parseMentionedContacts(noteText);
 
-    // Status change — REPLACES status (consistent with the status-badge modal).
-    let statusChangedCount = 0;
-    if (activeChips.some(c => c.dataset.expand === 'status')) {
-        const newStatuses = getSelectedStatuses('note-status-list');
-        if (newStatuses.length > 0 && sensorTags.length > 0) {
-            let firstBefore = null;
-            sensorTags.forEach(sId => {
-                const s = sensors.find(x => x.id === sId);
-                if (!s) return;
-                const oldStatuses = getStatusArray(s);
-                if (firstBefore === null) firstBefore = oldStatuses;
-                s.status = newStatuses;
-                persistSensor(s);
-                noteText += `\n${sId} status changed from "${oldStatuses.join(', ') || '(none)'}" to "${newStatuses.join(', ')}".`;
-                statusChangedCount++;
-            });
-            buildSensorSidebar();
-            // Single sensor → structured before/after for the color-coded badge line.
-            if (sensorTags.length === 1) {
-                additionalInfo = JSON.stringify({ beforeStatus: firstBefore || [], afterStatus: newStatuses });
-            }
-        }
-    }
-
-    // Move — each fill-in-the-blank row is one sensor movement. A swap is
-    // just two rows. All fold into THIS one log entry.
-    let movedCount = 0;
-    if (activeChips.some(c => c.dataset.expand === 'move')) {
-        const rows = [...document.querySelectorAll('#note-move-rows .move-row')];
-        const fromIds = new Set();
-        const applied = [];
-        rows.forEach(row => {
-            const sId = row.querySelector('.move-row-sensor')?.value || '';
-            const fromId = row.querySelector('.move-row-from')?.value || '';
-            const toId = row.querySelector('.move-row-to')?.value || '';
-            const s = sensors.find(x => x.id === sId);
-            if (!s || !toId || s.community === toId) return;   // skip incomplete / no-op rows
-            s.community = toId;
-            persistSensor(s);
-            // Update install history + auto-set the install date (no prompt).
-            recordSensorMove(sId, fromId || null, toId, noteDate);
-            noteText += `\n${sId} removed from ${getCommunityName(fromId) || '(none)'} and installed in ${getCommunityName(toId)}.`;
-            movedCount++;
-            if (!sensorTags.includes(sId)) sensorTags.push(sId);
-            if (fromId) fromIds.add(fromId);
-            fromIds.add(toId);
-            applied.push({ sId, fromId, toId });
-        });
-        if (movedCount > 0) {
-            // Tag every from + to community so the move shows in each history.
-            [...fromIds].forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
-            buildSensorSidebar();
-            // A single plain move keeps the structured before/after badge; a
-            // multi-row swap relies on the auto-written text lines instead.
-            if (applied.length === 1 && !additionalInfo) {
-                const m = applied[0];
-                additionalInfo = JSON.stringify({ sensorId: m.sId, fromCommunity: m.fromId || '', toCommunity: m.toId });
-            }
-        }
-    }
+    // Apply the sensor field changes (one write per sensor), then the moves —
+    // the exact primitives the old flow used, so there's no new save behavior.
+    composed.mutations.forEach(mut => {
+        const s = mut.s;
+        if (mut.newStatus !== undefined) s.status = mut.newStatus;
+        if (mut.newType !== undefined) s.type = mut.newType;
+        if (mut.newLocation !== undefined) s.location = mut.newLocation;
+        if (mut.newCommunity !== undefined) s.community = mut.newCommunity;
+        persistSensor(s);
+    });
+    composed.moves.forEach(m => recordSensorMove(m.sId, m.fromId, m.toId, noteDate));
+    if (composed.mutations.length) buildSensorSidebar();
 
     const note = {
         id: generateId('n'),
         date: noteDate,
-        type: type,
+        type: composed.typeStr,
         text: noteText,
-        additionalInfo: additionalInfo,
+        additionalInfo: composed.additionalInfo,
         createdBy: getCurrentUserName(), createdById: currentUserId,
         createdAt: new Date().toISOString(),
-        taggedSensors: sensorTags,
+        taggedSensors: composed.sensorTags,
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
     };
+    // Insert FIRST, then push (mirrors saveComm): the note only enters the shared
+    // array once it has its real DB id, and a failed insert leaves no phantom.
     closeModal('modal-add-note');
-    // Insert FIRST, then push into the shared `notes` array (mirrors saveComm).
-    // Pushing before the insert resolved let the timeline render with the note's
-    // temporary client id baked into the DOM (e.g. saveTimelineFollowUp('n-...')).
-    // Once the insert returned the real DB UUID and we reassigned note.id, that
-    // stale button matched nothing, so adding a follow-up note to a just-logged
-    // event silently did nothing until a page refresh. Awaiting the id first
-    // guarantees every render carries the real id, and a failed insert no longer
-    // leaves a phantom note that vanishes on refresh.
     try {
         const saved = await db.insertNote(note);
         if (saved?.id) note.id = saved.id;
@@ -4813,9 +4860,10 @@ async function saveNote(e) {
         return;
     }
     notes.push(note);
-    let toastMsg = 'Note added';
-    if (statusChangedCount > 0) toastMsg += ` · ${statusChangedCount} status updated`;
-    if (movedCount > 0) toastMsg += ` · ${movedCount} moved`;
+    const nStatus = composed.mutations.filter(m => m.newStatus !== undefined).length;
+    let toastMsg = 'Log saved';
+    if (nStatus) toastMsg += ` · ${nStatus} status updated`;
+    if (composed.moves.length) toastMsg += ` · ${composed.moves.length} moved`;
     showSuccessToast(toastMsg);
     refreshCurrentView();
 }
@@ -5249,20 +5297,18 @@ function openEditNoteModal(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
 
-    // Reset and pre-fill the modal in "add" mode first (re-uses the existing
-    // wiring for chip inputs, mention autocomplete, status list).
+    // Reset the modal in New-Log mode first (re-uses chip-input + mention wiring),
+    // then flip to edit mode. Editing a note changes its text / date / tags — it
+    // does NOT re-run the sensor changes (that would double-apply a move/status),
+    // so the per-sensor rows are hidden and the sensor-tag chips are shown instead.
     openAddNoteModal('', '');
+    _logSetMode('edit');
 
-    // Switch to edit mode: title, submit text, hidden id, and keep the
-    // action chips/panels hidden. Re-running move/status actions on edit would
-    // re-apply movements or re-merge statuses, which isn't what "edit" means.
     document.getElementById('note-edit-id').value = noteId;
     const titleEl = document.getElementById('modal-add-note-title');
     if (titleEl) titleEl.textContent = 'Edit Note';
     const submitBtn = document.getElementById('modal-add-note-submit');
     if (submitBtn) submitBtn.textContent = 'Save Changes';
-    document.getElementById('log-type-group').style.display = 'none';
-    document.getElementById('note-status-change-group').style.display = 'none';
     document.getElementById('note-audit-link-group').style.display = 'none';
 
     // Pre-fill text + date.
