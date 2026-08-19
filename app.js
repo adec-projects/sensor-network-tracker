@@ -230,7 +230,7 @@ async function loadAllData() {
     results.forEach((r, i) => { if (r.status === 'rejected') console.warn('Data load warning:', r.reason); });
 
     // Communities
-    COMMUNITIES = communitiesData.map(c => ({ id: c.id, name: c.name, details: c.details || '', network_availability: c.network_availability || '' }));
+    COMMUNITIES = communitiesData.map(c => ({ id: c.id, name: c.name, details: c.details || '', network_availability: c.network_availability || '', updated_at: c.updated_at || null, updated_by: c.updated_by || null }));
     communityParents = {};
     communitiesData.forEach(c => {
         if (c.parent_id) communityParents[c.id] = c.parent_id;
@@ -296,6 +296,8 @@ async function loadAllData() {
             active: c.active !== false,
             emailList: c.email_list === true,
             primaryContact: c.primary_contact === true,
+            updated_at: c.updated_at || null,
+            updated_by: c.updated_by || null,
         };
     });
 
@@ -687,22 +689,27 @@ function diffSensorFields(snap, s) {
     return changed;
 }
 
-function persistSensor(s) {
+// opts.rethrow = true → let the caller await/handle the error (used by the Log so
+// it can confirm the write actually landed). Default keeps the fire-and-forget
+// behavior (internal error toast) that every other caller relies on.
+function persistSensor(s, opts) {
+    const rethrow = opts && opts.rethrow;
     const snap = sensorDbSnapshots[s.id];
     // No baseline (brand-new row, or a sensor that never came through a mapper):
     // fall back to the original full-row write, then record the baseline. This
     // keeps behavior identical to before whenever the snapshot is unavailable.
+    // On a successful write, stamp who/when in memory so "Last edited by X on Y"
+    // is correct immediately (every sensor edit path goes through here).
+    const stamp = () => { s.updated_at = new Date().toISOString(); s.updated_by = currentUserId; sensorDbSnapshots[s.id] = snapshotSensorFields(s); };
     if (!snap) {
-        return db.upsertSensor(s)
-            .then(() => { sensorDbSnapshots[s.id] = snapshotSensorFields(s); })
-            .catch(handleSaveError);
+        const p = db.upsertSensor(s).then(stamp);
+        return rethrow ? p : p.catch(handleSaveError);
     }
     const changed = diffSensorFields(snap, s);
     // Nothing actually changed among the persisted fields: skip the write.
     if (Object.keys(changed).length === 0) return Promise.resolve();
-    return db.updateSensorFields(s.id, changed)
-        .then(() => { sensorDbSnapshots[s.id] = snapshotSensorFields(s); })
-        .catch(handleSaveError);
+    const p = db.updateSensorFields(s.id, changed).then(stamp);
+    return rethrow ? p : p.catch(handleSaveError);
 }
 
 // Notes/Details boxes: hover-to-edit. The view shows the saved text; clicking
@@ -751,7 +758,7 @@ async function saveCommunityDetailsBtn(id) {
         if (msg) { msg.textContent = 'Save failed: ' + (e?.message || e); msg.style.color = 'var(--aurora-rose)'; }
     }
 }
-function persistContact(c) { return db.upsertContact(c).catch(handleSaveError); }
+function persistContact(c) { return db.upsertContact(c).then(() => { c.updated_at = new Date().toISOString(); c.updated_by = currentUserId; }).catch(handleSaveError); }
 // After the insert returns the real DB id, re-render so any timeline row already
 // showing this record swaps its temporary client id for the real one. Without the
 // re-render the DOM keeps the temp id and the record's first edit/delete/follow-up
@@ -2997,7 +3004,8 @@ function showCommunityView(communityId) {
     const parentHtml = parent
         ? `<span class="community-parent-breadcrumb"><span class="clickable" onclick="showCommunity('${parent.id}')">${escapeHtml(parent.name)}</span> &rsaquo; </span>`
         : '';
-    document.getElementById('community-name').innerHTML = parentHtml + escapeHtml(community.name);
+    const commLastEdited = formatLastUpdated(community);
+    document.getElementById('community-name').innerHTML = parentHtml + escapeHtml(community.name) + (commLastEdited ? `<span style="display:block;font-size:11px;color:var(--slate-400);font-weight:400;margin-top:2px">${commLastEdited}</span>` : '');
 
     const tags = getCommunityTags(communityId);
     const badgeContainer = document.getElementById('community-type-badge');
@@ -3842,7 +3850,8 @@ function showContactView(contactId) {
     if (!c) return;
     currentContact = contactId;
 
-    document.getElementById('contact-detail-name').innerHTML = '<span class="editable-field" onclick="inlineEditContact(\'' + c.id + '\', \'name\')">' + escapeHtml(c.name) + '</span>' + (c.primaryContact ? '<span class="contact-primary-badge" style="margin-left:10px;font-size:12px">Primary</span>' : '') + (c.active === false ? '<span class="contact-inactive-badge" style="margin-left:10px;font-size:12px">Inactive</span>' : '');
+    const contactLastEdited = formatLastUpdated(c);
+    document.getElementById('contact-detail-name').innerHTML = '<span class="editable-field" onclick="inlineEditContact(\'' + c.id + '\', \'name\')">' + escapeHtml(c.name) + '</span>' + (c.primaryContact ? '<span class="contact-primary-badge" style="margin-left:10px;font-size:12px">Primary</span>' : '') + (c.active === false ? '<span class="contact-inactive-badge" style="margin-left:10px;font-size:12px">Inactive</span>' : '') + (contactLastEdited ? `<div style="font-size:11px;color:var(--slate-400);font-weight:400;margin-top:3px">${contactLastEdited}</div>` : '');
     if (setupMode) {
         document.getElementById('contact-info-card').innerHTML = `
             <div class="info-item"><label>Name</label>
@@ -4793,6 +4802,8 @@ async function saveNote(e) {
         const contactTags = parseMentionedContacts(text);
         const existing = notes.find(n => n.id === editId);
         if (!existing) { closeModal('modal-add-note'); return; }
+        // Snapshot the old values so we can revert if the write fails.
+        const prev = { text: existing.text, date: existing.date, taggedSensors: existing.taggedSensors, taggedCommunities: existing.taggedCommunities, taggedContacts: existing.taggedContacts, updatedAt: existing.updatedAt, updatedBy: existing.updatedBy };
         existing.text = text;
         existing.date = noteDate;
         existing.taggedSensors = sensorTags;
@@ -4802,12 +4813,17 @@ async function saveNote(e) {
         // trigger also sets updated_at/updated_by).
         existing.updatedAt = new Date().toISOString();
         existing.updatedBy = currentUserId;
-        Promise.all([
-            db.updateNote(editId, { text, date: noteDate }),
-            db.replaceNoteTags(editId, sensorTags, noteCommunityTags, contactTags),
-        ]).catch(handleSaveError);
         closeModal('modal-add-note');
-        showSuccessToast('Note updated');
+        try {
+            await Promise.all([
+                db.updateNote(editId, { text, date: noteDate }),
+                db.replaceNoteTags(editId, sensorTags, noteCommunityTags, contactTags),
+            ]);
+            showSuccessToast('Note updated');
+        } catch (err) {
+            Object.assign(existing, prev);   // revert in-memory so UI matches the DB
+            handleSaveError(err);
+        }
         refreshCurrentView();
         return;
     }
@@ -4834,19 +4850,6 @@ async function saveNote(e) {
     composed.commSet.forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
     const contactTags = parseMentionedContacts(noteText);
 
-    // Apply the sensor field changes (one write per sensor), then the moves —
-    // the exact primitives the old flow used, so there's no new save behavior.
-    composed.mutations.forEach(mut => {
-        const s = mut.s;
-        if (mut.newStatus !== undefined) s.status = mut.newStatus;
-        if (mut.newType !== undefined) s.type = mut.newType;
-        if (mut.newLocation !== undefined) s.location = mut.newLocation;
-        if (mut.newCommunity !== undefined) s.community = mut.newCommunity;
-        persistSensor(s);
-    });
-    composed.moves.forEach(m => recordSensorMove(m.sId, m.fromId, m.toId, noteDate));
-    if (composed.mutations.length) buildSensorSidebar();
-
     const note = {
         id: generateId('n'),
         date: noteDate,
@@ -4859,8 +4862,9 @@ async function saveNote(e) {
         taggedCommunities: communityTags,
         taggedContacts: contactTags,
     };
-    // Insert FIRST, then push (mirrors saveComm): the note only enters the shared
-    // array once it has its real DB id, and a failed insert leaves no phantom.
+    // Save the NOTE FIRST, before touching any sensor. This guarantees a change is
+    // never persisted without an audit record. If the note insert fails, nothing
+    // has been mutated yet, so there's no phantom and no unlogged change.
     closeModal('modal-add-note');
     try {
         const saved = await db.insertNote(note);
@@ -4870,11 +4874,35 @@ async function saveNote(e) {
         return;
     }
     notes.push(note);
-    const nStatus = composed.mutations.filter(m => m.newStatus !== undefined).length;
-    let toastMsg = 'Log saved';
-    if (nStatus) toastMsg += ` · ${nStatus} status updated`;
-    if (composed.moves.length) toastMsg += ` · ${composed.moves.length} moved`;
-    showSuccessToast(toastMsg);
+
+    // Now apply each sensor's field changes and moves, and CONFIRM they actually
+    // saved (rethrow mode) so we don't claim success over a silent failure.
+    const sensorWrites = [];
+    composed.mutations.forEach(mut => {
+        const s = mut.s;
+        if (mut.newStatus !== undefined) s.status = mut.newStatus;
+        if (mut.newType !== undefined) s.type = mut.newType;
+        if (mut.newLocation !== undefined) s.location = mut.newLocation;
+        if (mut.newCommunity !== undefined) s.community = mut.newCommunity;
+        // persistSensor stamps updated_at/updated_by on success.
+        sensorWrites.push(persistSensor(s, { rethrow: true }));
+    });
+    composed.moves.forEach(m => recordSensorMove(m.sId, m.fromId, m.toId, noteDate));
+    if (composed.mutations.length) buildSensorSidebar();
+
+    let writeFailed = false;
+    try { await Promise.all(sensorWrites); }
+    catch (err) { writeFailed = true; handleSaveError(err); }
+
+    if (writeFailed) {
+        showAlert('Saved with a problem', 'The log note was saved, but one or more sensor changes did not save. Open the sensor to check its status/location, and re-apply if needed.');
+    } else {
+        const nStatus = composed.mutations.filter(m => m.newStatus !== undefined).length;
+        let toastMsg = 'Log saved';
+        if (nStatus) toastMsg += ` · ${nStatus} status updated`;
+        if (composed.moves.length) toastMsg += ` · ${composed.moves.length} moved`;
+        showSuccessToast(toastMsg);
+    }
     refreshCurrentView();
 }
 
@@ -4920,6 +4948,8 @@ async function saveComm(e) {
     if (editId) {
         const existing = comms.find(c => c.id === editId);
         if (!existing) { closeModal('modal-comm'); return; }
+        // Snapshot old values so we can revert if the write fails.
+        const prev = { text: existing.text, date: existing.date, commType: existing.commType, community: existing.community, taggedContacts: existing.taggedContacts, taggedCommunities: existing.taggedCommunities, updatedAt: existing.updatedAt, updatedBy: existing.updatedBy };
         existing.text = text;
         existing.date = commDate;
         existing.commType = commType;
@@ -4932,12 +4962,17 @@ async function saveComm(e) {
         // Stamp the edit locally so the "edited <date> by <user>" line shows now.
         existing.updatedAt = new Date().toISOString();
         existing.updatedBy = currentUserId;
-        Promise.all([
-            db.updateComm(editId, { text, date: commDate, commType, community: communityId || null }),
-            db.replaceCommTags(editId, taggedCommunities, taggedContacts),
-        ]).catch(handleSaveError);
         closeModal('modal-comm');
-        showSuccessToast('Communication updated');
+        try {
+            await Promise.all([
+                db.updateComm(editId, { text, date: commDate, commType, community: communityId || null }),
+                db.replaceCommTags(editId, taggedCommunities, taggedContacts),
+            ]);
+            showSuccessToast('Communication updated');
+        } catch (err) {
+            Object.assign(existing, prev);   // revert in-memory so UI matches the DB
+            handleSaveError(err);
+        }
         refreshCurrentView();
         return;
     }
@@ -8269,6 +8304,7 @@ function openTicketDetail(ticketId) {
             <div class="ticket-field"><label>Actions Needed</label><p>${formatTicketType(ticket.ticketType)}</p></div>
             <div class="ticket-field"><label>Status</label><p><span class="ticket-status-badge ${TICKET_STATUS_CSS[ticket.status] || ''}">${ticket.status}</span></p></div>
             <div class="ticket-field"><label>Opened</label><p>${escapeHtml(ticket.createdBy)} on ${formatDate(ticket.createdAt)}</p></div>
+            ${formatLastUpdated(ticket) ? `<div class="ticket-field full-width" style="font-size:11px;color:var(--slate-400)">${formatLastUpdated(ticket)}</div>` : ''}
             <div class="ticket-field full-width"><label>Issue Description</label><p>${escapeHtml(ticket.issueDescription) || '—'}</p></div>
             <div class="ticket-field"><label>RMA Number</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.rmaNumber)}" placeholder="e.g. RMA-2026-0042" onblur="saveTicketField('${ticket.id}','rmaNumber',this.value)">` : `<p>${escapeHtml(ticket.rmaNumber) || '—'}</p>`}</div>
             <div class="ticket-field"><label>Tracking Info (to QuantAQ)</label>${isOpen ? `<input class="ticket-edit-input" value="${escapeHtml(ticket.fedexTrackingTo)}" placeholder="e.g. UPS, 1234567890" onblur="saveTicketField('${ticket.id}','fedexTrackingTo',this.value)">` : `<p>${escapeHtml(ticket.fedexTrackingTo) || '—'}</p>`}</div>
@@ -8977,6 +9013,7 @@ function openAuditDetail(auditId) {
             <div class="ticket-field"><label>End Date</label><input type="date" class="ticket-edit-input" value="${audit.endDate || ''}" onblur="saveAuditField('${audit.id}','endDate',this.value)"></div>
             <div class="ticket-field"><label>Install Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[0] || '')}" placeholder="Who installed" onblur="saveAuditConductors('${audit.id}', this.value, null)"></div>
             <div class="ticket-field"><label>Takedown Team</label><input class="ticket-edit-input" value="${escapeHtml(audit.conductedBy?.split(' / ')[1] || '')}" placeholder="Who removed" onblur="saveAuditConductors('${audit.id}', null, this.value)"></div>
+            ${formatLastUpdated(audit) ? `<div class="ticket-field full-width" style="font-size:11px;color:var(--slate-400)">${formatLastUpdated(audit)}</div>` : ''}
             ${renderProgressNotesSection(audit.progressNotes, audit.id, 'addAuditProgressNote', 'audit')}
         </div>
         <div style="padding:0 28px 16px"><label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.5px;display:block;margin-bottom:8px">Analysis Results</label><div style="overflow-x:auto">${analysisHtml}</div>${audit.analysisFilePath ? `<div style="margin-top:10px;display:flex;gap:16px;align-items:center;flex-wrap:wrap"><a href="#" onclick="previewAuditExcel('${escapeHtml(audit.analysisFilePath)}','${encodeURIComponent(audit.analysisFileName || '')}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128196; Preview Excel</a><a href="#" onclick="downloadAuditSource('${escapeHtml(audit.analysisFilePath)}');return false;" style="font-size:13px;color:var(--navy-500);text-decoration:none">&#128206; Download${audit.analysisFileName ? ` (${escapeHtml(audit.analysisFileName)})` : ''}</a></div>` : ''}</div>
@@ -12474,6 +12511,7 @@ function openCollocationDetail(collocId) {
             <div class="ticket-field"><label>End Date</label><input class="ticket-edit-input" type="date" value="${colloc.endDate === 'TBD' ? '' : colloc.endDate}" onblur="saveCollocationField('${colloc.id}','endDate',this.value)"></div>
             <div class="ticket-field full-width"><label>Sensors</label><p>${sensorList || '—'}</p></div>
             <div class="ticket-field"><label>Conducted By</label><input class="ticket-edit-input" value="${escapeHtml(colloc.conductedBy)}" onblur="saveCollocationField('${colloc.id}','conductedBy',this.value)"></div>
+            ${formatLastUpdated(colloc) ? `<div class="ticket-field full-width" style="font-size:11px;color:var(--slate-400)">${formatLastUpdated(colloc)}</div>` : ''}
             ${renderProgressNotesSection(colloc.progressNotes, colloc.id, 'addCollocationProgressNote', 'collocation')}
             ${hasResults ? `<div class="ticket-field full-width"><label>Analysis</label><p style="color:var(--green)">Analysis uploaded ${formatDate(colloc.analysisUploadDate)} by ${escapeHtml(colloc.analysisUploadedBy)}</p></div>` : ''}
         </div>

@@ -419,8 +419,12 @@ const db = {
         (note.taggedContacts || []).forEach(id => { if (id) tagRows.push({ note_id: noteId, tag_type: 'contact', tag_id: String(id) }); });
 
         if (tagRows.length > 0) {
+            // The note row is already committed. If ONLY the tags fail, do NOT throw
+            // the whole insert away — that discarded the saved note (so the caller
+            // never kept it and the user re-saved, creating a duplicate). Keep the
+            // note; just warn that its tags didn't attach.
             const { error: tagError } = await supa.from('note_tags').insert(tagRows);
-            if (tagError) throw tagError;
+            if (tagError) console.warn('[insertNote] note saved but its tags failed to attach:', tagError.message);
         }
 
         return { ...note, id: noteId };
@@ -657,7 +661,7 @@ const db = {
             analysisNotes: a.analysis_notes || '',
             analysisFilePath: a.analysis_file_path || '', analysisFileName: a.analysis_file_name || '',
             createdBy: a.profiles?.name || (a.created_by ? '[Deleted User]' : ''), createdById: a.created_by,
-            createdAt: a.created_at, updatedAt: a.updated_at,
+            createdAt: a.created_at, updatedAt: a.updated_at, updatedBy: a.updated_by,
         }));
     },
 
@@ -690,7 +694,7 @@ const db = {
             analysisNotes: a.analysis_notes || '',
             analysisFilePath: a.analysis_file_path || '', analysisFileName: a.analysis_file_name || '',
             createdBy: a.profiles?.name || '', createdById: a.created_by,
-            createdAt: a.created_at, updatedAt: a.updated_at,
+            createdAt: a.created_at, updatedAt: a.updated_at, updatedBy: a.updated_by,
         };
     },
 
@@ -728,7 +732,7 @@ const db = {
             analysisUploadDate: c.analysis_upload_date || null,
             analysisUploadedBy: c.analysis_uploaded_by || '',
             createdBy: c.profiles?.name || (c.created_by ? '[Deleted User]' : ''),
-            createdById: c.created_by, createdAt: c.created_at, updatedAt: c.updated_at,
+            createdById: c.created_by, createdAt: c.created_at, updatedAt: c.updated_at, updatedBy: c.updated_by,
         }));
     },
 
@@ -810,7 +814,7 @@ const db = {
                 fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
                 progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
                 createdBy: t.profiles?.name || (t.created_by ? '[Deleted User]' : ''), createdById: t.created_by,
-                createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
+                createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at, updatedBy: t.updated_by,
             };
         });
     },
@@ -842,7 +846,7 @@ const db = {
             fedexTrackingFrom: t.fedex_tracking_from || '', issueDescription: t.issue_description || '',
             progressNotes: parseNotesField(t.quant_notes), workCompleted: t.work_completed || '',
             createdBy: t.profiles?.name || '', createdById: t.created_by,
-            createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at,
+            createdAt: t.created_at, closedAt: t.closed_at, updatedAt: t.updated_at, updatedBy: t.updated_by,
         };
     },
 
