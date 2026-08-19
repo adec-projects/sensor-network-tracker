@@ -513,6 +513,8 @@ const db = {
                 createdBy: comm.profiles?.name || (comm.created_by ? '[Deleted User]' : ''),
                 createdById: comm.created_by,
                 createdAt: comm.created_at,
+                updatedAt: comm.updated_at || null,   // null until actually edited
+                updatedBy: comm.updated_by || null,   // editor id; name via profileNames
                 source: comm.source || 'manual',
                 loggedBy: comm.logged_by || '',
                 community: comm.community_id || '',

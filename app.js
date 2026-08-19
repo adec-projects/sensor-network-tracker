@@ -4871,6 +4871,9 @@ async function saveComm(e) {
         // community was cleared, drop the tag instead of leaving the old one behind.
         existing.taggedCommunities = communityId ? [communityId] : [];
         const taggedCommunities = existing.taggedCommunities;
+        // Stamp the edit locally so the "edited <date> by <user>" line shows now.
+        existing.updatedAt = new Date().toISOString();
+        existing.updatedBy = currentUserId;
         Promise.all([
             db.updateComm(editId, { text, date: commDate, commType, community: communityId || null }),
             db.replaceCommTags(editId, taggedCommunities, taggedContacts),
