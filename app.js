@@ -4520,6 +4520,12 @@ function logRowCardHTML(r) {
                 oninput="logRenderRowList('${r.uid}', this.value)" onfocus="logRenderRowList('${r.uid}', this.value)" onblur="logHideRowListSoon('${r.uid}')">
             <div class="log-combo-list" id="log-rowlist-${r.uid}"></div></div></div></div>`;
     }
+    // Sensor id is set but the sensor is gone (deleted/renamed in another session).
+    // Render a clear removable state instead of dereferencing a null and crashing
+    // the whole rows render.
+    if (!s) {
+        return `<div class="logrow">${head}<div class="logrow-body"><div class="logrow-now" style="color:#b03a2e">This sensor is no longer available — remove this row.</div></div></div>`;
+    }
     const sel = logRowStatuses(r);
     const chips = sel.size
         ? [...sel].map(x => `<span class="logrow-schip">${escapeHtml(x)}<span class="rm" title="remove" onclick="logRemoveStatus('${r.uid}','${x.replace(/'/g, "\\'")}')">&times;</span></span>`).join('')
@@ -4601,7 +4607,11 @@ function logComboOptHTML(s, pickFn) { const meta = s.community ? getCommunityNam
 function logRenderAddList(q) { const el = document.getElementById('log-add-list'); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickAdd('${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
 function logPickAdd(id) { logRows.push(logNewRow({ sensorId: id })); const inp = document.getElementById('log-add-input'); if (inp) inp.value = ''; const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); logRenderAll(); if (inp) inp.focus(); }
 function logRenderRowList(uid, q) { const el = document.getElementById('log-rowlist-' + uid); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickRow('${uid}','${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
-function logPickRow(uid, id) { const r = logRow(uid); if (r) r.sensorId = id; logRenderAll(); }
+function logPickRow(uid, id) {
+    // Don't let the same sensor land in two rows — their changes would collide on save.
+    if (logRows.some(x => String(x.uid) !== String(uid) && x.sensorId === id)) { showAlert('Already added', 'That sensor is already in this log.'); return; }
+    const r = logRow(uid); if (r) r.sensorId = id; logRenderAll();
+}
 function logHideRowListSoon(uid) { setTimeout(() => { const l = document.getElementById('log-rowlist-' + uid); if (l) l.classList.remove('show'); }, 150); }
 
 // wire the persistent top "add sensor" search box once
