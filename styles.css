@@ -1937,10 +1937,17 @@ tr:last-child td {
 }
 /* Auto-generated status-change / move lines appended to a note */
 .note-auto {
-    font-size: 11px;
-    font-style: italic;
-    color: var(--slate-400);
+    display: block;
+    font-size: 12px;
+    font-style: normal;
+    color: var(--slate-500);
+    line-height: 1.55;
+    padding-left: 10px;
+    border-left: 2px solid var(--slate-200);
 }
+/* first change line in a run gets a little breathing room from the user's text */
+.timeline-text > .note-auto:first-child,
+p:not(.note-auto) + .note-auto { margin-top: 6px; }
 
 .timeline-followups {
     margin-top: 10px;

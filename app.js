@@ -5321,14 +5321,46 @@ function stripTrailingFullBodyFromTitle(text, fullBody) {
     return head || text;
 }
 
-// Auto-generated summary lines (status changes, moves) appended to a note.
-// They're rendered smaller + italic so the user's own text stands out.
-const AUTO_NOTE_LINE_RE = /(status changed from .* to .*\.|removed from .* and (?:brought to|installed in) .*\.|added status .*)\s*$/i;
+// Classify an auto-generated change line → { key: "SENSOR|field", noOp } or null
+// (a plain user line). Used to render change lines cleanly, drop no-ops, and drop
+// superseded duplicates (e.g. an edited location showing both the old + new value).
+function classifyChangeLine(line) {
+    const l = line.trim(); let m;
+    if ((m = l.match(/^(\S+) status changed from "(.*)" to "(.*)"\.?$/))) return { key: m[1] + '|status', noOp: m[2] === m[3] };
+    if ((m = l.match(/^(\S+) type changed from "(.*)" to "(.*)"\.?$/))) return { key: m[1] + '|type', noOp: m[2] === m[3] };
+    if ((m = l.match(/^(\S+) location (?:set to ".*"|cleared)\.?$/))) return { key: m[1] + '|location', noOp: false };
+    if ((m = l.match(/^(\S+) (?:removed from .+ and (?:installed in|brought to) .+|removed from .+ and returned to the lab \(.+\)|sent to the lab \(.+\)|installed in .+)\.?$/))) return { key: m[1] + '|move', noOp: false };
+    if ((m = l.match(/^(\S+) added status .+$/i))) return { key: m[1] + '|status', noOp: false };
+    return null;
+}
 function renderNoteBody(text) {
-    return text.split('\n').map(line => {
-        const esc = highlightMentions(escapeHtml(line));
-        return AUTO_NOTE_LINE_RE.test(line) ? `<span class="note-auto">${esc}</span>` : esc;
-    }).join('\n');
+    const info = text.split('\n').map(line => ({ line, cls: classifyChangeLine(line) }));
+    // For each change key, remember the LAST real occurrence so earlier duplicates drop.
+    const lastIdx = {};
+    info.forEach((it, i) => { if (it.cls && !it.cls.noOp) lastIdx[it.cls.key] = i; });
+    const out = [];
+    info.forEach((it, i) => {
+        if (it.cls) {
+            if (it.cls.noOp) return;                     // drop "X → X"
+            if (lastIdx[it.cls.key] !== i) return;       // drop superseded duplicate
+            out.push(`<span class="note-auto">${highlightMentions(escapeHtml(it.line))}</span>`);
+        } else if (it.line.trim() !== '' || out.length) {
+            out.push(highlightMentions(escapeHtml(it.line)));
+        }
+    });
+    return out.join('\n');
+}
+// Plain-text version of the dedup (no HTML) — for prefilling the edit box.
+function dedupeNoteText(text) {
+    const info = (text || '').split('\n').map(line => ({ line, cls: classifyChangeLine(line) }));
+    const lastIdx = {};
+    info.forEach((it, i) => { if (it.cls && !it.cls.noOp) lastIdx[it.cls.key] = i; });
+    const out = [];
+    info.forEach((it, i) => {
+        if (it.cls) { if (it.cls.noOp || lastIdx[it.cls.key] !== i) return; out.push(it.line); }
+        else if (it.line.trim() !== '' || out.length) out.push(it.line);
+    });
+    return out.join('\n');
 }
 
 function renderNoteText(text, noteId) {
@@ -5562,7 +5594,7 @@ function openAdditiveLogEdit(note) {
     _logEditMode = 'additive';
     const titleEl = document.getElementById('modal-add-note-title'); if (titleEl) titleEl.textContent = 'Edit Log';
     const submitBtn = document.getElementById('modal-add-note-submit'); if (submitBtn) submitBtn.textContent = 'Save Changes';
-    const ta = document.getElementById('note-text-input'); if (ta) { ta.value = note.text || ''; ta.placeholder = 'Note text (any new changes below are added to this).'; }
+    const ta = document.getElementById('note-text-input'); if (ta) { ta.value = dedupeNoteText(note.text || ''); ta.placeholder = 'Note text (any new changes below are added to this).'; }
     document.getElementById('note-date-input').value = note.date || nowDatetime();
     // One row per tagged sensor that still exists; baseline = live state (no editBefore).
     logRows = (note.taggedSensors || []).filter(id => findSensor(id)).map(id => logNewRow({ sensorId: id, open: true }));
