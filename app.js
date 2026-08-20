@@ -4476,23 +4476,53 @@ function selectLogType(btn) {
 // timeline already renders, so every existing note is untouched.
 let logRows = [];
 let logUid = 1;
-function logNewRow(over) { return Object.assign({ uid: logUid++, sensorId: '', role: '', statuses: null, moveTo: '', type: '', location: null, open: true }, over || {}); }
+let _logEditNoteId = null;           // set while editing an existing log in full (grace window)
+const LOG_EDIT_WINDOW_MS = 60 * 60 * 1000;  // 1 hour
+function logNewRow(over) { return Object.assign({ uid: logUid++, sensorId: '', role: '', statuses: null, moveTo: '', type: '', location: null, open: true, editBefore: null, editAfterCommunity: '' }, over || {}); }
+
+// Can this note be re-opened in the FULL log editor? Only a recent (< 1h) log whose
+// sensor changes are all still exactly as it left them (nothing changed since). Returns
+// the parsed structured payload, or null (→ caller falls back to text-only edit).
+function _statusSetEqual(a, b) { const A = new Set(a || []), B = new Set(b || []); return A.size === B.size && [...A].every(x => B.has(x)); }
+function canFullEditLog(note) {
+    if (!note || !note.additionalInfo) return null;
+    let parsed; try { parsed = JSON.parse(note.additionalInfo); } catch (e) { return null; }
+    if (!parsed || !Array.isArray(parsed.logSensors) || !parsed.logSensors.length) return null;
+    const created = note.createdAt ? new Date(note.createdAt).getTime() : 0;
+    if (!created || (Date.now() - created) > LOG_EDIT_WINDOW_MS) return null;
+    // Guardrail: every pod must still match what this log set it to.
+    for (const ls of parsed.logSensors) {
+        const s = findSensor(ls.sensorId);
+        if (!s || !ls.after) return null;
+        if (!_statusSetEqual(getStatusArray(s), ls.after.status) || (s.type || '') !== (ls.after.type || '') || (s.community || '') !== (ls.after.community || '') || (s.location || '') !== (ls.after.location || '')) return null;
+    }
+    return parsed;
+}
 function logRow(id) { return logRows.find(r => String(r.uid) === String(id)); }
 function logRowIndex(id) { return logRows.findIndex(r => String(r.uid) === String(id)); }
 function logDefaultLab() { return [...LAB_COMMUNITY_IDS].find(id => COMMUNITIES.some(c => c.id === id)) || ''; }
 
-// Current per-row selection (defaults to the sensor's live values).
-function logRowStatuses(r) { if (r.statuses) return r.statuses; const s = findSensor(r.sensorId); return new Set(s ? getStatusArray(s) : []); }
-function logRowType(r) { const s = findSensor(r.sensorId); return r.type || (s ? (s.type || '') : ''); }
-function logRowLoc(r) { if (r.location !== null) return r.location; const s = findSensor(r.sensorId); return s ? (s.location || '') : ''; }
+// Baseline a row's changes are measured against. Normally the sensor's LIVE state;
+// in a full-log EDIT, the pod's state BEFORE the original log (r.editBefore), so the
+// original changes show up as changes and can be adjusted.
+function logRowBase(r) {
+    if (r.editBefore) return { status: r.editBefore.status || [], type: r.editBefore.type || '', community: r.editBefore.community || '', location: r.editBefore.location || '' };
+    const s = findSensor(r.sensorId);
+    return s ? { status: getStatusArray(s), type: s.type || '', community: s.community || '', location: s.location || '' } : { status: [], type: '', community: '', location: '' };
+}
+// Current per-row selection (defaults to the baseline values).
+function logRowStatuses(r) { if (r.statuses) return r.statuses; return new Set(logRowBase(r).status); }
+function logRowType(r) { return r.type || logRowBase(r).type; }
+function logRowLoc(r) { if (r.location !== null) return r.location; return logRowBase(r).location; }
 function logRowChanges(r) {
-    const s = findSensor(r.sensorId); const ch = []; if (!s) return ch;
-    const cur = new Set(getStatusArray(s)), nxt = logRowStatuses(r);
+    if (!findSensor(r.sensorId)) return [];
+    const base = logRowBase(r); const ch = [];
+    const cur = new Set(base.status), nxt = logRowStatuses(r);
     const same = cur.size === nxt.size && [...cur].every(x => nxt.has(x));
     if (!same) ch.push({ kind: 'status', from: [...cur], to: [...nxt] });
-    if (r.moveTo && r.moveTo !== s.community) ch.push({ kind: 'move', from: s.community, to: r.moveTo });
-    const t = logRowType(r); if (t && t !== (s.type || '')) ch.push({ kind: 'type', from: s.type || '', to: t });
-    const loc = logRowLoc(r); if (loc !== (s.location || '')) ch.push({ kind: 'location', from: s.location || '', to: loc });
+    if (r.moveTo && r.moveTo !== base.community) ch.push({ kind: 'move', from: base.community, to: r.moveTo });
+    const t = logRowType(r); if (t && t !== base.type) ch.push({ kind: 'type', from: base.type, to: t });
+    const loc = logRowLoc(r); if (loc !== base.location) ch.push({ kind: 'location', from: base.location, to: loc });
     return ch;
 }
 function logHas(r, kind) { return logRowChanges(r).some(c => c.kind === kind); }
@@ -4534,22 +4564,24 @@ function logRowCardHTML(r) {
     if (!s) {
         return `<div class="logrow">${head}<div class="logrow-body"><div class="logrow-now" style="color:#b03a2e">This sensor is no longer available — remove this row.</div></div></div>`;
     }
+    const base = logRowBase(r);
     const sel = logRowStatuses(r);
     const chips = sel.size
         ? [...sel].map(x => `<span class="logrow-schip">${escapeHtml(x)}<span class="rm" title="remove" onclick="logRemoveStatus('${r.uid}','${x.replace(/'/g, "\\'")}')">&times;</span></span>`).join('')
         : '<span class="logrow-schip none">no status</span>';
     const addOpts = '<option value="">+ add status</option>' + ALL_STATUSES.filter(x => !sel.has(x)).map(x => `<option>${escapeHtml(x)}</option>`).join('');
     const typeOpts = SENSOR_TYPES.map(t => `<option value="${escapeHtml(t)}" ${logRowType(r) === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
-    const fromName = s.community ? getCommunityName(s.community) : 'unassigned';
+    const fromName = base.community ? getCommunityName(base.community) : 'unassigned';
     const qas = [];
     if (!sel.has('Online')) qas.push(`<button type="button" class="logrow-qa" onclick="logQa('${r.uid}','online')">Bring online</button>`);
     if (!(sel.has('Lab Storage') && sel.has('Offline'))) qas.push(`<button type="button" class="logrow-qa" onclick="logQa('${r.uid}','lab')">Send to lab</button>`);
     if (!sel.has('Needs Repair')) qas.push(`<button type="button" class="logrow-qa" onclick="logQa('${r.uid}','repair')">Flag for repair</button>`);
     const quick = qas.length ? `<div class="logrow-quick">${qas.join('')}</div>` : '';
-    const replace = (s.community && !LAB_COMMUNITY_IDS.has(s.community) && r.role !== 'Local sensor')
+    // No "replace this pod" shortcut while editing an existing log.
+    const replace = (!r.editBefore && base.community && !LAB_COMMUNITY_IDS.has(base.community) && r.role !== 'Local sensor')
         ? `<div class="logrow-foot"><button type="button" class="logrow-replace" onclick="logAddReplacement('${r.uid}')">↔ Replacing this pod? Add the incoming replacement</button></div>` : '';
     return `<div class="logrow">${head}<div class="logrow-body">
-        <div class="logrow-now">Now: ${escapeHtml(s.type || '—')} · ${s.community ? escapeHtml(getCommunityName(s.community)) : 'no community'} · ${escapeHtml(getStatusArray(s).join(', ') || 'no status')}</div>
+        <div class="logrow-now">${r.editBefore ? 'Before this log:' : 'Now:'} ${escapeHtml(base.type || '—')} · ${base.community ? escapeHtml(getCommunityName(base.community)) : 'no community'} · ${escapeHtml((base.status || []).join(', ') || 'no status')}</div>
         ${quick}
         <div class="logrow-form">
             <div class="logrow-k ${logHas(r, 'status') ? 'changed' : ''}">Status<span class="dot"></span></div>
@@ -4688,7 +4720,7 @@ function _logSetMode(mode) {
 function logComposeNote() {
     const free = (document.getElementById('note-text-input')?.value || '').trim();
     const lines = []; const sensorTags = []; const commSet = new Set(); const kinds = new Set();
-    const mutations = []; const moves = []; const statusChanges = [];
+    const mutations = []; const moves = []; const statusChanges = []; const logSensors = [];
     logRows.forEach(r => {
         if (!r.sensorId) return;
         const s = findSensor(r.sensorId); if (!s) return;
@@ -4708,18 +4740,29 @@ function logComposeNote() {
             else if (c.kind === 'type') { kinds.add('Info Edit'); mut.newType = c.to; lines.push(`${r.sensorId} type changed from "${c.from || '(none)'}" to "${c.to}".`); }
             else if (c.kind === 'location') { kinds.add('Info Edit'); mut.newLocation = c.to; lines.push(c.to ? `${r.sensorId} location set to "${c.to}".` : `${r.sensorId} location cleared.`); }
         });
-        if ('newStatus' in mut || 'newType' in mut || 'newCommunity' in mut || 'newLocation' in mut) mutations.push(mut);
+        if ('newStatus' in mut || 'newType' in mut || 'newCommunity' in mut || 'newLocation' in mut) {
+            mutations.push(mut);
+            const base = logRowBase(r);
+            logSensors.push({
+                sensorId: r.sensorId,
+                before: { status: base.status, type: base.type, community: base.community, location: base.location },
+                after: { status: [...logRowStatuses(r)], type: logRowType(r), community: (r.moveTo || base.community), location: logRowLoc(r) },
+            });
+        }
     });
     const commChip = getActiveLogChips().find(c => c.dataset.kind === 'comm');
     const commType = commChip ? commChip.dataset.commtype : '';
     let typeStr = [...kinds].join(' + ');
     if (commType) typeStr = typeStr ? (commType + ' + ' + typeStr) : commType;
     if (!typeStr) typeStr = 'General';
-    // Preserve the color-coded before/after badge for the single-sensor case, so
-    // those notes render exactly like today's. Multi-sensor events rely on the text.
+    // additionalInfo carries: the single-sensor color badge (so the timeline renders
+    // exactly like today) PLUS the full before/after per sensor + free text, which the
+    // 1-hour full-edit window reads to reconstruct and safely re-apply the log.
+    const extra = { userText: free, logSensors };
     let additionalInfo = '';
-    if (sensorTags.length === 1 && statusChanges.length === 1) additionalInfo = JSON.stringify({ beforeStatus: statusChanges[0].before, afterStatus: statusChanges[0].after });
-    else if (moves.length === 1) additionalInfo = JSON.stringify({ sensorId: moves[0].sId, fromCommunity: moves[0].fromId || '', toCommunity: moves[0].toId });
+    if (sensorTags.length === 1 && statusChanges.length === 1) additionalInfo = JSON.stringify(Object.assign({ beforeStatus: statusChanges[0].before, afterStatus: statusChanges[0].after }, extra));
+    else if (moves.length === 1) additionalInfo = JSON.stringify(Object.assign({ sensorId: moves[0].sId, fromCommunity: moves[0].fromId || '', toCommunity: moves[0].toId }, extra));
+    else if (logSensors.length) additionalInfo = JSON.stringify(extra);
     return { free, lines, sensorTags, commSet, typeStr, mutations, moves, additionalInfo };
 }
 // New Log communication types save as a comm (reuses insertComm + tags).
@@ -4772,6 +4815,7 @@ function openAddNoteModal(contextId, contextType) {
 
     // Fresh state
     logRows = [];
+    _logEditNoteId = null;
     const addInput = document.getElementById('log-add-input'); if (addInput) addInput.value = '';
     const applyAll = document.getElementById('log-applyall'); if (applyAll) applyAll.style.display = 'none';
     const ta = document.getElementById('note-text-input'); if (ta) { ta.value = ''; ta.placeholder = 'Describe what happened (optional). Type @ to tag contacts.'; }
@@ -4799,8 +4843,66 @@ function openAddNoteModal(contextId, contextType) {
     openModal('modal-add-note');
 }
 
+// Save a full re-edit of a recent log: apply the corrected final state to each pod
+// (reconciling install history for any move change) and rewrite the same note.
+async function saveFullLogEdit() {
+    const editId = _logEditNoteId;
+    const note = notes.find(n => n.id === editId);
+    if (!note) { _logEditNoteId = null; closeModal('modal-add-note'); return; }
+    const composed = logComposeNote();   // baseline-aware (uses each row's editBefore)
+    const noteDate = document.getElementById('note-date-input').value || note.date || nowDatetime();
+    if (!composed.lines.length && !composed.free) { showAlert('Nothing to log', 'Add a change or some note text before saving.'); return; }
+
+    let noteText = composed.free;
+    composed.lines.forEach(l => { noteText += (noteText ? '\n' : '') + l; });
+    const noteCommunityTags = getChipValues('tag-communities-container')
+        .map(name => { const c = COMMUNITIES.find(c => c.name.toLowerCase() === name.toLowerCase()); return c ? c.id : null; }).filter(Boolean);
+    const communityTags = [...noteCommunityTags];
+    composed.commSet.forEach(id => { if (id && !communityTags.includes(id)) communityTags.push(id); });
+    const contactTags = parseMentionedContacts(noteText);
+    const moveDay = ((note.date || noteDate) || '').split('T')[0];
+
+    _logEditNoteId = null;
+    closeModal('modal-add-note');
+
+    // Apply the edited final state to each pod; reconcile install history for a move.
+    const writes = [];
+    logRows.forEach(r => {
+        const s = findSensor(r.sensorId); if (!s) return;
+        const base = logRowBase(r);
+        const editedCommunity = r.moveTo || base.community;
+        const originalAfterCommunity = r.editAfterCommunity || '';
+        s.status = [...logRowStatuses(r)];
+        s.type = logRowType(r);
+        s.location = logRowLoc(r);
+        s.community = editedCommunity;
+        writes.push(persistSensor(s, { rethrow: true }));
+        if (editedCommunity !== originalAfterCommunity) {
+            if (base.community !== originalAfterCommunity) revertInstallForMove(r.sensorId, base.community, originalAfterCommunity, moveDay);
+            if (editedCommunity !== base.community) recordSensorMove(r.sensorId, base.community, editedCommunity, noteDate);
+        }
+    });
+
+    // Rewrite the same note (text/date/type/structured data/tags).
+    note.text = noteText; note.date = noteDate; note.type = composed.typeStr;
+    note.additionalInfo = composed.additionalInfo;
+    note.taggedSensors = composed.sensorTags; note.taggedCommunities = communityTags; note.taggedContacts = contactTags;
+    note.updatedAt = new Date().toISOString(); note.updatedBy = currentUserId;
+
+    let writeFailed = false;
+    try {
+        await db.updateNote(editId, { text: noteText, date: noteDate, type: composed.typeStr, additional_info: composed.additionalInfo });
+        await db.replaceNoteTags(editId, composed.sensorTags, communityTags, contactTags);
+        await Promise.all(writes);
+    } catch (err) { writeFailed = true; handleSaveError(err); }
+    if (composed.mutations.length) buildSensorSidebar();
+    if (!writeFailed) showSuccessToast('Log updated');
+    refreshCurrentView();
+}
+
 async function saveNote(e) {
     e.preventDefault();
+    if (_logEditNoteId) { await saveFullLogEdit(); return; }
     const editId = document.getElementById('note-edit-id')?.value || '';
     const noteDate = document.getElementById('note-date-input').value || nowDatetime();
 
@@ -5356,6 +5458,11 @@ function openEditNoteModal(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
 
+    // Recent log (< 1h, unchanged since): re-open the FULL editor so any part can be
+    // fixed. Otherwise fall back to editing the words/tags only.
+    const fullEdit = canFullEditLog(note);
+    if (fullEdit) { openFullLogEdit(note, fullEdit); return; }
+
     // Reset the modal in New-Log mode first (re-uses chip-input + mention wiring),
     // then flip to edit mode. Editing a note changes its text / date / tags — it
     // does NOT re-run the sensor changes (that would double-apply a move/status),
@@ -5387,6 +5494,37 @@ function openEditNoteModal(noteId) {
     // body show up as visible chips below the textarea.
     if (typeof wireAllMentionChipStrips === 'function') wireAllMentionChipStrips();
     setTimeout(() => document.getElementById('note-text-input')?.focus(), 0);
+}
+
+// Full re-open of a recent log (within the grace window). Rebuilds the per-sensor
+// rows from the stored before/after so ANY part can be fixed. Baseline = the pod's
+// pre-log state, selection = what the log set — so the original changes show and can
+// be adjusted; saving re-applies the corrected set and rewrites the same note.
+function openFullLogEdit(note, parsed) {
+    openAddNoteModal('', '');           // New-Log mode (rows + preview visible)
+    _logEditNoteId = note.id;
+    const titleEl = document.getElementById('modal-add-note-title'); if (titleEl) titleEl.textContent = 'Edit Log';
+    const submitBtn = document.getElementById('modal-add-note-submit'); if (submitBtn) submitBtn.textContent = 'Save Changes';
+    const ta = document.getElementById('note-text-input'); if (ta) { ta.value = parsed.userText || ''; ta.placeholder = 'Describe what happened (optional).'; }
+    document.getElementById('note-date-input').value = note.date || nowDatetime();
+    logRows = parsed.logSensors.map(ls => {
+        const before = ls.before || {}, after = ls.after || {};
+        return logNewRow({
+            sensorId: ls.sensorId,
+            editBefore: { status: before.status || [], type: before.type || '', community: before.community || '', location: before.location || '' },
+            editAfterCommunity: after.community || '',
+            statuses: new Set(after.status || []),
+            moveTo: (after.community && after.community !== before.community) ? after.community : '',
+            type: (after.type && after.type !== before.type) ? after.type : '',
+            location: (after.location !== before.location) ? (after.location || '') : null,
+            open: true,
+        });
+    });
+    // Keep any community tags the note carried; move communities re-add themselves on save.
+    document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
+    (note.taggedCommunities || []).forEach(cId => { const c = COMMUNITIES.find(x => x.id === cId); if (c) prefillChip('tag-communities-container', c.name); });
+    logRenderAll();
+    setTimeout(() => document.getElementById('log-add-input')?.focus(), 0);
 }
 
 function openEditCommModal(commId) {
