@@ -4688,7 +4688,9 @@ function logSetupEvents() {
     const inp = document.getElementById('log-add-input'); if (!inp) return;
     logSetupEvents._done = true;
     inp.addEventListener('input', () => logRenderAddList(inp.value));
-    inp.addEventListener('focus', () => logRenderAddList(inp.value));
+    // Only show the sensor list once the user actually types — focusing the box
+    // (including auto-focus on open) must NOT pop the whole list over the rows.
+    inp.addEventListener('focus', () => { if (inp.value.trim()) logRenderAddList(inp.value); });
     inp.addEventListener('blur', () => setTimeout(() => { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }, 150));
     inp.addEventListener('keydown', (e) => {
         if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector('#log-add-list .log-combo-opt'); if (f && f.dataset.id) logPickAdd(f.dataset.id); }
@@ -5599,7 +5601,6 @@ function openFullLogEdit(note, parsed) {
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
     (note.taggedCommunities || []).forEach(cId => { const c = COMMUNITIES.find(x => x.id === cId); if (c) prefillChip('tag-communities-container', c.name); });
     logRenderAll();
-    setTimeout(() => document.getElementById('log-add-input')?.focus(), 0);
 }
 
 // Additive edit for a log with no stored before/after (older logs, e.g. ones created
@@ -5619,7 +5620,6 @@ function openAdditiveLogEdit(note) {
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
     (note.taggedCommunities || []).forEach(cId => { const c = COMMUNITIES.find(x => x.id === cId); if (c) prefillChip('tag-communities-container', c.name); });
     logRenderAll();
-    setTimeout(() => document.getElementById('log-add-input')?.focus(), 0);
 }
 
 function openEditCommModal(commId) {
