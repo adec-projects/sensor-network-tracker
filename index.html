@@ -727,7 +727,9 @@
       #modal-add-note .log-step-n{flex:none;width:26px;height:26px;border-radius:50%;background:#1B2A4A;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
       #modal-add-note .log-step-h{font-size:15px;font-weight:700;color:#1B2A4A;letter-spacing:-.1px}
       #modal-add-note .log-step-sub{font-size:12.5px;color:#5c6b82;margin-top:1px}
-      #modal-add-note input[type=text],#modal-add-note input[type=datetime-local],#modal-add-note textarea,#modal-add-note select{font-size:13.5px;border:1px solid #e7ebf2;border-radius:9px;transition:border-color .12s,box-shadow .12s}
+      #modal-add-note input[type=text],#modal-add-note input[type=datetime-local],#modal-add-note textarea,#modal-add-note select{font-size:13.5px;border:1px solid #e7ebf2;border-radius:9px;padding:9px 11px;transition:border-color .12s,box-shadow .12s}
+      #modal-add-note .log-combo-input{border:1px solid #e7ebf2!important;background:#fff!important;padding:9px 11px!important;border-radius:9px!important}
+      #modal-add-note .log-combo.search .log-combo-input{padding-left:34px!important}
       #modal-add-note input[type=text]:focus,#modal-add-note input[type=datetime-local]:focus,#modal-add-note textarea:focus,#modal-add-note select:focus{outline:none;border-color:#C9A84C;box-shadow:0 0 0 3px #fbf3dc}
       #modal-add-note select{cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235c6b82' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:30px}
       #modal-add-note .log-addbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
@@ -842,7 +844,7 @@
                     <div class="log-addbar">
                         <div class="grow log-combo search">
                             <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-                            <input type="text" id="log-add-input" class="tag-chip-input log-combo-input" placeholder="Add a sensor — type any part of the ID…" autocomplete="off" style="width:100%">
+                            <input type="text" id="log-add-input" class="log-combo-input" placeholder="Add a sensor — type any part of the ID…" autocomplete="off" style="width:100%">
                             <div class="log-combo-list" id="log-add-list"></div>
                         </div>
                         <select id="log-site-select" title="Add every pod currently at a community" onchange="logPullSite(this.value); this.value='';"><option value="">Pull a whole site…</option></select>

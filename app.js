@@ -4575,7 +4575,7 @@ function logRowCardHTML(r) {
     if (!r.sensorId) {
         return `<div class="logrow open">${head}<div class="logrow-body picker"><div class="log-combo search">
             <span class="ico">${LOG_SEARCH_SVG}</span>
-            <input type="text" class="tag-chip-input log-combo-input" style="width:100%" placeholder="Type a sensor ID to search…" autocomplete="off"
+            <input type="text" class="log-combo-input" style="width:100%" placeholder="Type a sensor ID to search…" autocomplete="off"
                 oninput="logRenderRowList('${r.uid}', this.value)" onfocus="logRenderRowList('${r.uid}', this.value)" onblur="logHideRowListSoon('${r.uid}')">
             <div class="log-combo-list" id="log-rowlist-${r.uid}"></div></div></div></div>`;
     }
