@@ -4651,16 +4651,23 @@ function logAddReplacement(uid) {
     logRenderAll();
     showSuccessToast('Added a replacement row. The outgoing (local) pod is set to return to the lab — pick the incoming pod for the new "Replacement sensor" row.');
 }
-// Add every pod currently at a community (picked from the search). Neutral — no
-// preset changes; each row is added collapsed for you to edit or Apply-to-all.
-function logAddCommunitySensors(cid) {
-    if (!cid) return;
-    const used = new Set(logRows.map(r => r.sensorId).filter(Boolean));
-    const here = sensors.filter(s => s.community === cid && !used.has(s.id));
-    if (!here.length) { showAlert('No pods to add', 'No sensors at that community (or they’re already in this log).'); return; }
-    here.forEach(s => logRows.push(logNewRow({ sensorId: s.id, open: false })));
-    logRenderAll();
-    showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)}`);
+// Checkbox picker: toggle a single sensor in/out of the log (adds/removes its row).
+function logToggleSensor(id) {
+    const idx = logRows.findIndex(r => r.sensorId === id);
+    if (idx >= 0) logRows.splice(idx, 1);
+    else logRows.push(logNewRow({ sensorId: id, open: false }));
+    logRenderRows(); logRenderPreview();
+    logRenderAddList(document.getElementById('log-add-input') ? document.getElementById('log-add-input').value : '');
+}
+// Toggle a whole community: if all its pods are already in, remove them; else add
+// the ones that aren't. Neutral — no preset changes.
+function logToggleCommunity(cid) {
+    const here = sensors.filter(s => s.community === cid);
+    const allIn = here.length > 0 && here.every(s => logRows.some(r => r.sensorId === s.id));
+    if (allIn) logRows = logRows.filter(r => !here.some(s => s.id === r.sensorId));
+    else here.forEach(s => { if (!logRows.some(r => r.sensorId === s.id)) logRows.push(logNewRow({ sensorId: s.id, open: false })); });
+    logRenderRows(); logRenderPreview();
+    logRenderAddList(document.getElementById('log-add-input') ? document.getElementById('log-add-input').value : '');
 }
 function logToggleApplyAll() { const a = document.getElementById('log-applyall'); if (a) a.style.display = a.style.display === 'none' ? 'block' : 'none'; }
 function logApplyToAll() {
@@ -4674,33 +4681,34 @@ function logApplyToAll() {
 function logAvailableSensors() { const used = new Set(logRows.map(r => r.sensorId).filter(Boolean)); return sensors.filter(s => !used.has(s.id)); }
 function logMatchSensors(q) { const ql = (q || '').toLowerCase().trim(); return logAvailableSensors().filter(s => !ql || s.id.toLowerCase().includes(ql) || (s.community && getCommunityName(s.community).toLowerCase().includes(ql))); }
 function logComboOptHTML(s, pickFn) { const meta = s.community ? getCommunityName(s.community) : 'unassigned'; return `<div class="log-combo-opt" data-id="${escapeHtml(s.id)}" onmousedown="event.preventDefault(); ${pickFn}"><span class="logrow-id">${escapeHtml(s.id)}</span><span class="meta">${escapeHtml(meta)}</span></div>`; }
-// Sensors + communities matching the search. Picking a community adds all its pods.
-function logMatchAdd(q) {
-    const ql = (q || '').toLowerCase().trim();
-    const used = new Set(logRows.map(r => r.sensorId).filter(Boolean));
-    const ss = sensors.filter(s => !used.has(s.id)).filter(s => !ql || s.id.toLowerCase().includes(ql) || (s.community && getCommunityName(s.community).toLowerCase().includes(ql)));
-    const comms = COMMUNITIES.map(c => ({ c, count: sensors.filter(s => s.community === c.id && !used.has(s.id)).length }))
-        .filter(o => o.count > 0 && (!ql || o.c.name.toLowerCase().includes(ql)))
-        .sort((a, b) => a.c.name.localeCompare(b.c.name));
-    return { sensors: ss, comms };
-}
+// Grouped checkbox picker: each community (checkbox = select all its pods) with its
+// pods nested underneath (checkbox each). Filters as you type; stays open so you can
+// tick several. Ticking adds/removes the pod's row.
 function logRenderAddList(q) {
     const el = document.getElementById('log-add-list'); if (!el) return;
-    const { sensors: ss, comms } = logMatchAdd(q);
-    let html = comms.map(o => `<div class="log-combo-opt" data-add-kind="community" data-add-id="${escapeHtml(o.c.id)}" onmousedown="event.preventDefault(); logPickAddItem('community','${escapeHtml(o.c.id)}')"><span class="opt-site">Site</span><span>${escapeHtml(o.c.name)}</span><span class="meta">${o.count} pod${o.count !== 1 ? 's' : ''}</span></div>`).join('');
-    html += ss.map(s => `<div class="log-combo-opt" data-add-kind="sensor" data-add-id="${escapeHtml(s.id)}" onmousedown="event.preventDefault(); logPickAddItem('sensor','${escapeHtml(s.id)}')"><span class="logrow-id">${escapeHtml(s.id)}</span><span class="meta">${escapeHtml(s.community ? getCommunityName(s.community) : 'unassigned')}</span></div>`).join('');
+    const ql = (q || '').toLowerCase().trim();
+    if (!ql) { el.innerHTML = '<div class="log-combo-empty">Type a community or sensor name to find pods…</div>'; el.classList.add('show'); return; }
+    const inLog = id => logRows.some(r => r.sensorId === id);
+    const cb = on => `<input type="checkbox" tabindex="-1" ${on ? 'checked' : ''}>`;
+    let html = '';
+    [...COMMUNITIES].sort((a, b) => a.name.localeCompare(b.name)).forEach(c => {
+        const here = sensors.filter(s => s.community === c.id);
+        if (!here.length) return;
+        const nameMatch = c.name.toLowerCase().includes(ql);
+        const show = nameMatch ? here : here.filter(s => s.id.toLowerCase().includes(ql));
+        if (!show.length) return;
+        const allIn = show.every(s => inLog(s.id));
+        html += `<div class="log-opt-group" onmousedown="event.preventDefault()" onclick="logToggleCommunity('${c.id}')">${cb(allIn)}<span class="opt-site">Site</span><span class="log-opt-gname">${escapeHtml(c.name)}</span><span class="meta">${show.length} pod${show.length !== 1 ? 's' : ''}</span></div>`;
+        show.forEach(s => { html += `<div class="log-opt log-opt-child" onmousedown="event.preventDefault()" onclick="logToggleSensor('${s.id}')">${cb(inLog(s.id))}<span class="logrow-id">${escapeHtml(s.id)}</span></div>`; });
+    });
+    const unassigned = sensors.filter(s => !s.community && s.id.toLowerCase().includes(ql));
+    if (unassigned.length) {
+        html += `<div class="log-opt-grouplabel">Unassigned</div>`;
+        unassigned.forEach(s => { html += `<div class="log-opt" onmousedown="event.preventDefault()" onclick="logToggleSensor('${s.id}')">${cb(inLog(s.id))}<span class="logrow-id">${escapeHtml(s.id)}</span></div>`; });
+    }
     el.innerHTML = html || '<div class="log-combo-empty">No matching sensors or communities</div>';
     el.classList.add('show');
 }
-function logPickAddItem(kind, id) {
-    if (kind === 'community') {
-        const inp = document.getElementById('log-add-input'); if (inp) inp.value = '';
-        const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show');
-        logAddCommunitySensors(id);
-        if (inp) inp.focus();
-    } else { logPickAdd(id); }
-}
-function logPickAdd(id) { logRows.push(logNewRow({ sensorId: id })); const inp = document.getElementById('log-add-input'); if (inp) inp.value = ''; const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); logRenderAll(); if (inp) inp.focus(); }
 function logRenderRowList(uid, q) { const el = document.getElementById('log-rowlist-' + uid); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickRow('${uid}','${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
 function logPickRow(uid, id) {
     // Don't let the same sensor land in two rows — their changes would collide on save.
@@ -4720,7 +4728,7 @@ function logSetupEvents() {
     inp.addEventListener('focus', () => { if (inp.value.trim()) logRenderAddList(inp.value); });
     inp.addEventListener('blur', () => setTimeout(() => { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }, 150));
     inp.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector('#log-add-list .log-combo-opt'); if (f && f.dataset.addId) logPickAddItem(f.dataset.addKind, f.dataset.addId); }
+        if (e.key === 'Enter') { e.preventDefault(); }   // don't submit the form; use the checkboxes
         else if (e.key === 'Escape') { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }
     });
 }

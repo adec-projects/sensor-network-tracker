@@ -744,6 +744,16 @@
       #modal-add-note .log-combo-opt:hover,#modal-add-note .log-combo-opt.active{background:#eef1f7}
       #modal-add-note .log-combo-opt .meta{color:#9aa6ba;font-size:11.5px;margin-left:auto}
       #modal-add-note .log-combo-opt .opt-site{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#fbf3dc;color:#8a6d1e;padding:2px 7px;border-radius:5px}
+      #modal-add-note .log-opt-group,#modal-add-note .log-opt{display:flex;align-items:center;gap:9px;padding:8px 10px;font-size:13px;cursor:pointer;border-radius:8px}
+      #modal-add-note .log-opt-group:hover,#modal-add-note .log-opt:hover{background:#eef1f7}
+      #modal-add-note .log-opt-group{font-weight:600;color:#1B2A4A}
+      #modal-add-note .log-opt-child{padding-left:32px}
+      #modal-add-note .log-opt-group input[type=checkbox],#modal-add-note .log-opt input[type=checkbox]{width:15px;height:15px;accent-color:#1B2A4A;pointer-events:none;flex:none;margin:0}
+      #modal-add-note .log-opt-group .opt-site{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#fbf3dc;color:#8a6d1e;padding:2px 7px;border-radius:5px}
+      #modal-add-note .log-opt-group .log-opt-gname{flex:none}
+      #modal-add-note .log-opt-group .meta{margin-left:auto;color:#9aa6ba;font-size:11.5px;font-weight:400}
+      #modal-add-note .log-opt .logrow-id{font-size:13px}
+      #modal-add-note .log-opt-grouplabel{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9aa6ba;padding:9px 10px 3px}
       #modal-add-note .log-combo-empty{padding:9px 10px;color:#9aa6ba;font-size:12.5px}
       #modal-add-note .log-rows{display:flex;flex-direction:column;gap:9px}
       #modal-add-note .log-empty{border:1.5px dashed #e7ebf2;border-radius:12px;padding:28px 24px;text-align:center;color:#5c6b82;font-size:13px;background:#fbfcfe}
@@ -916,7 +926,7 @@
                     <div class="pv-type" id="log-pv-type">General</div>
                     <div class="pv-text" id="log-pv-text"></div>
                     <div class="pv-tags" id="log-pv-tags"></div>
-                    <div class="pv-note">Everything above is written as <b>one note</b>, tagged to each sensor and/or community involved. The note is displayed under each sensor and/or community's log history.</div>
+                    <div class="pv-note">Everything above is written as <b>one note</b>, tagged to each sensor and/or community involved. The note is displayed under each sensor and/or community log history.</div>
                 </div>
 
                 <div class="modal-footer">
