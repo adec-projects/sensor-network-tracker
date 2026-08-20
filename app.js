@@ -4476,8 +4476,17 @@ function selectLogType(btn) {
 // timeline already renders, so every existing note is untouched.
 let logRows = [];
 let logUid = 1;
-let _logEditNoteId = null;           // set while editing an existing log in full (grace window)
-const LOG_EDIT_WINDOW_MS = 60 * 60 * 1000;  // 1 hour
+let _logEditNoteId = null;           // set while editing an existing log in full
+let _logEditMode = null;             // 'full' (revert+reapply, recent) | 'additive' (append changes)
+const LOG_EDIT_WINDOW_MS = 60 * 60 * 1000;  // 1 hour (full revert-and-redo window)
+
+// An older/plain sensor log with no stored before/after — editable ADDITIVELY (open
+// the full editor at the pod's current state; changes apply + append to the note).
+function isSensorLog(note) {
+    if (!note) return false;
+    if ((note.taggedSensors || []).filter(id => findSensor(id)).length === 0) return false;
+    return /Movement|Status Change|Info Edit|Sensor Install|Sensor Removal|Troubleshooting/.test(note.type || '');
+}
 function logNewRow(over) { return Object.assign({ uid: logUid++, sensorId: '', role: '', statuses: null, moveTo: '', type: '', location: null, open: true, editBefore: null, editAfterCommunity: '' }, over || {}); }
 
 // Can this note be re-opened in the FULL log editor? Only a recent (< 1h) log whose
@@ -4816,6 +4825,7 @@ function openAddNoteModal(contextId, contextType) {
     // Fresh state
     logRows = [];
     _logEditNoteId = null;
+    _logEditMode = null;
     const addInput = document.getElementById('log-add-input'); if (addInput) addInput.value = '';
     const applyAll = document.getElementById('log-applyall'); if (applyAll) applyAll.style.display = 'none';
     const ta = document.getElementById('note-text-input'); if (ta) { ta.value = ''; ta.placeholder = 'Describe what happened (optional). Type @ to tag contacts.'; }
@@ -4847,8 +4857,9 @@ function openAddNoteModal(contextId, contextType) {
 // (reconciling install history for any move change) and rewrite the same note.
 async function saveFullLogEdit() {
     const editId = _logEditNoteId;
+    const isFull = _logEditMode === 'full';   // 'full' = revert+reapply; else additive
     const note = notes.find(n => n.id === editId);
-    if (!note) { _logEditNoteId = null; closeModal('modal-add-note'); return; }
+    if (!note) { _logEditNoteId = null; _logEditMode = null; closeModal('modal-add-note'); return; }
     const composed = logComposeNote();   // baseline-aware (uses each row's editBefore)
     const noteDate = document.getElementById('note-date-input').value || note.date || nowDatetime();
     if (!composed.lines.length && !composed.free) { showAlert('Nothing to log', 'Add a change or some note text before saving.'); return; }
@@ -4863,6 +4874,7 @@ async function saveFullLogEdit() {
     const moveDay = ((note.date || noteDate) || '').split('T')[0];
 
     _logEditNoteId = null;
+    _logEditMode = null;
     closeModal('modal-add-note');
 
     // Apply the edited final state to each pod; reconcile install history for a move.
@@ -4871,27 +4883,37 @@ async function saveFullLogEdit() {
         const s = findSensor(r.sensorId); if (!s) return;
         const base = logRowBase(r);
         const editedCommunity = r.moveTo || base.community;
-        const originalAfterCommunity = r.editAfterCommunity || '';
         s.status = [...logRowStatuses(r)];
         s.type = logRowType(r);
         s.location = logRowLoc(r);
         s.community = editedCommunity;
         writes.push(persistSensor(s, { rethrow: true }));
-        if (editedCommunity !== originalAfterCommunity) {
-            if (base.community !== originalAfterCommunity) revertInstallForMove(r.sensorId, base.community, originalAfterCommunity, moveDay);
-            if (editedCommunity !== base.community) recordSensorMove(r.sensorId, base.community, editedCommunity, noteDate);
+        if (isFull) {
+            // Revert the original move (if any) and apply the corrected one.
+            const originalAfterCommunity = r.editAfterCommunity || '';
+            if (editedCommunity !== originalAfterCommunity) {
+                if (base.community !== originalAfterCommunity) revertInstallForMove(r.sensorId, base.community, originalAfterCommunity, moveDay);
+                if (editedCommunity !== base.community) recordSensorMove(r.sensorId, base.community, editedCommunity, noteDate);
+            }
+        } else if (editedCommunity !== base.community) {
+            // Additive: only a brand-new move relative to the pod's current community.
+            recordSensorMove(r.sensorId, base.community, editedCommunity, noteDate);
         }
     });
 
-    // Rewrite the same note (text/date/type/structured data/tags).
-    note.text = noteText; note.date = noteDate; note.type = composed.typeStr;
-    note.additionalInfo = composed.additionalInfo;
+    // Update the note. Full edit rewrites text + structured data; additive keeps the
+    // note's existing type/structured data (its original event) and just saves the
+    // text (original + the appended change lines) and tags.
+    const newType = isFull ? composed.typeStr : (note.type || composed.typeStr);
+    const newAdditional = isFull ? composed.additionalInfo : (note.additionalInfo || '');
+    note.text = noteText; note.date = noteDate; note.type = newType;
+    note.additionalInfo = newAdditional;
     note.taggedSensors = composed.sensorTags; note.taggedCommunities = communityTags; note.taggedContacts = contactTags;
     note.updatedAt = new Date().toISOString(); note.updatedBy = currentUserId;
 
     let writeFailed = false;
     try {
-        await db.updateNote(editId, { text: noteText, date: noteDate, type: composed.typeStr, additional_info: composed.additionalInfo });
+        await db.updateNote(editId, { text: noteText, date: noteDate, type: newType, additional_info: newAdditional });
         await db.replaceNoteTags(editId, composed.sensorTags, communityTags, contactTags);
         await Promise.all(writes);
     } catch (err) { writeFailed = true; handleSaveError(err); }
@@ -5458,10 +5480,12 @@ function openEditNoteModal(noteId) {
     const note = notes.find(n => n.id === noteId);
     if (!note) return;
 
-    // Recent log (< 1h, unchanged since): re-open the FULL editor so any part can be
-    // fixed. Otherwise fall back to editing the words/tags only.
+    // Recent log (< 1h, unchanged since): re-open the FULL editor and correct the
+    // original event. Any other sensor log: open the full editor ADDITIVELY (add
+    // changes to it). Plain text notes fall through to words/tags-only editing.
     const fullEdit = canFullEditLog(note);
     if (fullEdit) { openFullLogEdit(note, fullEdit); return; }
+    if (isSensorLog(note)) { openAdditiveLogEdit(note); return; }
 
     // Reset the modal in New-Log mode first (re-uses chip-input + mention wiring),
     // then flip to edit mode. Editing a note changes its text / date / tags — it
@@ -5503,6 +5527,7 @@ function openEditNoteModal(noteId) {
 function openFullLogEdit(note, parsed) {
     openAddNoteModal('', '');           // New-Log mode (rows + preview visible)
     _logEditNoteId = note.id;
+    _logEditMode = 'full';
     const titleEl = document.getElementById('modal-add-note-title'); if (titleEl) titleEl.textContent = 'Edit Log';
     const submitBtn = document.getElementById('modal-add-note-submit'); if (submitBtn) submitBtn.textContent = 'Save Changes';
     const ta = document.getElementById('note-text-input'); if (ta) { ta.value = parsed.userText || ''; ta.placeholder = 'Describe what happened (optional).'; }
@@ -5521,6 +5546,26 @@ function openFullLogEdit(note, parsed) {
         });
     });
     // Keep any community tags the note carried; move communities re-add themselves on save.
+    document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
+    (note.taggedCommunities || []).forEach(cId => { const c = COMMUNITIES.find(x => x.id === cId); if (c) prefillChip('tag-communities-container', c.name); });
+    logRenderAll();
+    setTimeout(() => document.getElementById('log-add-input')?.focus(), 0);
+}
+
+// Additive edit for a log with no stored before/after (older logs, e.g. ones created
+// before the edit feature). Opens the full editor with each tagged pod at its CURRENT
+// state and the original note text kept; changes you make apply and are appended to
+// the note. Nothing is reverted, so it's safe at any age.
+function openAdditiveLogEdit(note) {
+    openAddNoteModal('', '');
+    _logEditNoteId = note.id;
+    _logEditMode = 'additive';
+    const titleEl = document.getElementById('modal-add-note-title'); if (titleEl) titleEl.textContent = 'Edit Log';
+    const submitBtn = document.getElementById('modal-add-note-submit'); if (submitBtn) submitBtn.textContent = 'Save Changes';
+    const ta = document.getElementById('note-text-input'); if (ta) { ta.value = note.text || ''; ta.placeholder = 'Note text (any new changes below are added to this).'; }
+    document.getElementById('note-date-input').value = note.date || nowDatetime();
+    // One row per tagged sensor that still exists; baseline = live state (no editBefore).
+    logRows = (note.taggedSensors || []).filter(id => findSensor(id)).map(id => logNewRow({ sensorId: id, open: true }));
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
     (note.taggedCommunities || []).forEach(cId => { const c = COMMUNITIES.find(x => x.id === cId); if (c) prefillChip('tag-communities-container', c.name); });
     logRenderAll();
