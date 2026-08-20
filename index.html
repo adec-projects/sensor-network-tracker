@@ -743,6 +743,7 @@
       #modal-add-note .log-combo-opt{padding:8px 10px;font-size:13px;cursor:pointer;border-radius:8px;display:flex;gap:9px;align-items:baseline}
       #modal-add-note .log-combo-opt:hover,#modal-add-note .log-combo-opt.active{background:#eef1f7}
       #modal-add-note .log-combo-opt .meta{color:#9aa6ba;font-size:11.5px;margin-left:auto}
+      #modal-add-note .log-combo-opt .opt-site{font-size:9px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;background:#fbf3dc;color:#8a6d1e;padding:2px 7px;border-radius:5px}
       #modal-add-note .log-combo-empty{padding:9px 10px;color:#9aa6ba;font-size:12.5px}
       #modal-add-note .log-rows{display:flex;flex-direction:column;gap:9px}
       #modal-add-note .log-empty{border:1.5px dashed #e7ebf2;border-radius:12px;padding:28px 24px;text-align:center;color:#5c6b82;font-size:13px;background:#fbfcfe}
@@ -844,10 +845,9 @@
                     <div class="log-addbar">
                         <div class="grow log-combo search">
                             <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-                            <input type="text" id="log-add-input" class="log-combo-input" placeholder="Add a sensor — type any part of the ID…" autocomplete="off" style="width:100%">
+                            <input type="text" id="log-add-input" class="log-combo-input" placeholder="Add a sensor or community — type any part of the ID or name…" autocomplete="off" style="width:100%">
                             <div class="log-combo-list" id="log-add-list"></div>
                         </div>
-                        <select id="log-site-select" title="Add every pod currently at a community" onchange="logPullSite(this.value); this.value='';"><option value="">Pull a whole site…</option></select>
                         <button type="button" class="btn btn-sm" id="log-applyall-btn" style="display:none" onclick="logToggleApplyAll()">Apply to all</button>
                     </div>
                     <div class="log-applyall" id="log-applyall" style="display:none">
@@ -916,7 +916,7 @@
                     <div class="pv-type" id="log-pv-type">General</div>
                     <div class="pv-text" id="log-pv-text"></div>
                     <div class="pv-tags" id="log-pv-tags"></div>
-                    <div class="pv-note">Everything above becomes <b>one note</b>, tagged to every sensor and community involved — so it shows up in each of their histories, with no duplicate &ldquo;add note&rdquo; pop-ups.</div>
+                    <div class="pv-note">Everything above becomes <b>one note</b>, tagged to every sensor and community involved — so it shows up in each of their histories.</div>
                 </div>
 
                 <div class="modal-footer">

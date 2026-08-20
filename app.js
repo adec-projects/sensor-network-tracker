@@ -4651,14 +4651,16 @@ function logAddReplacement(uid) {
     logRenderAll();
     showSuccessToast('Added a replacement row. The outgoing (local) pod is set to return to the lab — pick the incoming pod for the new "Replacement sensor" row.');
 }
-function logPullSite(cid) {
+// Add every pod currently at a community (picked from the search). Neutral — no
+// preset changes; each row is added collapsed for you to edit or Apply-to-all.
+function logAddCommunitySensors(cid) {
     if (!cid) return;
-    const here = sensors.filter(s => s.community === cid && !logRows.some(r => r.sensorId === s.id));
-    if (!here.length) { showAlert('No pods to add', 'No sensors at that site (or they’re already in this log).'); return; }
-    const lab = logDefaultLab();
-    here.forEach((s) => logRows.push(logNewRow({ sensorId: s.id, statuses: new Set(['Offline', 'Lab Storage']), moveTo: lab, type: 'Not Assigned', open: false })));
+    const used = new Set(logRows.map(r => r.sensorId).filter(Boolean));
+    const here = sensors.filter(s => s.community === cid && !used.has(s.id));
+    if (!here.length) { showAlert('No pods to add', 'No sensors at that community (or they’re already in this log).'); return; }
+    here.forEach(s => logRows.push(logNewRow({ sensorId: s.id, open: false })));
     logRenderAll();
-    showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)} — each staged to go Offline + Lab Storage and return to the lab. Expand any row to adjust before saving.`);
+    showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)}`);
 }
 function logToggleApplyAll() { const a = document.getElementById('log-applyall'); if (a) a.style.display = a.style.display === 'none' ? 'block' : 'none'; }
 function logApplyToAll() {
@@ -4672,7 +4674,32 @@ function logApplyToAll() {
 function logAvailableSensors() { const used = new Set(logRows.map(r => r.sensorId).filter(Boolean)); return sensors.filter(s => !used.has(s.id)); }
 function logMatchSensors(q) { const ql = (q || '').toLowerCase().trim(); return logAvailableSensors().filter(s => !ql || s.id.toLowerCase().includes(ql) || (s.community && getCommunityName(s.community).toLowerCase().includes(ql))); }
 function logComboOptHTML(s, pickFn) { const meta = s.community ? getCommunityName(s.community) : 'unassigned'; return `<div class="log-combo-opt" data-id="${escapeHtml(s.id)}" onmousedown="event.preventDefault(); ${pickFn}"><span class="logrow-id">${escapeHtml(s.id)}</span><span class="meta">${escapeHtml(meta)}</span></div>`; }
-function logRenderAddList(q) { const el = document.getElementById('log-add-list'); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickAdd('${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
+// Sensors + communities matching the search. Picking a community adds all its pods.
+function logMatchAdd(q) {
+    const ql = (q || '').toLowerCase().trim();
+    const used = new Set(logRows.map(r => r.sensorId).filter(Boolean));
+    const ss = sensors.filter(s => !used.has(s.id)).filter(s => !ql || s.id.toLowerCase().includes(ql) || (s.community && getCommunityName(s.community).toLowerCase().includes(ql)));
+    const comms = COMMUNITIES.map(c => ({ c, count: sensors.filter(s => s.community === c.id && !used.has(s.id)).length }))
+        .filter(o => o.count > 0 && (!ql || o.c.name.toLowerCase().includes(ql)))
+        .sort((a, b) => a.c.name.localeCompare(b.c.name));
+    return { sensors: ss, comms };
+}
+function logRenderAddList(q) {
+    const el = document.getElementById('log-add-list'); if (!el) return;
+    const { sensors: ss, comms } = logMatchAdd(q);
+    let html = comms.map(o => `<div class="log-combo-opt" data-add-kind="community" data-add-id="${escapeHtml(o.c.id)}" onmousedown="event.preventDefault(); logPickAddItem('community','${escapeHtml(o.c.id)}')"><span class="opt-site">Site</span><span>${escapeHtml(o.c.name)}</span><span class="meta">${o.count} pod${o.count !== 1 ? 's' : ''}</span></div>`).join('');
+    html += ss.map(s => `<div class="log-combo-opt" data-add-kind="sensor" data-add-id="${escapeHtml(s.id)}" onmousedown="event.preventDefault(); logPickAddItem('sensor','${escapeHtml(s.id)}')"><span class="logrow-id">${escapeHtml(s.id)}</span><span class="meta">${escapeHtml(s.community ? getCommunityName(s.community) : 'unassigned')}</span></div>`).join('');
+    el.innerHTML = html || '<div class="log-combo-empty">No matching sensors or communities</div>';
+    el.classList.add('show');
+}
+function logPickAddItem(kind, id) {
+    if (kind === 'community') {
+        const inp = document.getElementById('log-add-input'); if (inp) inp.value = '';
+        const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show');
+        logAddCommunitySensors(id);
+        if (inp) inp.focus();
+    } else { logPickAdd(id); }
+}
 function logPickAdd(id) { logRows.push(logNewRow({ sensorId: id })); const inp = document.getElementById('log-add-input'); if (inp) inp.value = ''; const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); logRenderAll(); if (inp) inp.focus(); }
 function logRenderRowList(uid, q) { const el = document.getElementById('log-rowlist-' + uid); if (!el) return; const list = logMatchSensors(q); el.innerHTML = list.length ? list.map(s => logComboOptHTML(s, `logPickRow('${uid}','${s.id}')`)).join('') : '<div class="log-combo-empty">No matching sensors</div>'; el.classList.add('show'); }
 function logPickRow(uid, id) {
@@ -4693,7 +4720,7 @@ function logSetupEvents() {
     inp.addEventListener('focus', () => { if (inp.value.trim()) logRenderAddList(inp.value); });
     inp.addEventListener('blur', () => setTimeout(() => { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }, 150));
     inp.addEventListener('keydown', (e) => {
-        if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector('#log-add-list .log-combo-opt'); if (f && f.dataset.id) logPickAdd(f.dataset.id); }
+        if (e.key === 'Enter') { e.preventDefault(); const f = document.querySelector('#log-add-list .log-combo-opt'); if (f && f.dataset.addId) logPickAddItem(f.dataset.addKind, f.dataset.addId); }
         else if (e.key === 'Escape') { const l = document.getElementById('log-add-list'); if (l) l.classList.remove('show'); }
     });
 }
@@ -4701,14 +4728,11 @@ function logSetupEvents() {
 function logRenderRows() {
     const el = document.getElementById('log-rows'); if (!el) return;
     el.innerHTML = logRows.length ? logRows.map(logRowCardHTML).join('')
-        : '<div class="log-empty"><b>Start by adding the sensors involved.</b><br>Use “+ Add a sensor” above — add as many as the event touches.</div>';
+        : '<div class="log-empty"><b>Start by adding the sensors involved.</b><br>Search above to add a sensor — or pick a community to add all its pods.</div>';
     const btn = document.getElementById('log-applyall-btn');
     if (btn) btn.style.display = logRows.filter(r => r.sensorId).length > 1 ? 'inline-block' : 'none';
 }
 function logRenderSelects() {
-    const sites = [...new Set(sensors.filter(s => s.community && !LAB_COMMUNITY_IDS.has(s.community)).map(s => s.community))].filter(c => COMMUNITIES.some(x => x.id === c));
-    const siteSel = document.getElementById('log-site-select');
-    if (siteSel) siteSel.innerHTML = '<option value="">Pull a whole site…</option>' + sites.sort((a, b) => getCommunityName(a).localeCompare(getCommunityName(b))).map(c => `<option value="${c}">${escapeHtml(getCommunityName(c))} (${sensors.filter(s => s.community === c).length})</option>`).join('');
     const aaS = document.getElementById('log-aa-status');
     if (aaS) aaS.innerHTML = '<option value="">(leave status)</option>' + MANUAL_STATUSES.map(s => `<option>${escapeHtml(s)}</option>`).join('');
     const aaM = document.getElementById('log-aa-move');
