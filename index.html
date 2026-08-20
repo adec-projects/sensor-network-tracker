@@ -722,72 +722,98 @@
 
     <!-- Add Note / New Log Modal -->
     <style>
-      /* ---- New Log (per-sensor rows) — scoped styles ---- */
-      #modal-add-note .log-step{display:flex;align-items:baseline;gap:10px;margin:2px 0 12px}
-      #modal-add-note .log-step-n{flex:none;width:22px;height:22px;border-radius:50%;background:var(--navy-700,#1B2A4A);color:#fff;font-size:12px;font-weight:700;display:flex;align-items:center;justify-content:center;transform:translateY(3px)}
-      #modal-add-note .log-step-h{font-size:14.5px;font-weight:700;color:var(--navy-700,#1B2A4A)}
-      #modal-add-note .log-step-sub{font-size:12px;color:var(--slate-500,#64748b);margin-top:1px}
-      #modal-add-note .log-addbar{display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px}
-      #modal-add-note .log-addbar .grow{flex:1;min-width:200px}
+      /* ---- New Log (per-sensor rows) — revamped scoped styles ---- */
+      #modal-add-note .log-step{display:flex;align-items:center;gap:11px;margin:2px 0 12px}
+      #modal-add-note .log-step-n{flex:none;width:26px;height:26px;border-radius:50%;background:#1B2A4A;color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center}
+      #modal-add-note .log-step-h{font-size:15px;font-weight:700;color:#1B2A4A;letter-spacing:-.1px}
+      #modal-add-note .log-step-sub{font-size:12.5px;color:#5c6b82;margin-top:1px}
+      #modal-add-note input[type=text],#modal-add-note input[type=datetime-local],#modal-add-note textarea,#modal-add-note select{font-size:13.5px;border:1px solid #e7ebf2;border-radius:9px;transition:border-color .12s,box-shadow .12s}
+      #modal-add-note input[type=text]:focus,#modal-add-note input[type=datetime-local]:focus,#modal-add-note textarea:focus,#modal-add-note select:focus{outline:none;border-color:#C9A84C;box-shadow:0 0 0 3px #fbf3dc}
+      #modal-add-note select{cursor:pointer;-webkit-appearance:none;appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='10' height='6' viewBox='0 0 10 6'%3E%3Cpath d='M1 1l4 4 4-4' stroke='%235c6b82' stroke-width='1.6' fill='none' stroke-linecap='round'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 11px center;padding-right:30px}
+      #modal-add-note .log-addbar{display:flex;gap:9px;align-items:center;flex-wrap:wrap;margin-bottom:14px}
+      #modal-add-note .log-addbar .grow{flex:1;min-width:220px}
+      #modal-add-note .log-addbar select{width:auto;min-width:170px}
       #modal-add-note .log-combo{position:relative}
-      #modal-add-note .log-combo-list{position:absolute;left:0;right:0;top:calc(100% + 4px);background:#fff;border:1px solid var(--slate-200,#e2e8f0);border-radius:8px;box-shadow:0 8px 22px rgba(15,23,42,.14);max-height:230px;overflow:auto;z-index:40;display:none;padding:4px}
+      #modal-add-note .log-combo .ico{position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9aa6ba;pointer-events:none;display:flex}
+      #modal-add-note .log-combo.search .log-combo-input{padding-left:34px}
+      #modal-add-note .log-combo-list{position:absolute;left:0;right:0;top:calc(100% + 5px);background:#fff;border:1px solid #e7ebf2;border-radius:11px;box-shadow:0 14px 34px rgba(20,32,60,.16);max-height:250px;overflow:auto;z-index:40;display:none;padding:5px}
       #modal-add-note .log-combo-list.show{display:block}
-      #modal-add-note .log-combo-opt{padding:7px 9px;font-size:13px;cursor:pointer;border-radius:6px;display:flex;gap:8px;align-items:baseline}
-      #modal-add-note .log-combo-opt:hover,#modal-add-note .log-combo-opt.active{background:var(--slate-100,#f1f5f9)}
-      #modal-add-note .log-combo-opt .meta{color:var(--slate-400,#94a3b8);font-size:11.5px}
-      #modal-add-note .log-combo-empty{padding:8px 9px;color:var(--slate-400,#94a3b8);font-size:12.5px}
-      #modal-add-note .log-rows{display:flex;flex-direction:column;gap:10px}
-      #modal-add-note .log-empty{border:1px dashed var(--slate-200,#e2e8f0);border-radius:12px;padding:20px;text-align:center;color:var(--slate-500,#64748b);font-size:13px;background:#fbfcfe}
-      #modal-add-note .logrow{border:1px solid var(--slate-200,#e2e8f0);border-radius:12px;overflow:hidden;background:#fff}
-      #modal-add-note .logrow-top{display:flex;align-items:center;gap:10px;padding:10px 12px;cursor:pointer}
+      #modal-add-note .log-combo-opt{padding:8px 10px;font-size:13px;cursor:pointer;border-radius:8px;display:flex;gap:9px;align-items:baseline}
+      #modal-add-note .log-combo-opt:hover,#modal-add-note .log-combo-opt.active{background:#eef1f7}
+      #modal-add-note .log-combo-opt .meta{color:#9aa6ba;font-size:11.5px;margin-left:auto}
+      #modal-add-note .log-combo-empty{padding:9px 10px;color:#9aa6ba;font-size:12.5px}
+      #modal-add-note .log-rows{display:flex;flex-direction:column;gap:9px}
+      #modal-add-note .log-empty{border:1.5px dashed #e7ebf2;border-radius:12px;padding:28px 24px;text-align:center;color:#5c6b82;font-size:13px;background:#fbfcfe}
+      #modal-add-note .log-empty b{color:#1B2A4A;display:block;margin-bottom:3px;font-size:14px}
+      #modal-add-note .logrow{border:1px solid #e7ebf2;border-radius:12px;background:#fff;transition:border-color .12s,box-shadow .12s}
+      #modal-add-note .logrow.open{border-color:#d5dcea;box-shadow:0 4px 18px rgba(20,32,60,.06)}
+      #modal-add-note .logrow-top{display:flex;align-items:center;gap:11px;padding:12px 14px;cursor:pointer;border-radius:12px}
       #modal-add-note .logrow-top:hover{background:#fbfcfe}
-      #modal-add-note .logrow-id{font-size:13.5px;font-weight:600;font-family:var(--font-mono,'JetBrains Mono',monospace)}
-      #modal-add-note .logrow-role{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 7px;border-radius:5px;background:#eef2fb;color:var(--navy-700,#1B2A4A)}
-      #modal-add-note .logrow-sum{font-size:12px;color:var(--slate-500,#64748b);margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:44%}
-      #modal-add-note .logrow-sum .chg{color:#7a5f18}
-      #modal-add-note .logrow-caret{color:var(--slate-400,#94a3b8);font-size:12px;width:12px}
-      #modal-add-note .logrow-x{border:none;background:none;color:var(--slate-400,#94a3b8);cursor:pointer;font-size:16px;padding:0 2px}
-      #modal-add-note .logrow-x:hover{color:#b03a2e}
-      #modal-add-note .logrow-body{border-top:1px solid var(--slate-100,#f1f5f9);padding:12px 14px}
-      #modal-add-note .logrow-now{font-size:11.5px;color:var(--slate-400,#94a3b8);margin-bottom:8px}
-      #modal-add-note .logrow-quick{display:flex;gap:6px;flex-wrap:wrap;margin-bottom:12px}
-      #modal-add-note .logrow-qa{border:1px solid var(--slate-200,#e2e8f0);background:#fbfcfe;border-radius:7px;padding:4px 10px;font-size:12px;color:var(--navy-700,#1B2A4A);cursor:pointer;font-weight:500}
-      #modal-add-note .logrow-qa:hover{border-color:var(--gold-500,#C9A84C);background:#fff}
-      #modal-add-note .logrow-form{display:grid;grid-template-columns:76px 1fr;gap:11px 12px;align-items:center}
-      #modal-add-note .logrow-form .picker{grid-column:1/-1}
-      #modal-add-note .logrow-k{font-size:10.5px;font-weight:700;text-transform:uppercase;letter-spacing:.4px;color:var(--slate-500,#64748b)}
-      #modal-add-note .logrow-k .dot{display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--gold-500,#C9A84C);margin-left:5px;vertical-align:middle;visibility:hidden}
-      #modal-add-note .logrow-k.changed .dot{visibility:visible}
-      #modal-add-note .logrow-statusline{display:flex;flex-wrap:wrap;gap:5px;align-items:center}
-      #modal-add-note .logrow-schip{background:var(--navy-700,#1B2A4A);color:#fff;font-size:11px;padding:2px 6px 2px 9px;border-radius:20px;display:inline-flex;align-items:center;gap:5px}
-      #modal-add-note .logrow-schip .rm{cursor:pointer;opacity:.7;font-size:13px;line-height:1}
+      #modal-add-note .logrow.open .logrow-top{border-radius:12px 12px 0 0}
+      #modal-add-note .logrow-caret{flex:none;color:#9aa6ba;width:14px;height:14px;transition:transform .18s;display:flex;align-items:center;justify-content:center}
+      #modal-add-note .logrow.open .logrow-caret{transform:rotate(90deg);color:#1B2A4A}
+      #modal-add-note .logrow-id{font-size:13.5px;font-weight:600;flex:none;font-family:'JetBrains Mono',monospace}
+      #modal-add-note .logrow-role{font-size:9.5px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;padding:2px 8px;border-radius:20px;background:#eef1f7;color:#1B2A4A;flex:none}
+      #modal-add-note .logrow-role.repl{background:#fbf3dc;color:#8a6d1e}
+      #modal-add-note .logrow-sum{font-size:12.5px;color:#9aa6ba;margin-left:auto;text-align:right;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:52%;display:flex;align-items:center;gap:6px;justify-content:flex-end}
+      #modal-add-note .logrow-sum .chg{display:inline-flex;align-items:center;gap:5px;background:#fbf3dc;color:#8a6d1e;font-weight:500;padding:2px 9px;border-radius:20px;max-width:100%;overflow:hidden;text-overflow:ellipsis}
+      #modal-add-note .logrow-sum .none{color:#9aa6ba}
+      #modal-add-note .logrow-sum .pick{color:#8a6d1e;font-weight:600}
+      #modal-add-note .logrow-edit{font-size:11.5px;color:#1B2A4A;font-weight:600;flex:none;opacity:0;transition:.12s}
+      #modal-add-note .logrow-top:hover .logrow-edit{opacity:1}
+      #modal-add-note .logrow.open .logrow-edit{display:none}
+      #modal-add-note .logrow-x{flex:none;border:none;background:none;color:#9aa6ba;cursor:pointer;font-size:17px;padding:2px 6px;border-radius:7px;line-height:1}
+      #modal-add-note .logrow-x:hover{color:#b03a2e;background:#fbeeec}
+      #modal-add-note .logrow-body{border-top:1px solid #f2f5fa;padding:16px}
+      #modal-add-note .logrow-body.picker .log-combo{max-width:420px}
+      #modal-add-note .logrow-now{display:flex;align-items:center;gap:8px;font-size:12px;color:#5c6b82;background:#fbfcfe;border:1px solid #f2f5fa;border-radius:9px;padding:8px 12px;margin-bottom:14px;flex-wrap:wrap}
+      #modal-add-note .logrow-now .lbl{font-weight:700;color:#1B2A4A;text-transform:uppercase;font-size:10px;letter-spacing:.5px}
+      #modal-add-note .logrow-now .dotsep{color:#9aa6ba}
+      #modal-add-note .logrow-quick{display:flex;gap:7px;flex-wrap:wrap;margin-bottom:16px}
+      #modal-add-note .logrow-qa{border:1px solid #e7ebf2;background:#fff;border-radius:8px;padding:6px 12px;font-size:12px;color:#1B2A4A;cursor:pointer;font-weight:600;transition:.12s}
+      #modal-add-note .logrow-qa:hover{border-color:#C9A84C;background:#fbf3dc}
+      #modal-add-note .logrow-ctrls{display:flex;flex-direction:column;border:1px solid #e7ebf2;border-radius:11px;overflow:hidden}
+      #modal-add-note .logrow-ctrl{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;padding:12px 14px;background:#fff}
+      #modal-add-note .logrow-ctrl + .logrow-ctrl{border-top:1px solid #f2f5fa}
+      #modal-add-note .logrow-ctrl.changed{background:#fefaf0}
+      #modal-add-note .logrow-k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#5c6b82;display:flex;align-items:center;gap:6px}
+      #modal-add-note .logrow-ctrl.changed .logrow-k{color:#8a6d1e}
+      #modal-add-note .logrow-k .dot{width:6px;height:6px;border-radius:50%;background:#C9A84C;visibility:hidden}
+      #modal-add-note .logrow-ctrl.changed .logrow-k .dot{visibility:visible}
+      #modal-add-note .logrow-statusline{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+      #modal-add-note .logrow-schip{background:#1B2A4A;color:#fff;font-size:11.5px;padding:3px 7px 3px 11px;border-radius:20px;display:inline-flex;align-items:center;gap:6px}
+      #modal-add-note .logrow-schip .rm{cursor:pointer;opacity:.65;font-size:14px;line-height:1}
       #modal-add-note .logrow-schip .rm:hover{opacity:1}
-      #modal-add-note .logrow-schip.none{background:var(--slate-100,#f1f5f9);color:var(--slate-500,#64748b);padding:2px 9px}
-      #modal-add-note .logrow-addstatus{border:1px dashed var(--slate-200,#e2e8f0);border-radius:20px;font-size:11.5px;color:var(--slate-500,#64748b);padding:2px 8px;background:#fff;cursor:pointer;width:auto;max-width:150px}
-      #modal-add-note .logrow-movewrap{display:flex;align-items:center;gap:7px}
-      #modal-add-note .logrow-movewrap .from{font-size:12px;color:var(--slate-400,#94a3b8);white-space:nowrap}
-      #modal-add-note .logrow-movewrap select{flex:1}
-      #modal-add-note .logrow-foot{border-top:1px dashed var(--slate-100,#f1f5f9);margin-top:12px;padding-top:10px}
-      #modal-add-note .logrow-replace{border:none;background:none;color:var(--navy-700,#1B2A4A);font-weight:600;cursor:pointer;font-size:12.5px;text-decoration:underline;padding:0}
-      #modal-add-note .log-applyall{border:1px solid var(--slate-200,#e2e8f0);border-radius:10px;background:#fbfcfe;padding:12px 14px;margin-bottom:10px}
+      #modal-add-note .logrow-schip.none{background:#f2f5fa;color:#5c6b82;padding:3px 11px}
+      #modal-add-note .logrow-addstatus{border:1px dashed #c9d2e2;border-radius:20px;font-size:11.5px;color:#5c6b82;padding:4px 10px;background:#fff;cursor:pointer;width:auto;max-width:150px;background-position:right 9px center;padding-right:26px}
+      #modal-add-note .logrow-movewrap{display:flex;align-items:center;gap:9px}
+      #modal-add-note .logrow-movewrap .from{font-size:12px;color:#5c6b82;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
+      #modal-add-note .logrow-movewrap .from b{color:#1B2A4A;font-weight:600}
+      #modal-add-note .logrow-movewrap .arr{color:#8a6d1e}
+      #modal-add-note .logrow-movewrap select{flex:1;max-width:280px}
+      #modal-add-note .logrow-ctrl select,#modal-add-note .logrow-ctrl input[type=text]{max-width:360px}
+      #modal-add-note .logrow-foot{margin-top:16px}
+      #modal-add-note .logrow-replace{border:none;background:none;color:#1B2A4A;font-weight:600;cursor:pointer;font-size:12.5px;padding:0}
+      #modal-add-note .logrow-replace:hover{color:#8a6d1e}
+      #modal-add-note .log-applyall{border:1px solid #e7ebf2;border-radius:11px;background:#fbfcfe;padding:12px 14px;margin-bottom:10px}
       #modal-add-note .log-applyall .aa-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
-      #modal-add-note .log-preview{border:1px solid var(--slate-200,#e2e8f0);border-radius:10px;margin:6px 0 4px;overflow:hidden}
-      #modal-add-note .log-preview .ph{display:flex;align-items:center;gap:8px;padding:9px 12px;border-bottom:1px solid var(--slate-100,#f1f5f9);background:#fbfcfe}
-      #modal-add-note .log-preview .ph .pill{background:var(--navy-700,#1B2A4A);color:#fff;font-size:10px;font-weight:700;letter-spacing:.5px;padding:3px 8px;border-radius:20px}
-      #modal-add-note .log-preview .ph .lbl{font-size:12.5px;font-weight:700;color:var(--navy-700,#1B2A4A)}
-      #modal-add-note .log-preview .pv-type{font-size:10px;font-weight:700;color:var(--navy-700,#1B2A4A);text-transform:uppercase;letter-spacing:.4px;padding:10px 12px 0}
-      #modal-add-note .log-preview .pv-text{font-size:12.5px;white-space:pre-wrap;padding:4px 12px 12px}
-      #modal-add-note .log-preview .pv-text .auto{color:#5a6b82}
-      #modal-add-note .log-preview .pv-text .free{color:var(--ink,#1e293b);font-weight:500}
-      #modal-add-note .log-preview .pv-tags{padding:0 12px 6px;font-size:11px;color:var(--slate-500,#64748b)}
+      #modal-add-note .log-preview{border:1px solid #e7ebf2;border-radius:12px;margin:8px 0 4px;overflow:hidden;box-shadow:0 6px 20px rgba(20,32,60,.05)}
+      #modal-add-note .log-preview .ph{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid #e7ebf2;background:#1B2A4A;color:#fff}
+      #modal-add-note .log-preview .ph .pill{background:#C9A84C;color:#1B2A4A;font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 10px;border-radius:20px}
+      #modal-add-note .log-preview .ph .lbl{font-size:14px;font-weight:700;color:#fff}
+      #modal-add-note .log-preview .pv-type{display:inline-block;font-size:10px;font-weight:700;color:#1B2A4A;background:#eef1f7;text-transform:uppercase;letter-spacing:.5px;padding:4px 10px;border-radius:20px;margin:14px 16px 0}
+      #modal-add-note .log-preview .pv-text{font-size:12.5px;white-space:pre-wrap;line-height:1.6;padding:8px 16px 4px}
+      #modal-add-note .log-preview .pv-text .auto{color:#586a83;display:block}
+      #modal-add-note .log-preview .pv-text .free{color:#1f2a3d;font-weight:500;display:block;margin-bottom:4px}
+      #modal-add-note .log-preview .pv-tags{padding:4px 16px 6px;font-size:11px;color:#5c6b82}
       #modal-add-note .log-preview .pv-tags:empty{display:none}
-      #modal-add-note .log-preview .pv-tag{display:inline-block;border-radius:20px;padding:2px 9px;margin:2px 3px 0 0;font-size:11px}
-      #modal-add-note .log-preview .pv-tag.s{background:#eef2fb;color:var(--navy-700,#1B2A4A);font-family:var(--font-mono,'JetBrains Mono',monospace)}
-      #modal-add-note .log-preview .pv-tag.c{background:var(--gold-soft,#fbf3dc);color:#7a5f18}
-      #modal-add-note .log-preview .pv-note{padding:9px 12px 12px;font-size:11px;color:var(--slate-500,#64748b);border-top:1px solid var(--slate-100,#f1f5f9)}
-      #modal-add-note .log-preview .pv-note b{color:var(--navy-700,#1B2A4A)}
+      #modal-add-note .log-preview .pv-tag{display:inline-block;border-radius:20px;padding:3px 10px;margin:2px 4px 2px 0;font-size:11px}
+      #modal-add-note .log-preview .pv-tag.s{background:#eef1f7;color:#1B2A4A;font-family:'JetBrains Mono',monospace}
+      #modal-add-note .log-preview .pv-tag.c{background:#fbf3dc;color:#8a6d1e}
+      #modal-add-note .log-preview .pv-note{padding:12px 16px 14px;font-size:11px;color:#5c6b82;border-top:1px solid #f2f5fa;line-height:1.55}
+      #modal-add-note .log-preview .pv-note b{color:#1B2A4A}
       @media (max-width:600px){
-        #modal-add-note .logrow-form{grid-template-columns:1fr;gap:8px}
+        #modal-add-note .logrow-ctrl{grid-template-columns:1fr;gap:6px}
         #modal-add-note .log-applyall .aa-grid{grid-template-columns:1fr}
         #modal-add-note .logrow-movewrap{flex-wrap:wrap}
         #modal-add-note .log-addbar{flex-direction:column;align-items:stretch}
@@ -814,8 +840,9 @@
                         </div>
                     </div>
                     <div class="log-addbar">
-                        <div class="grow log-combo">
-                            <input type="text" id="log-add-input" class="tag-chip-input log-combo-input" placeholder="+ Add a sensor — type any part of the ID…" autocomplete="off" style="width:100%">
+                        <div class="grow log-combo search">
+                            <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
+                            <input type="text" id="log-add-input" class="tag-chip-input log-combo-input" placeholder="Add a sensor — type any part of the ID…" autocomplete="off" style="width:100%">
                             <div class="log-combo-list" id="log-add-list"></div>
                         </div>
                         <select id="log-site-select" title="Add every pod currently at a community" onchange="logPullSite(this.value); this.value='';"><option value="">Pull a whole site…</option></select>

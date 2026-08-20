@@ -4487,7 +4487,13 @@ function isSensorLog(note) {
     if ((note.taggedSensors || []).filter(id => findSensor(id)).length === 0) return false;
     return /Movement|Status Change|Info Edit|Sensor Install|Sensor Removal|Troubleshooting/.test(note.type || '');
 }
-function logNewRow(over) { return Object.assign({ uid: logUid++, sensorId: '', role: '', statuses: null, moveTo: '', type: '', location: null, open: true, editBefore: null, editAfterCommunity: '' }, over || {}); }
+function logNewRow(over) {
+    const row = Object.assign({ uid: logUid++, sensorId: '', role: '', statuses: null, moveTo: '', type: '', location: null, open: undefined, editBefore: null, editAfterCommunity: '' }, over || {});
+    // Collapsed by default; a row still needing a sensor picked stays open so the
+    // search box is visible. Callers can force `open` explicitly.
+    if (row.open === undefined) row.open = !row.sensorId;
+    return row;
+}
 
 // Can this note be re-opened in the FULL log editor? Only a recent (< 1h) log whose
 // sensor changes are all still exactly as it left them (nothing changed since). Returns
@@ -4547,31 +4553,35 @@ function logCommunityOptionsFlat() {
 }
 
 function logSummary(r) {
-    if (!r.sensorId) return '<span style="color:#b45309">choose a sensor</span>';
-    const ch = logRowChanges(r); if (!ch.length) return '<span style="color:#94a3b8">no changes yet</span>';
-    return '<span class="chg">' + ch.map(c => c.kind === 'status' ? (c.to.join(', ') || 'no status') : c.kind === 'move' ? ('→ ' + getCommunityName(c.to)) : c.kind === 'type' ? c.to : 'location').map(escapeHtml).join(' · ') + '</span>';
+    if (!r.sensorId) return '<span class="pick">choose a sensor</span>';
+    const ch = logRowChanges(r); if (!ch.length) return '<span class="none">no changes yet</span>';
+    const txt = ch.map(c => c.kind === 'status' ? (c.to.join(', ') || 'no status') : c.kind === 'move' ? ('→ ' + getCommunityName(c.to)) : c.kind === 'type' ? c.to : 'location').map(escapeHtml).join(' · ');
+    return `<span class="chg">${txt}</span>`;
 }
+
+const LOG_CARET_SVG = '<svg width="8" height="12" viewBox="0 0 8 12" fill="none"><path d="M1.5 1.5L6 6l-4.5 4.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>';
+const LOG_SEARCH_SVG = '<svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
 
 function logRowCardHTML(r) {
     const s = findSensor(r.sensorId);
-    const roleTag = r.role ? `<span class="logrow-role">${escapeHtml(r.role)}</span>` : '';
+    const roleTag = r.role ? `<span class="logrow-role ${r.role === 'Replacement sensor' ? 'repl' : ''}">${escapeHtml(r.role)}</span>` : '';
     const head = `<div class="logrow-top" role="button" tabindex="0" aria-expanded="${r.open ? 'true' : 'false'}" onclick="logToggleRow('${r.uid}')" onkeydown="if((event.key==='Enter'||event.key===' ')&&event.target===event.currentTarget){event.preventDefault();logToggleRow('${r.uid}')}">
-        <span class="logrow-caret">${r.open ? '▾' : '▸'}</span>
+        <span class="logrow-caret">${LOG_CARET_SVG}</span>
         <span class="logrow-id">${escapeHtml(r.sensorId || 'New sensor row')}</span>${roleTag}
         <span class="logrow-sum" id="logsum-${r.uid}">${logSummary(r)}</span>
+        <span class="logrow-edit">Edit</span>
         <button type="button" class="logrow-x" title="Remove" onclick="event.stopPropagation(); logRemoveRow('${r.uid}')">&times;</button></div>`;
     if (!r.open) return `<div class="logrow">${head}</div>`;
     if (!r.sensorId) {
-        return `<div class="logrow">${head}<div class="logrow-body picker"><div class="log-combo">
+        return `<div class="logrow open">${head}<div class="logrow-body picker"><div class="log-combo search">
+            <span class="ico">${LOG_SEARCH_SVG}</span>
             <input type="text" class="tag-chip-input log-combo-input" style="width:100%" placeholder="Type a sensor ID to search…" autocomplete="off"
                 oninput="logRenderRowList('${r.uid}', this.value)" onfocus="logRenderRowList('${r.uid}', this.value)" onblur="logHideRowListSoon('${r.uid}')">
             <div class="log-combo-list" id="log-rowlist-${r.uid}"></div></div></div></div>`;
     }
     // Sensor id is set but the sensor is gone (deleted/renamed in another session).
-    // Render a clear removable state instead of dereferencing a null and crashing
-    // the whole rows render.
     if (!s) {
-        return `<div class="logrow">${head}<div class="logrow-body"><div class="logrow-now" style="color:#b03a2e">This sensor is no longer available — remove this row.</div></div></div>`;
+        return `<div class="logrow open">${head}<div class="logrow-body"><div class="logrow-now" style="color:#b03a2e">This sensor is no longer available — remove this row.</div></div></div>`;
     }
     const base = logRowBase(r);
     const sel = logRowStatuses(r);
@@ -4589,18 +4599,26 @@ function logRowCardHTML(r) {
     // No "replace this pod" shortcut while editing an existing log.
     const replace = (!r.editBefore && base.community && !LAB_COMMUNITY_IDS.has(base.community) && r.role !== 'Local sensor')
         ? `<div class="logrow-foot"><button type="button" class="logrow-replace" onclick="logAddReplacement('${r.uid}')">↔ Replacing this pod? Add the incoming replacement</button></div>` : '';
-    return `<div class="logrow">${head}<div class="logrow-body">
-        <div class="logrow-now">${r.editBefore ? 'Before this log:' : 'Now:'} ${escapeHtml(base.type || '—')} · ${base.community ? escapeHtml(getCommunityName(base.community)) : 'no community'} · ${escapeHtml((base.status || []).join(', ') || 'no status')}</div>
+    return `<div class="logrow open">${head}<div class="logrow-body">
+        <div class="logrow-now"><span class="lbl">${r.editBefore ? 'Before' : 'Now'}</span> ${escapeHtml(base.type || '—')} <span class="dotsep">·</span> ${base.community ? escapeHtml(getCommunityName(base.community)) : 'no community'} <span class="dotsep">·</span> ${escapeHtml((base.status || []).join(', ') || 'no status')}</div>
         ${quick}
-        <div class="logrow-form">
-            <div class="logrow-k ${logHas(r, 'status') ? 'changed' : ''}">Status<span class="dot"></span></div>
-            <div class="logrow-statusline">${chips}<select class="logrow-addstatus" onchange="logAddStatus('${r.uid}', this.value); this.value='';">${addOpts}</select></div>
-            <div class="logrow-k ${logHas(r, 'move') ? 'changed' : ''}">Move to<span class="dot"></span></div>
-            <div class="logrow-movewrap"><span class="from">from ${escapeHtml(fromName)} →</span><select onchange="logSetMove('${r.uid}', this.value)">${logCommunityOptions(r.moveTo)}</select></div>
-            <div class="logrow-k ${logHas(r, 'type') ? 'changed' : ''}">Type<span class="dot"></span></div>
-            <div><select onchange="logSetType('${r.uid}', this.value)">${typeOpts}</select></div>
-            <div class="logrow-k ${logHas(r, 'location') ? 'changed' : ''}">Location<span class="dot"></span></div>
-            <div><input type="text" value="${escapeHtml(logRowLoc(r))}" placeholder="Where the pod is mounted (optional)" oninput="logSetLoc('${r.uid}', this.value)"></div>
+        <div class="logrow-ctrls">
+            <div class="logrow-ctrl ${logHas(r, 'status') ? 'changed' : ''}">
+                <div class="logrow-k">Status<span class="dot"></span></div>
+                <div class="logrow-statusline">${chips}<select class="logrow-addstatus" onchange="logAddStatus('${r.uid}', this.value); this.value='';">${addOpts}</select></div>
+            </div>
+            <div class="logrow-ctrl ${logHas(r, 'move') ? 'changed' : ''}">
+                <div class="logrow-k">Move to<span class="dot"></span></div>
+                <div class="logrow-movewrap"><span class="from">from <b>${escapeHtml(fromName)}</b> <span class="arr">→</span></span><select onchange="logSetMove('${r.uid}', this.value)">${logCommunityOptions(r.moveTo)}</select></div>
+            </div>
+            <div class="logrow-ctrl ${logHas(r, 'type') ? 'changed' : ''}">
+                <div class="logrow-k">Type<span class="dot"></span></div>
+                <div><select onchange="logSetType('${r.uid}', this.value)">${typeOpts}</select></div>
+            </div>
+            <div class="logrow-ctrl ${logHas(r, 'location') ? 'changed' : ''}">
+                <div class="logrow-k">Location<span class="dot"></span></div>
+                <div><input type="text" value="${escapeHtml(logRowLoc(r))}" placeholder="Where the pod is mounted (optional)" oninput="logSetLoc('${r.uid}', this.value)"></div>
+            </div>
         </div>${replace}</div></div>`;
 }
 
@@ -4638,7 +4656,7 @@ function logPullSite(cid) {
     const here = sensors.filter(s => s.community === cid && !logRows.some(r => r.sensorId === s.id));
     if (!here.length) { showAlert('No pods to add', 'No sensors at that site (or they’re already in this log).'); return; }
     const lab = logDefaultLab();
-    here.forEach((s, i) => logRows.push(logNewRow({ sensorId: s.id, statuses: new Set(['Offline', 'Lab Storage']), moveTo: lab, type: 'Not Assigned', open: i === 0 })));
+    here.forEach((s) => logRows.push(logNewRow({ sensorId: s.id, statuses: new Set(['Offline', 'Lab Storage']), moveTo: lab, type: 'Not Assigned', open: false })));
     logRenderAll();
     showSuccessToast(`Added ${here.length} pod${here.length !== 1 ? 's' : ''} from ${getCommunityName(cid)} — each staged to go Offline + Lab Storage and return to the lab. Expand any row to adjust before saving.`);
 }
@@ -5574,7 +5592,7 @@ function openFullLogEdit(note, parsed) {
             moveTo: (after.community && after.community !== before.community) ? after.community : '',
             type: (after.type && after.type !== before.type) ? after.type : '',
             location: (after.location !== before.location) ? (after.location || '') : null,
-            open: true,
+            open: false,
         });
     });
     // Keep any community tags the note carried; move communities re-add themselves on save.
@@ -5597,7 +5615,7 @@ function openAdditiveLogEdit(note) {
     const ta = document.getElementById('note-text-input'); if (ta) { ta.value = dedupeNoteText(note.text || ''); ta.placeholder = 'Note text (any new changes below are added to this).'; }
     document.getElementById('note-date-input').value = note.date || nowDatetime();
     // One row per tagged sensor that still exists; baseline = live state (no editBefore).
-    logRows = (note.taggedSensors || []).filter(id => findSensor(id)).map(id => logNewRow({ sensorId: id, open: true }));
+    logRows = (note.taggedSensors || []).filter(id => findSensor(id)).map(id => logNewRow({ sensorId: id, open: false }));
     document.querySelectorAll('#modal-add-note .tag-chip').forEach(c => c.remove());
     (note.taggedCommunities || []).forEach(cId => { const c = COMMUNITIES.find(x => x.id === cId); if (c) prefillChip('tag-communities-container', c.name); });
     logRenderAll();
