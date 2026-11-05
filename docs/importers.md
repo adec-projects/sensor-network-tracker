@@ -6,7 +6,7 @@ This repo contains several standalone HTML pages used to load data into Supabase
 
 Each importer is a self-contained page that loads the Supabase JS library from a CDN, authenticates against the same project as the main app, and writes to one or more tables. They're deliberately kept as plain HTML so they survive framework changes and can be used even after the main app evolves.
 
-**⚠️ All importers write to production Supabase.** There is no dev database. Open them only when you intend to run them.
+**All importers write directly to the production Supabase database.** There is no dev database. Open them only when you intend to run them.
 
 ## Available importers
 
@@ -22,7 +22,7 @@ Chart data is left null on purpose so the audit shows the **report's** DQI numbe
 recomputed version (the app excludes the first 24h; the reports don't). Requires the
 `20260603120000_sf_audit_provenance.sql` migration first.
 
-**Use when:** loading the historical Salesforce audit sheets. See `docs/sf-integration-plan.md`.
+**Use when:** loading the historical Salesforce audit sheets.
 
 ### `sf-importer.html`
 Track B of the Salesforce migration: imports the classified comms + notes (from the full
@@ -34,7 +34,7 @@ pending here"). Writes to `comms`/`notes` with `comm_tags`/`note_tags`, tagged
 removes all SF-imported comms/notes. Requires the `20260603130000_sf_comms_notes_provenance.sql`
 migration. Bulk `List Email:` blasts and audit entries are excluded by the preprocessor.
 
-**Use when:** importing the Salesforce activity history. See `docs/sf-integration-plan.md`.
+**Use when:** importing the Salesforce activity history.
 
 ### `sf-contact-migrator.html`
 Migrates contacts out of the legacy Salesforce system into the `contacts` table. Handles the column-name mapping, de-dupes by email, and assigns contacts to communities.

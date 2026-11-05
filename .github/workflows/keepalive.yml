@@ -3,8 +3,11 @@ name: Supabase keep-alive
 # Supabase pauses free-tier projects after 7 days with no API activity.
 # This job sends a tiny, harmless read request to the project on a schedule
 # so it always registers as "active" and never gets paused.
-# It does NOT change the app or the data — it's a read that returns nothing
+# It does NOT change the app or the data; it is a read that returns nothing
 # (all tables are locked to logged-in users; the request still counts as activity).
+#
+# TEMPORARY: this only matters while Supabase is the live database. Once the data
+# has been migrated to the State-managed system, this workflow can be deleted.
 
 on:
   schedule:
@@ -30,7 +33,7 @@ jobs:
             -H "Authorization: Bearer $SUPABASE_ANON_KEY")
           echo "Supabase responded: HTTP $code"
           if [ "$code" != "200" ]; then
-            echo "Unexpected response — keep-alive ping may have failed."
+            echo "Unexpected response. Keep-alive ping may have failed."
             exit 1
           fi
           echo "Keep-alive ping OK."

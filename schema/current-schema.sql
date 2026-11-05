@@ -3,8 +3,8 @@
 -- =============================================================================
 -- This file is the single source of truth for the live database structure,
 -- reverse-engineered directly from the production Supabase/PostgreSQL database
--- (information_schema + pg_constraint + pg_indexes). It supersedes the older,
--- stale `supabase-schema.sql` at the repo root.
+-- (information_schema + pg_constraint + pg_indexes). It is the authoritative
+-- reference for the live database structure.
 --
 -- Generated: 2026-06-08, for the State of Alaska handoff (Supabase -> MS SQL).
 --

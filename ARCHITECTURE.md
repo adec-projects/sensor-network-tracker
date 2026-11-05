@@ -55,7 +55,7 @@ The anon key committed in `supabase-client.js` is the public anon key and is saf
 
 ## Data model
 
-See [`docs/data-dictionary.md`](docs/data-dictionary.md) for the table-by-table reference and [`schema/current-schema.sql`](schema/current-schema.sql) for the exact DDL. The shape at a glance:
+See [`docs/data-dictionary.md`](docs/data-dictionary.md) for the table-by-table reference and [`schema/current-schema.sql`](schema/current-schema.sql) for the exact DDL. The structure:
 
 - **`communities`** are the ~40 Alaska communities plus regulatory sites and labs, with parent/child support for sub-sites (for example NCore under Fairbanks).
 - **`sensors`** are the pods. Status is a text array, so a pod can be "Online" and "PM Sensor Issue" at the same time.

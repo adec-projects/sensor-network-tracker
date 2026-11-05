@@ -5,6 +5,10 @@ supabase/.branches/
 .env
 .env.local
 
-# Raw Salesforce export data (PII) — never commit
+# Raw Salesforce export data (PII); never commit
 sf-export/*
 !sf-export/README.md
+
+# Exported data copies / backups (contain contact + sensor data); never commit
+*.csv
+handoff-backup-*/

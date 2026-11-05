@@ -14,9 +14,9 @@ in `index.html`.
 | `sf-importer.html` | Salesforce comms/notes activity history → `comms`/`notes`, reviewed community-by-community |
 
 These write directly to the **live** Supabase database and are not everyday
-tools — they live here so the day-to-day app surface stays simple. Open them
+tools - they live here so the day-to-day app surface stays simple. Open them
 by URL (`…/archive/<file>`) only when running a migration/backfill.
 
 If the repo ever needs to stop bundling these in a GitHub Pages deploy,
-they can be safely deleted — the Salesforce source data they consumed is
+they can be safely deleted - the Salesforce source data they consumed is
 no longer authoritative.

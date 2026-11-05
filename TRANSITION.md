@@ -22,14 +22,14 @@ DEC's decided direction is to **migrate the data into DEC's own internal databas
 and retire this app.** That makes the single most important action clear:
 
 > **Get a complete, verified copy of the data into DEC's hands before Ayla's last
-> day.** That export is the insurance policy. Even if every account lapses the day
-> she leaves, the data is safe and the migration can proceed on DEC's own schedule.
+> day.** That export is the safeguard. Even if every account lapses the day she
+> leaves, the data is safe and the migration can proceed on DEC's own schedule.
 
 Everything else below supports that one goal.
 
 ---
 
-## 2. What the system actually is (30-second version)
+## 2. What the system is
 
 Two pieces, no server to maintain:
 
@@ -39,13 +39,13 @@ Two pieces, no server to maintain:
    also handles logins and stores uploaded files.
 
 There is no custom server, no monthly bill, and no automatic sensor/QuantAQ
-connection anymore. Staff log issues by hand. This simplicity is good news for a
+connection anymore. Staff log issues by hand. This simplicity helps the
 handoff: the valuable thing to preserve is **the data**, and the data all lives in
 one place (Supabase).
 
 ---
 
-## 3. Access & ownership inventory (the heart of the meeting)
+## 3. Access and ownership inventory
 
 This is the "who holds the keys" table. Walk DEC through it.
 
@@ -92,7 +92,7 @@ The schema and the data export are the whole spec.
 
 ---
 
-## 5. The data export (the insurance policy) - do this before the last day
+## 5. The data export (the safeguard) - do this before the last day
 
 This is the most important deliverable. Two ways to do it; **Option A is the full,
 faithful backup and is recommended.** Both need the database password from the
@@ -208,5 +208,5 @@ everything we need."
 | `docs/mssql-migration-runbook.md` | Step-by-step transfer + verification |
 | `SECURITY.md` | How access/permissions work |
 | `ARCHITECTURE.md` | How the website and database fit together |
-| `README.md` / `AGENTS.md` | Project overview and file map |
+| `README.md` / `docs/developer-notes.md` | Project overview and file map |
 | `scripts/backup-database.sh` | One-command data export |

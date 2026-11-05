@@ -90,7 +90,7 @@ exist in MS SQL.
   requires a TOTP challenge after login; admins can reset a user's MFA
   (`admin_reset_mfa`, which clears Supabase `auth.mfa_factors`). The new identity
   provider needs an equivalent MFA enforcement and an admin MFA-reset path. (Note:
-  today the MFA gate is enforced in the UI, not in RLS — see SECURITY.md.)
+  today the MFA gate is enforced in the UI, not in RLS - see SECURITY.md.)
 
 ---
 
@@ -119,37 +119,37 @@ policies here are role-based, not per-row.
 These PostgreSQL/Supabase server-side pieces exist (definitions in
 `supabase/migrations/`). The behavior to preserve, function by function:
 
-- **`is_email_allowed(email)`** — the signup gate. Case-insensitive email match
+- **`is_email_allowed(email)`** - the signup gate. Case-insensitive email match
   against `allowed_emails`, AND the row must be active (`status='active'` or null).
   Returns boolean. (`20260422221400_hardening_pass.sql`)
-- **`upsert_profile(id, email, name)`** — on INSERT it sets the profile's `role`
+- **`upsert_profile(id, email, name)`** - on INSERT it sets the profile's `role`
   from the matching `allowed_emails` row; on conflict it updates only the name and
   **never overwrites an admin-set role**. (`20260421210700_sync_profile_role...`)
-- **`sync_my_role()`** — sets the caller's `profiles.role` from their
+- **`sync_my_role()`** - sets the caller's `profiles.role` from their
   `allowed_emails` entry (used by the app to keep RLS role in sync without letting
   a user change their own role). (`20260608030000_fix_profile_role_escalation.sql`)
-- **`append_progress_note(kind, id, text, contacts)`** — race-free single-statement
+- **`append_progress_note(kind, id, text, contacts)`** - race-free single-statement
   append of a progress note to a ticket/audit/collocation; stamps the note `at`
   time in **America/Anchorage** wall-clock. Keep both the atomicity and the AK-time.
   (`20260423213800_progress_note_ak_time.sql`)
 - **`edit_progress_note(kind, id, at, by, old_text, new_text, contacts)`** and
-  **`delete_progress_note(kind, id, at, by, old_text)`** — race-free single-UPDATE
+  **`delete_progress_note(kind, id, at, by, old_text)`** - race-free single-UPDATE
   edit/delete of one progress note inside the same JSON array. They locate the
   target by its `(at, by, text)` identity (not by array index) and rebuild the
   array server-side, so a concurrent append isn't clobbered. The client falls
   back to a full-array rewrite if these aren't present, but reproduce them in
   T-SQL (`OPENJSON` to find the element + `JSON_MODIFY` to rewrite, same approach
   as append) for the same safety. (`20260608040000_edit_delete_progress_note.sql`)
-- **`send_user_invite`, `delete_auth_user`, `admin_reset_mfa`** — admin-only user
+- **`send_user_invite`, `delete_auth_user`, `admin_reset_mfa`** - admin-only user
   management. `delete_auth_user` and `admin_reset_mfa` reach into Supabase's
   `auth.users` / `auth.mfa_factors` schema, so they're tied to Supabase Auth and
   must be re-expressed against the new identity provider.
-- **Trigger `set_updated_by()`** — on UPDATE sets `updated_by = auth.uid()` (only
+- **Trigger `set_updated_by()`** - on UPDATE sets `updated_by = auth.uid()` (only
   when there is a logged-in user) and bumps `updated_at = now()` **only for
   `communities`, `contacts`, `notes`, `comms`** (not sensors/tickets/audits/
   collocations). A naive "set updated_at on every table" reimplementation would
   change behavior; match the table list.
-- **Cron — `purge_old_trash()`**, scheduled as pg_cron job **`purge-old-trash`**,
+- **Cron - `purge_old_trash()`**, scheduled as pg_cron job **`purge-old-trash`**,
   daily at **09:00 UTC**. Hard-deletes rows whose `deleted_at` is older than
   **30 days** from exactly five tables: `notes`, `comms`, `service_tickets`,
   `audits`, `collocations` (NOT sensors). Reproduce as a SQL Server Agent job with

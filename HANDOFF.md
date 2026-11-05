@@ -8,12 +8,12 @@ Internal ADEC tool tracking air-quality sensor pods (QuantAQ Modulairs), the
 Alaska communities they're deployed in, and site contacts; replaced a Salesforce
 workflow. Vanilla HTML/CSS/JS front end against a Supabase/PostgreSQL backend; all
 data access is centralized in `supabase-client.js` (the `db` helper). Architecture
-overview in [`AGENTS.md`](AGENTS.md).
+overview in [`docs/developer-notes.md`](docs/developer-notes.md).
 
 ## Backend documentation
 | Document | Contents |
 |---|---|
-| [`schema/current-schema.sql`](schema/current-schema.sql) | Authoritative current DDL (16 tables, keys, indexes), reverse-engineered from production, with inline `[MSSQL]` translation notes. Source of truth for structure. (`supabase-schema.sql` is a stale snapshot, marked archived.) |
+| [`schema/current-schema.sql`](schema/current-schema.sql) | Authoritative current DDL (16 tables, keys, indexes), reverse-engineered from production, with inline `[MSSQL]` translation notes. Source of truth for structure. |
 | [`docs/data-dictionary.md`](docs/data-dictionary.md) | Table/column semantics. |
 | [`docs/mssql-migration-guide.md`](docs/mssql-migration-guide.md) | PostgreSQL→MS SQL mapping: types, arrays, JSON, timestamps, RLS, auth, functions. |
 | [`docs/mssql-migration-runbook.md`](docs/mssql-migration-runbook.md) | Step-by-step transfer procedure with pre-flight and post-load validation. |
