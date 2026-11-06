@@ -86,7 +86,7 @@ the app with test transfers loaded; DEC can use it to practice, or delete it.
 | Who | Does | Guide |
 |---|---|---|
 | A Salesforce admin | Requests the Data Export (a few clicks) | `tools/sf-transfer/README.md`, Step 1 |
-| OIT | Backs up the app, runs *prepare*, *finalize*, and the load | `tools/sf-transfer/README.md` |
+| OIT | Backs up the app, runs *prepare*, *finalize*, and the load. **Also coordinates the review:** picks reviewers with DEC, sends them the package and reviewer guide, walks them through the review page, answers questions, and collects their decisions. | `tools/sf-transfer/README.md` (Step 4) |
 | Reviewer(s) who know the network | Review flagged items in the browser (~1-2 hours) | `tools/sf-transfer/REVIEWER-GUIDE.md` |
 
 ## 3a. Day-to-day account help (no IT ticket needed)

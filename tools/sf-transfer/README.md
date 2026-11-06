@@ -21,6 +21,13 @@ Each run only brings over what isn't in the app yet.
 decide the flagged items in **review.html** → OIT runs **finalize** and **loads** it.
 Try it on a test copy of the app first.
 
+> **OIT coordinates the review.** Reviewers are program staff, not IT, and won't know
+> about this process unless OIT tells them. OIT is responsible for choosing the
+> reviewer(s) with DEC, sending each one the review package and
+> [`REVIEWER-GUIDE.md`](REVIEWER-GUIDE.md), walking them through it (a short call or
+> screen-share is recommended the first time), answering their questions, and collecting
+> their `decisions.json` files. See *Step 4*.
+
 > **Privacy.** The Salesforce export, the app backup, and everything the tool writes
 > contain names, emails, and phone numbers. Keep them **out of this repository** and
 > share them only by a State secure file share, never email. The repo contains code
@@ -107,11 +114,23 @@ writes:
   e.g. `bethel`, `fbx-ncore`) and run **prepare** again. Your fixes are kept on
   every later run.
 
-## Step 4: Review (people who know the network)
+## Step 4: Review (people who know the network), coordinated by OIT
 
-Send `review-package.json` to the reviewer(s) by secure share, together with
-[`REVIEWER-GUIDE.md`](REVIEWER-GUIDE.md), which explains everything below in plain
-language. They:
+**OIT's part:**
+
+1. With DEC, pick who reviews: someone who knows which sensors were where and which
+   audits and collocations happened. More than one person can share it.
+2. Send each reviewer `review-package.json` (State secure share, not email) and
+   [`REVIEWER-GUIDE.md`](REVIEWER-GUIDE.md), plus a deadline.
+3. **Walk them through it.** A 15-minute call or screen-share works well: open the review
+   page together, load the package, and decide one or two items so they've seen each
+   choice (*Import*, *Keep separate*, *Skip*) and how to save. Point out where their
+   browser saves `decisions.json`.
+4. Be their contact for questions, and collect every `decisions.json`.
+5. Run *finalize*. If `pending-review.csv` lists anything still undecided, send it back to a
+   reviewer before loading.
+
+**The reviewer's part** (explained in plain language in the reviewer guide):
 
 1. Open `review.html` from this folder in Chrome, Edge, Firefox, or Safari (double-click it,
    or use the copy on the app's website, `.../tools/sf-transfer/review.html`). It runs

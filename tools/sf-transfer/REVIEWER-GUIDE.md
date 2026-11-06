@@ -5,6 +5,10 @@ which audits and collocations happened.
 **Time:** about 1 to 2 hours, and you can stop and come back anytime.
 **No technical skills, logins, or installs needed.**
 
+> **OIT will contact you** to set this up. They'll send you the file you need, walk you
+> through the review page the first time, and answer questions along the way. This guide
+> is your reference for what they show you.
+
 ## What's going on
 
 Salesforce records (sensor notes, calls, emails, audits) are being copied into the
@@ -24,8 +28,7 @@ Two common examples:
 ## What you need
 
 1. A computer with **Chrome, Edge, Firefox, or Safari**.
-2. A file called **`review-package.json`**, which the person running the transfer
-   (OIT) sends you by secure file share.
+2. A file called **`review-package.json`**, which OIT sends you by secure file share.
 3. Your knowledge of the network: which sensors were where, and which audits and
    collocations happened.
 
@@ -53,7 +56,7 @@ Two common examples:
 5. When the counter at the top says everything is decided, click **Save decisions
    file**. It saves `decisions.json` (check your Downloads folder; some browsers save it
    next to the page instead).
-6. Send `decisions.json` back to the person running the transfer, by secure share.
+6. Send `decisions.json` back to OIT, by secure share.
 
 Items marked **Ready** will be brought over as shown. You don't need to look at them,
 but you can change or skip any of them.
@@ -77,6 +80,7 @@ rest). Each person saves and sends their own `decisions.json`; the tool combines
 
 ## Questions
 
-Ask the person who sent you the package. If something in the app looks wrong after the
-transfer, every transferred record is marked as coming from Salesforce, so it can be
-found and fixed.
+Ask your OIT contact (the person who sent you the package). If something in the app
+looks wrong after the
+transfer, tell OIT: every transferred record is marked as coming from Salesforce, so it
+can be found and fixed.
