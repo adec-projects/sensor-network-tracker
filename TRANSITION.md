@@ -87,7 +87,7 @@ the app with test transfers loaded; DEC can use it to practice, or delete it.
 |---|---|---|
 | A Salesforce admin | Requests the Data Export (a few clicks) | `tools/sf-transfer/README.md`, Step 1 |
 | OIT | Backs up the app, runs *prepare*, *finalize*, and the load | `tools/sf-transfer/README.md` |
-| Lydia / Isaac | Review flagged items in the browser (~1-2 hours) | `tools/sf-transfer/REVIEWER-GUIDE.md` |
+| Reviewer(s) who know the network | Review flagged items in the browser (~1-2 hours) | `tools/sf-transfer/REVIEWER-GUIDE.md` |
 
 ## 3a. Day-to-day account help (no IT ticket needed)
 
@@ -228,7 +228,7 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 **DEC, after handoff:**
 - [ ] Load the export into the target system following the runbook, and run the
       after-load row-count check to confirm nothing dropped.
-- [ ] Run the Salesforce transfer (`tools/sf-transfer/`) with Lydia/Isaac reviewing, and
+- [ ] Run the Salesforce transfer (`tools/sf-transfer/`) with reviewers who know the network, and
       run it once more just before Salesforce access ends.
 - [ ] Delete the `snt-transfer-test` Supabase project when it's no longer needed (it
       holds a copy of real contact data).

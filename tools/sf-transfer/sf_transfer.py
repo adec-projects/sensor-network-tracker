@@ -633,7 +633,7 @@ def consolidate(records, m):
     for r in records:
         if r["colloc"]:
             # Collocations: everything on the same date at the same place is one event,
-            # whatever the exact wording. Isaac/Lydia confirm each one.
+            # whatever the exact wording. A reviewer confirms each one.
             place = ",".join(sorted(set(r["communities"]) & {cid for _, cid in m.site_aliases})) or ",".join(r["communities"])
             groups[("colloc", r["date"], place)].append(r)
         elif GENERIC_SUBJECT.match(r["subject"] or ""):

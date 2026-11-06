@@ -15,7 +15,7 @@ Each run only brings over what isn't in the app yet.
 | `sf_transfer.py` | The tool. Python 3.8+, **standard library only** (nothing to install). |
 | `review.html` | The review page for people who know the network (opens in any browser, works offline). |
 | `README.md` | This guide, for whoever **runs** the transfer (OIT). |
-| `REVIEWER-GUIDE.md` | Plain-language guide for the **reviewers** (Lydia, Isaac). Send them this. |
+| `REVIEWER-GUIDE.md` | Plain-language guide for **reviewers** (anyone who knows the network). Send them this. |
 
 **At a glance:** a Salesforce admin exports the data → OIT runs **prepare** → reviewers
 decide the flagged items in **review.html** → OIT runs **finalize** and **loads** it.

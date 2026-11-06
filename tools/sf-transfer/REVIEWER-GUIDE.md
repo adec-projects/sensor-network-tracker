@@ -1,6 +1,7 @@
 # Reviewing the Salesforce transfer: a guide for reviewers
 
-**For:** Lydia, Isaac, or anyone who knows the sensor network well.
+**For:** anyone who knows the sensor network well: which sensors were where, and
+which audits and collocations happened.
 **Time:** about 1 to 2 hours, and you can stop and come back anytime.
 **No technical skills, logins, or installs needed.**
 
@@ -70,12 +71,9 @@ but you can change or skip any of them.
 
 ## Splitting the work
 
-Two people can share it. Use the filter buttons at the top, for example:
-
-* **Lydia:** *Audit* and *Collocation*
-* **Isaac:** *Copies differ*, *Same event?*, *Maybe already in app*, *Partly in app*
-
-Each person saves and sends their own `decisions.json`. The tool combines them.
+More than one person can share the review. Use the filter buttons at the top to divide
+it by type (for example, one person takes *Audit* and *Collocation*, another takes the
+rest). Each person saves and sends their own `decisions.json`; the tool combines them.
 
 ## Questions
 
