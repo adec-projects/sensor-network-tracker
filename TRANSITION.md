@@ -14,6 +14,13 @@ before Ayla leaves.
 
 ## 1. The one thing to take away from the meeting
 
+> **Update, Nov 6, 2026: this risk has been addressed.** DEC's contact is now an
+> **Owner** of the `adec-projects` GitHub organization and an Owner/Administrator of the
+> Supabase project, and has confirmed they can log in to both. DEC can make its own
+> up-to-date backup at any time with `scripts/backup-database.sh` (section 5), so no
+> copy needs to be handed over. The rest of this section is kept as the original
+> reasoning.
+
 **Everything this app runs on is tied to Ayla's personal accounts, and Ayla is the
 only person with access.** When her access ends, DEC loses the ability to get into
 the code and the live database unless we act first.
@@ -46,6 +53,8 @@ one place (Supabase).
 ---
 
 ## 3. Access and ownership inventory
+
+*As of Nov 6, 2026, DEC's contact also has Owner-level access to the GitHub organization and the Supabase project (see section 1). The table shows the situation before that.*
 
 This is the "who holds the keys" table. Walk DEC through it.
 
@@ -210,16 +219,15 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 - [x] Run the data export (section 5). *Done Nov 6, 2026: `handoff-backup-20261106/` on Ayla's laptop; all 16 tables.*
 - [ ] Run the pre-export cleanliness check (runbook section 1).
 - [ ] Download the `community-files` storage bucket.
-- [ ] Deliver the export + files to wherever DEC decides (section 6, #3).
+- [x] ~~Deliver the export + files to DEC.~~ *Not needed: DEC has direct access and can run the backup itself.*
 - [ ] Make a plain zip of this whole code repo as a backup for DEC's records.
 
 **Ayla, before the last day (once DEC names a receiver):**
-- [ ] Add DEC's GitHub account as an **Owner** of the `adec-projects` org (or confirm
-      DEC is OK relying on the exported zip instead).
-- [ ] Add DEC's login to the Supabase project, or start a Supabase project-transfer
-      to a DEC-owned account.
-- [ ] Hand over the database password and keys securely (section 6, #6).
-- [ ] Confirm DEC has successfully opened and read the export.
+- [x] Add DEC's GitHub account as an **Owner** of the `adec-projects` org. *Done Nov 6, 2026; access confirmed.*
+- [x] Add DEC's login to the Supabase project (Owner/Administrator). *Done Nov 6, 2026; access confirmed.*
+- [x] ~~Hand over the database password and keys.~~ *Not needed: DEC's Supabase owner can
+      reset the database password and see the keys in the dashboard.*
+- [x] ~~Confirm DEC has opened the export.~~ *Not needed (see above).*
 - [ ] Make sure at least two DEC staff are app **Admins** (Settings → Users). Admins
       are the only people who can help someone who forgot their password or lost
       their authenticator.
@@ -227,14 +235,19 @@ Bring these as your agenda. Each one is a decision only DEC can make:
       the personal Gmail test account and, on the last day, the alaska.gov work account.
       Archiving cuts off data access immediately.
 - [ ] Delete the `snt-transfer-test` Supabase project (test copy; holds contact data).
+- [ ] Delete local copies of app/Salesforce data from Ayla's laptop:
+      `handoff-backup-20261106/`, `~/sf-transfer-work/`, and `sf-export/` (all contain
+      contact details; none are in the repo).
 
 **DEC, after handoff:**
-- [ ] Load the export into the target system following the runbook, and run the
-      after-load row-count check to confirm nothing dropped.
+- [ ] When ready to migrate: make a fresh backup (`scripts/backup-database.sh`), load it
+      into the target system following the runbook, and run the after-load row-count
+      check to confirm nothing dropped.
 - [ ] Run the Salesforce transfer (`tools/sf-transfer/`) with reviewers who know the network, and
       run it once more just before Salesforce access ends.
 - [ ] Keep Supabase read-only for 30 to 60 days as a fallback, then decommission.
-- [ ] Reset/rotate any passwords Ayla shared, once the accounts are DEC-controlled.
+- [ ] After Ayla leaves: remove her from the GitHub organization and the Supabase project,
+      and reset the Supabase database password (she knows the current one).
 
 ---
 
