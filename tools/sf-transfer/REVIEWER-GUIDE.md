@@ -81,6 +81,5 @@ rest). Each person saves and sends their own `decisions.json`; the tool combines
 ## Questions
 
 Ask your OIT contact (the person who sent you the package). If something in the app
-looks wrong after the
-transfer, tell OIT: every transferred record is marked as coming from Salesforce, so it
-can be found and fixed.
+looks wrong after the transfer, tell OIT: every transferred record is marked as coming
+from Salesforce, so it can be found and fixed.
