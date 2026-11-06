@@ -235,9 +235,8 @@ Bring these as your agenda. Each one is a decision only DEC can make:
       the personal Gmail test account and, on the last day, the alaska.gov work account.
       Archiving cuts off data access immediately.
 - [ ] Delete the `snt-transfer-test` Supabase project (test copy; holds contact data).
-- [ ] Delete local copies of app/Salesforce data from Ayla's laptop:
-      `handoff-backup-20261106/`, `~/sf-transfer-work/`, and `sf-export/` (all contain
-      contact details; none are in the repo).
+- [x] Delete local copies of app/Salesforce data from Ayla's laptop
+      (`handoff-backup-20261106/`, `~/sf-transfer-work/`, `sf-export/`). *Done Nov 6, 2026.*
 
 **DEC, after handoff:**
 - [ ] When ready to migrate: make a fresh backup (`scripts/backup-database.sh`), load it
