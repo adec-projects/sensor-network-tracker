@@ -124,3 +124,10 @@ back and a fresh database stands up secured. Never edit old migrations.
   are checked server-side (`20261106120000`). Added admin-assisted password
   reset with forced change (`20261106160000`). Verified live: password-only
   logins and strangers get no rows or files; full sign-ins work normally.
+  Follow-up the same day: the sub-query form of the new rule tripped Postgres's
+  "infinite recursion" guard on `profiles`, whose UPDATE policies look up
+  `profiles` themselves. Admin role changes failed as a result. On `profiles`
+  only, the rule now calls the function directly (`20261106190000`). **If you
+  add a policy that looks up its own table, use the direct-call form on that
+  table too.** The admin contact list now also excludes admins who haven't
+  created an account (`20261106180000`).

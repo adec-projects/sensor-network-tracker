@@ -26,12 +26,20 @@ BEGIN
          ORDER BY c.relname
     LOOP
         EXECUTE format('DROP POLICY IF EXISTS require_trusted_session ON public.%I', t.tbl);
-        -- "(SELECT ...)" makes Postgres evaluate the check once per request
-        -- instead of once per row.
-        EXECUTE format(
-            'CREATE POLICY require_trusted_session ON public.%I AS RESTRICTIVE FOR ALL TO authenticated '
-            'USING ((SELECT public.session_is_trusted())) WITH CHECK ((SELECT public.session_is_trusted()))',
-            t.tbl);
+        IF t.tbl = 'profiles' THEN
+            -- profiles has UPDATE policies that look up profiles inside
+            -- themselves; a sub-query here would trip Postgres's "infinite
+            -- recursion" guard (see 20261106190000). Call the function directly.
+            EXECUTE 'CREATE POLICY require_trusted_session ON public.profiles AS RESTRICTIVE FOR ALL TO authenticated '
+                    'USING (public.session_is_trusted()) WITH CHECK (public.session_is_trusted())';
+        ELSE
+            -- "(SELECT ...)" makes Postgres evaluate the check once per request
+            -- instead of once per row.
+            EXECUTE format(
+                'CREATE POLICY require_trusted_session ON public.%I AS RESTRICTIVE FOR ALL TO authenticated '
+                'USING ((SELECT public.session_is_trusted())) WITH CHECK ((SELECT public.session_is_trusted()))',
+                t.tbl);
+        END IF;
         RAISE NOTICE 'protected: %', t.tbl;
     END LOOP;
 END;
