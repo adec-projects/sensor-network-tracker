@@ -228,12 +228,13 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 - [x] ~~Hand over the database password and keys.~~ *Not needed: DEC's Supabase owner can
       reset the database password and see the keys in the dashboard.*
 - [x] ~~Confirm DEC has opened the export.~~ *Not needed (see above).*
-- [ ] Make sure at least two DEC staff are app **Admins** (Settings → Users). Admins
-      are the only people who can help someone who forgot their password or lost
-      their authenticator.
-- [ ] Archive Ayla's app accounts (Settings → Users → Archive):
-      the personal Gmail test account and, on the last day, the alaska.gov work account.
-      Archiving cuts off data access immediately.
+- [x] Make sure at least two DEC staff are app **Admins** (Settings → Users). *Done Nov 6, 2026.*
+- [ ] On Ayla's last day, a **DEC admin** (you can't remove your own account) handles
+      Ayla's app accounts in Settings → Users:
+      - the personal Gmail test account: **Delete** (test only);
+      - the alaska.gov work account: **Archive**, not Delete. Archiving blocks all access
+        immediately but keeps Ayla's name on the records she created; Delete would
+        relabel all of them "[Deleted User]".
 - [x] Delete the `snt-transfer-test` Supabase project (test copy; holds contact data). *Done Nov 6, 2026.*
 - [x] Delete local copies of app/Salesforce data from Ayla's laptop
       (`handoff-backup-20261106/`, `~/sf-transfer-work/`, `sf-export/`). *Done Nov 6, 2026.*
