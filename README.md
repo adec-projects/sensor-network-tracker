@@ -47,8 +47,9 @@ QuantAQ is the hardware manufacturer only.
 - **Deployed:** GitHub Pages serves the `main` branch at the URL above. Pushing to
   `main` publishes it.
 
-Both modes read and write the same production database. There is no separate development
-database.
+Both modes read and write the same production database. To test something risky,
+make a throwaway copy first with `scripts/make-test-copy.sh` (copies the live data into
+a separate, empty Supabase project).
 
 ## Repository layout
 
@@ -74,9 +75,17 @@ docs/
 supabase/
   config.toml           Supabase CLI project config
   migrations/           Database change history (timestamped SQL)
+  rollback/             Undo scripts for the sign-in security rules (emergency use)
 
 scripts/
   backup-database.sh    One-command export of the full database for handoff
+  make-test-copy.sh     Copies the live database into an empty test project
+
+tools/sf-transfer/      Salesforce -> app transfer tool (re-runnable, no duplicates)
+  README.md             How to run it (for OIT)
+  REVIEWER-GUIDE.md     Plain-language guide for the people who review flagged items
+  sf_transfer.py        The tool (Python 3, nothing to install)
+  review.html           Review page (runs in the browser; nothing is uploaded)
 
 archive/                Retired one-off import tools and setup SQL (historical only)
 

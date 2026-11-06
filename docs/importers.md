@@ -1,5 +1,11 @@
 # Importer tools
 
+> **Moving Salesforce data into the app (current tool):** use
+> [`tools/sf-transfer/`](../tools/sf-transfer/README.md). It replaces the spring 2026
+> `archive/sf-importer.html` workflow: it handles the whole Salesforce Data Export in one
+> pass, merges per-sensor duplicate notes into one tagged note, skips anything already in
+> the app, and can be re-run safely. The archived importers below are kept as history.
+
 This repo contains several standalone HTML pages used to load data into Supabase during initial setup and one-off data cleanups. They are **not linked from the main app**: open them directly in a browser when you need them.
 
 **All of these now live in `archive/`** (e.g. `archive/audit-importer.html`, `archive/sf-importer.html`) to keep them out of the everyday app surface. Their everyday equivalents inside the app are the canonical paths: e.g. audits are normally created with the in-app "Upload Audit from Excel"; comms/notes are logged with "+ New Log". Reach for the archived importers only for bulk migration/backfill.

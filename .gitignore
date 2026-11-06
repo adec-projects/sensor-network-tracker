@@ -12,3 +12,9 @@ sf-export/*
 # Exported data copies / backups (contain contact + sensor data); never commit
 *.csv
 handoff-backup-*/
+
+# Salesforce transfer tool working files (contain contact data); never commit
+sf-transfer-work/
+review-package.json
+decisions*.json
+load-into-app.sql

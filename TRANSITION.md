@@ -66,6 +66,29 @@ only in the Supabase dashboard and must be handed over carefully.
 
 ---
 
+## 3b. Bringing the remaining Salesforce records over
+
+Salesforce and the app will be used side by side for a while. The tool in
+[`tools/sf-transfer/`](tools/sf-transfer/README.md) moves Salesforce notes,
+communications, audits, contacts, and sensors into the app **without duplicates**, and is
+meant to be run again just before Salesforce access ends. It needs: a Salesforce Data
+Export (a Salesforce admin requests it in Setup), a fresh app backup
+(`scripts/backup-database.sh`), and someone who knows the network to review the flagged
+items in `review.html`. Test it first on a copy made with `scripts/make-test-copy.sh`.
+
+**Status (Nov 6, 2026):** built and tested end to end on the spring 2026 export in a
+test copy of the app. **Not yet run on the live app or on a current Salesforce export.**
+A Supabase test project (`snt-transfer-test`, owned by Ayla's account) holds a copy of
+the app with test transfers loaded; DEC can use it to practice, or delete it.
+
+**Who does what:**
+
+| Who | Does | Guide |
+|---|---|---|
+| A Salesforce admin | Requests the Data Export (a few clicks) | `tools/sf-transfer/README.md`, Step 1 |
+| OIT | Backs up the app, runs *prepare*, *finalize*, and the load | `tools/sf-transfer/README.md` |
+| Lydia / Isaac | Review flagged items in the browser (~1-2 hours) | `tools/sf-transfer/REVIEWER-GUIDE.md` |
+
 ## 3a. Day-to-day account help (no IT ticket needed)
 
 All of this happens inside the app, in **Settings → Users**, by any Admin. There is
@@ -119,8 +142,9 @@ Supabase dashboard (Project Settings → Database). Ayla has this.
 ### Option A: one complete backup file (recommended)
 
 A ready-to-run script is in this repo: **`scripts/backup-database.sh`**. It uses the
-Supabase tool that's already installed and produces a timestamped folder with the
-full schema and all the data. Run it from the project folder:
+standard PostgreSQL tools (`brew install libpq` on a Mac; no Docker needed) and
+produces a timestamped folder with the full schema and all the data. Run it from the
+project folder:
 
 ```
 ./scripts/backup-database.sh
@@ -181,7 +205,8 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 
 **Ayla, this week:**
 - [ ] Walk DEC through this document in the meeting and get the six decisions above.
-- [ ] Run the data export (section 5) and the pre-export cleanliness check.
+- [x] Run the data export (section 5). *Done Nov 6, 2026: `handoff-backup-20261106/` on Ayla's laptop; all 16 tables.*
+- [ ] Run the pre-export cleanliness check (runbook section 1).
 - [ ] Download the `community-files` storage bucket.
 - [ ] Deliver the export + files to wherever DEC decides (section 6, #3).
 - [ ] Make a plain zip of this whole code repo as a backup for DEC's records.
@@ -203,6 +228,10 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 **DEC, after handoff:**
 - [ ] Load the export into the target system following the runbook, and run the
       after-load row-count check to confirm nothing dropped.
+- [ ] Run the Salesforce transfer (`tools/sf-transfer/`) with Lydia/Isaac reviewing, and
+      run it once more just before Salesforce access ends.
+- [ ] Delete the `snt-transfer-test` Supabase project when it's no longer needed (it
+      holds a copy of real contact data).
 - [ ] Keep Supabase read-only for 30 to 60 days as a fallback, then decommission.
 - [ ] Reset/rotate any passwords Ayla shared, once the accounts are DEC-controlled.
 
