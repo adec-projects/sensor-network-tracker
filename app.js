@@ -835,8 +835,73 @@ function hideAllAuthForms() {
     document.getElementById('signup-form-section').style.display = 'none';
     document.getElementById('mfa-challenge-section').style.display = 'none';
     document.getElementById('mfa-setup-section').style.display = 'none';
+    document.getElementById('force-change-section').style.display = 'none';
+    document.getElementById('forgot-help').style.display = 'none';
     document.getElementById('login-loading').style.display = 'none';
     hideLoginError();
+}
+
+// Sign-in page "Forgot password?" panel.
+function toggleForgotHelp() {
+    const panel = document.getElementById('forgot-help');
+    panel.style.display = panel.style.display === 'none' ? '' : 'none';
+}
+
+// Password typed on the sign-in form, held ONLY until the post-sign-in checks
+// finish, so someone signing in with a temporary password doesn't have to type
+// it a second time on the "Choose a new password" screen. Cleared on entering
+// the app, on sign-out, and after the forced change.
+let _signInPassword = null;
+
+// Shown when an admin has set a temporary password (password_change_required).
+// The database blocks all data until this is done, so this screen is the only
+// way forward.
+function showForcedPasswordChange() {
+    document.getElementById('loading-overlay').style.display = 'none';
+    document.getElementById('app').style.display = 'none';
+    document.getElementById('login-screen').style.display = 'flex';
+    hideAllAuthForms();
+    document.getElementById('force-current').value = '';
+    document.getElementById('force-new').value = '';
+    document.getElementById('force-confirm').value = '';
+    // Only ask for the temporary password again if we don't still have it
+    // (e.g. the page was refreshed after signing in).
+    document.getElementById('force-current-wrap').style.display = _signInPassword ? 'none' : '';
+    document.getElementById('force-change-section').style.display = '';
+    document.getElementById(_signInPassword ? 'force-new' : 'force-current').focus();
+}
+
+async function handleForcedPasswordChange() {
+    hideLoginError();
+    const current = _signInPassword || document.getElementById('force-current').value;
+    const newPw = document.getElementById('force-new').value;
+    const confirmPw = document.getElementById('force-confirm').value;
+    if (!current) { showLoginError('Please enter the temporary password you were given.'); return; }
+    if (newPw !== confirmPw) { showLoginError('New passwords do not match.'); return; }
+    const problem = passwordProblem(newPw);
+    if (problem) { showLoginError(problem); return; }
+    if (newPw === current) { showLoginError('Choose a password different from the temporary one.'); return; }
+
+    const btn = document.getElementById('force-submit-btn');
+    btn.disabled = true;
+    btn.textContent = 'Saving...';
+    try {
+        await db.changeMyPassword(current, newPw);
+        _signInPassword = null;
+        await enterApp();
+    } catch (err) {
+        // If the remembered password was somehow wrong, fall back to asking for it.
+        if (/current password is incorrect/i.test(err.message || '')) {
+            _signInPassword = null;
+            document.getElementById('force-current-wrap').style.display = '';
+            showLoginError('The temporary password was not accepted. Please type it in.');
+        } else {
+            showLoginError(err.message || 'Could not save your new password.');
+        }
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Save Password & Continue';
+    }
 }
 
 function getCommunityTags(communityId) {
@@ -907,6 +972,7 @@ function showSignUpForm() {
 }
 
 async function backToSignIn() {
+    _signInPassword = null;
     await supa.auth.signOut();
     document.getElementById('login-screen').style.display = 'flex';
     document.getElementById('app').style.display = 'none';
@@ -944,6 +1010,7 @@ async function handleSignIn() {
             return;
         }
         await db.signIn(email, password);
+        _signInPassword = password;
         await checkMfaAndProceed();
     } catch (err) {
         showLoginError(err.message || 'Sign in failed.');
@@ -980,11 +1047,55 @@ function showMfaChallenge() {
     document.getElementById('login-screen').style.display = 'flex';
     hideAllAuthForms();
     document.getElementById('mfa-challenge-section').style.display = '';
+    document.getElementById('mfa-help').style.display = 'none';
     document.getElementById('mfa-challenge-code').value = '';
     document.getElementById('mfa-challenge-code').focus();
 }
 
+// "Can't access your authenticator app?" panel on the code screen. Lists the
+// current admins (via get_admin_contacts) so the person knows who can reset it.
+async function toggleMfaHelp() {
+    const panel = document.getElementById('mfa-help');
+    const open = panel.style.display === 'none';
+    panel.style.display = open ? '' : 'none';
+    if (!open) return;
+    const list = document.getElementById('mfa-help-admins');
+    list.textContent = '';
+    try {
+        const admins = await db.getAdminContacts();
+        if (!admins.length) throw new Error('none');
+        const intro = document.createElement('p');
+        intro.style.margin = '0 0 4px';
+        intro.textContent = 'Ask one of these administrators to click "Reset MFA" next to your name in Settings:';
+        const ul = document.createElement('ul');
+        ul.style.cssText = 'margin:0;padding-left:18px';
+        admins.forEach(a => {
+            const li = document.createElement('li');
+            li.textContent = a.name && a.name !== a.email ? `${a.name} (${a.email})` : a.email;
+            ul.appendChild(li);
+        });
+        list.append(intro, ul);
+    } catch (e) {
+        list.textContent = 'Contact a Sensor Network Tracker administrator and ask them to reset your MFA.';
+    }
+}
+
 async function showMfaSetup() {
+    // Clear out any half-finished setups left from earlier visits to this
+    // screen. Supabase can refuse to start a new setup while an unfinished one
+    // exists, which would strand the person on this screen. Unverified factors
+    // were never usable, so removing them can't lock anyone out.
+    try {
+        const { data: existing } = await supa.auth.mfa.listFactors();
+        const stale = (existing?.all || []).filter(f => f.factor_type === 'totp' && f.status === 'unverified');
+        for (const f of stale) {
+            const { error: unErr } = await supa.auth.mfa.unenroll({ factorId: f.id });
+            if (unErr) console.warn('[mfa setup] could not clear unfinished setup:', unErr.message);
+        }
+    } catch (e) {
+        console.warn('[mfa setup] cleanup skipped:', e);
+    }
+
     // Load QR code while overlay is still showing
     const { data, error } = await supa.auth.mfa.enroll({ factorType: 'totp' });
     if (error) {
@@ -1010,7 +1121,17 @@ async function showMfaSetup() {
             + (data.totp.secret || data.totp.uri || '') + '</code>';
     };
     qrContainer.appendChild(img);
+
+    // Always offer the typed-in key too (for people setting up on a computer, or
+    // whose app can't scan). Shown in groups of 4 so it's easier to type.
+    const keyWrap = document.getElementById('mfa-setup-key-wrap');
+    const secret = data.totp.secret || '';
+    document.getElementById('mfa-setup-key').textContent = secret.replace(/(.{4})(?=.)/g, '$1 ');
+    keyWrap.open = false;
+    keyWrap.style.display = secret ? '' : 'none';
+
     document.getElementById('mfa-setup-section').dataset.factorId = data.id;
+    document.getElementById('mfa-setup-code').value = '';
 
     // Now show the screen
     document.getElementById('loading-overlay').style.display = 'none';
@@ -1064,7 +1185,8 @@ async function handleSignUp() {
     const confirmPassword = document.getElementById('signup-password-confirm').value;
 
     if (!name || !email || !password) { showLoginError('Please fill in all fields.'); return; }
-    if (password.length < 6) { showLoginError('Password must be at least 6 characters.'); return; }
+    const pwProblem = passwordProblem(password);
+    if (pwProblem) { showLoginError(pwProblem); return; }
     if (password !== confirmPassword) { showLoginError('Passwords do not match.'); return; }
 
     try {
@@ -1093,6 +1215,17 @@ async function handleSignUp() {
 }
 
 async function enterApp() {
+    // Temporary password from an admin? Must be replaced before entering.
+    // (The database enforces this too: no data is returned until it's done.)
+    // If the check itself fails (e.g. network), carry on: the server still
+    // protects the data, and the normal error path below will show.
+    try {
+        if (await db.passwordChangeRequired()) { showForcedPasswordChange(); return; }
+    } catch (e) {
+        console.warn('[enterApp] password_change_required check failed:', e);
+    }
+    _signInPassword = null;
+
     try {
     const session = await db.getSession();
     sessionStorage.setItem('mfa_verified_at', Date.now().toString());
@@ -1239,6 +1372,7 @@ function resetInactivityTimer() {
 }
 
 async function logoutUser() {
+    _signInPassword = null;
     await db.signOut();
     currentUser = null;
     currentUserId = null;
@@ -6955,7 +7089,17 @@ async function renderAllowedUsers(currentEmail) {
     const pending = (data || []).filter(r => r.status === 'active' && !signedUpEmails.has(r.email.toLowerCase()));
     const archived = (data || []).filter(r => r.status === 'archived' || r.status === 'revoked');
 
-    document.getElementById('settings-active-users').innerHTML = active.map(row => {
+    // Lockout safety net: an admin is the only person who can reset someone's
+    // authenticator from inside the app. Warn when there is just one.
+    const adminCount = active.filter(r => r.role === 'admin').length;
+    const adminWarning = isAdmin && adminCount < 2
+        ? `<div style="background:#fff8e8;border:1px solid #fde68a;border-radius:8px;padding:10px 14px;margin-bottom:12px;font-size:12.5px;color:#8a6d20">
+            <strong>Only ${adminCount === 1 ? 'one administrator' : 'no administrators'}.</strong>
+            Make a second person an Admin so someone can always reset MFA or manage users if an admin is unavailable or loses their authenticator.
+           </div>`
+        : '';
+
+    document.getElementById('settings-active-users').innerHTML = adminWarning + active.map(row => {
         const isYou = row.email.toLowerCase() === currentEmail.toLowerCase();
         const roleBadge = row.role === 'admin'
             ? '<span style="background:var(--navy-800);color:white;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px">Admin</span>'
@@ -6986,6 +7130,9 @@ async function renderAllowedUsers(currentEmail) {
         const resetMfaBtn = isAdmin && !isYou
             ? `<button class="btn btn-sm" style="font-size:11px" onclick="adminResetMfa('${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reset MFA</button>`
             : '';
+        const resetPwBtn = isAdmin && !isYou
+            ? `<button class="btn btn-sm" style="font-size:11px" onclick="adminResetPassword('${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reset password</button>`
+            : '';
         return `<div class="settings-user-row">
             <span>
                 <span class="settings-user-email">${escapeHtml(row.email)}</span>
@@ -6993,7 +7140,7 @@ async function renderAllowedUsers(currentEmail) {
                 ${guideBadge}
                 ${isYou ? '<span class="settings-user-you">(you)</span>' : ''}
             </span>
-            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${guideToggle}${roleToggle}${resetMfaBtn}${archiveBtn}${deleteBtn}</span>
+            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${guideToggle}${roleToggle}${resetPwBtn}${resetMfaBtn}${archiveBtn}${deleteBtn}</span>
         </div>`;
     }).join('') || '<p style="color:var(--slate-400);font-size:13px">No active users.</p>';
 
@@ -7224,122 +7371,61 @@ async function toggleMfaRequirement(enabled) {
 }
 
 // ===== CHANGE PASSWORD =====
-let _pwPendingNewPassword = null;
-let _pwPendingFactorId = null;
+// Password rules, shared by every place a password is set (sign-up, Settings,
+// and the forgot-password flow). The database enforces the same rules in
+// public.assert_password_strength(), so these are for friendly messages only.
+// Returns a message describing the first problem, or '' if the password is OK.
+function passwordProblem(pw) {
+    if (!pw || pw.length < 8) return 'Password must be at least 8 characters.';
+    if (pw.length > 72) return 'Password must be 72 characters or fewer.';
+    if (!/[a-zA-Z]/.test(pw)) return 'Password must include at least one letter.';
+    if (!/[0-9]/.test(pw)) return 'Password must include at least one number.';
+    if (!/[^a-zA-Z0-9]/.test(pw)) return 'Password must include at least one symbol (e.g. !@#$%).';
+    return '';
+}
 
+// Settings -> Change Password. Identity is proven by the CURRENT password,
+// checked server-side by db.changeMyPassword(); no authenticator code needed.
 async function changePassword(event) {
     event.preventDefault();
     const errorEl = document.getElementById('pw-error');
     const successEl = document.getElementById('pw-success');
     const btn = document.getElementById('pw-submit-btn');
-    const stepPasswords = document.getElementById('pw-step-passwords');
-    const stepMfa = document.getElementById('pw-step-mfa');
+    const showErr = (msg) => { errorEl.textContent = msg; errorEl.classList.add('visible'); };
     errorEl.textContent = '';
     errorEl.classList.remove('visible');
     successEl.style.display = 'none';
 
-    // Step 2: MFA verification — user is submitting the code
-    if (_pwPendingNewPassword) {
-        const mfaCode = document.getElementById('pw-mfa-code').value.trim();
-        if (!mfaCode || mfaCode.length !== 6) {
-            errorEl.textContent = 'Please enter your 6-digit code.';
-            errorEl.classList.add('visible');
-            return;
-        }
-
-        btn.disabled = true;
-        btn.textContent = 'Verifying...';
-
-        try {
-            const { data: challenge, error: challengeErr } = await supa.auth.mfa.challenge({ factorId: _pwPendingFactorId });
-            if (challengeErr) { errorEl.textContent = challengeErr.message; errorEl.classList.add('visible'); return; }
-            const { error: verifyErr } = await supa.auth.mfa.verify({ factorId: _pwPendingFactorId, challengeId: challenge.id, code: mfaCode });
-            if (verifyErr) {
-                errorEl.textContent = 'Invalid code. Please try again.';
-                errorEl.classList.add('visible');
-                document.getElementById('pw-mfa-code').value = '';
-                document.getElementById('pw-mfa-code').focus();
-                return;
-            }
-
-            const { error: updateErr } = await supa.auth.updateUser({ password: _pwPendingNewPassword });
-            if (updateErr) { errorEl.textContent = updateErr.message; errorEl.classList.add('visible'); return; }
-
-            // Success — reset everything
-            resetPasswordForm();
-            successEl.textContent = 'Password updated successfully.';
-            successEl.style.display = 'block';
-            setTimeout(() => { successEl.style.display = 'none'; }, 5000);
-        } catch (err) {
-            errorEl.textContent = err.message || 'Failed to update password.';
-            errorEl.classList.add('visible');
-        } finally {
-            btn.disabled = false;
-            btn.textContent = 'Confirm & Update Password';
-        }
-        return;
-    }
-
-    // Step 1: Validate passwords
     const currentPw = document.getElementById('pw-current').value;
     const newPw = document.getElementById('pw-new').value;
     const confirmPw = document.getElementById('pw-confirm').value;
 
-    if (newPw !== confirmPw) { errorEl.textContent = 'New passwords do not match.'; errorEl.classList.add('visible'); return; }
-    if (newPw.length < 8) { errorEl.textContent = 'Password must be at least 8 characters.'; errorEl.classList.add('visible'); return; }
-    if (!/[a-zA-Z]/.test(newPw)) { errorEl.textContent = 'Password must include at least one letter.'; errorEl.classList.add('visible'); return; }
-    if (!/[0-9]/.test(newPw)) { errorEl.textContent = 'Password must include at least one number.'; errorEl.classList.add('visible'); return; }
-    if (!/[^a-zA-Z0-9]/.test(newPw)) { errorEl.textContent = 'Password must include at least one symbol (e.g. !@#$%).'; errorEl.classList.add('visible'); return; }
-    if (newPw === currentPw) { errorEl.textContent = 'New password must be different from current password.'; errorEl.classList.add('visible'); return; }
+    if (!currentPw) { showErr('Please enter your current password.'); return; }
+    if (newPw !== confirmPw) { showErr('New passwords do not match.'); return; }
+    const problem = passwordProblem(newPw);
+    if (problem) { showErr(problem); return; }
+    if (newPw === currentPw) { showErr('New password must be different from your current password.'); return; }
 
     btn.disabled = true;
     btn.textContent = 'Updating...';
-
     try {
-        // Check if MFA verification is needed (Supabase requires AAL2 if account has a verified factor)
-        const { data: factors } = await supa.auth.mfa.listFactors();
-        const totp = factors?.totp?.find(f => f.status === 'verified');
-
-        if (totp) {
-            // Show MFA step, hide password fields
-            _pwPendingNewPassword = newPw;
-            _pwPendingFactorId = totp.id;
-            stepPasswords.style.display = 'none';
-            stepMfa.style.display = '';
-            btn.textContent = 'Confirm & Update Password';
-            btn.disabled = false;
-            document.getElementById('pw-mfa-code').value = '';
-            document.getElementById('pw-mfa-code').focus();
-            return;
-        }
-
-        // No MFA — update directly
-        const { error: updateErr } = await supa.auth.updateUser({ password: newPw });
-        if (updateErr) { errorEl.textContent = updateErr.message; errorEl.classList.add('visible'); return; }
-
+        await db.changeMyPassword(currentPw, newPw);
         resetPasswordForm();
-        successEl.textContent = 'Password updated successfully.';
+        successEl.textContent = 'Password updated. You have been signed out on your other devices.';
         successEl.style.display = 'block';
-        setTimeout(() => { successEl.style.display = 'none'; }, 5000);
+        setTimeout(() => { successEl.style.display = 'none'; }, 6000);
     } catch (err) {
-        errorEl.textContent = err.message || 'Failed to update password.';
-        errorEl.classList.add('visible');
+        showErr(err.message || 'Failed to update password.');
     } finally {
         btn.disabled = false;
-        if (!_pwPendingNewPassword) btn.textContent = 'Update Password';
+        btn.textContent = 'Update Password';
     }
 }
 
 function resetPasswordForm() {
-    _pwPendingNewPassword = null;
-    _pwPendingFactorId = null;
     document.getElementById('pw-current').value = '';
     document.getElementById('pw-new').value = '';
     document.getElementById('pw-confirm').value = '';
-    document.getElementById('pw-mfa-code').value = '';
-    document.getElementById('pw-step-passwords').style.display = '';
-    document.getElementById('pw-step-mfa').style.display = 'none';
-    document.getElementById('pw-submit-btn').textContent = 'Update Password';
 }
 
 // ===== MFA =====
@@ -7404,6 +7490,61 @@ async function confirmMfaToggle(enabled, checkbox) {
         danger: !enabled,
         onCancel: () => { checkbox.checked = !enabled; }
     });
+}
+
+// A temporary password that is easy to read aloud and type: three groups of
+// four characters with no look-alikes (0/O, 1/l/I), joined by dashes, e.g.
+// "Kq7m-Pz4r-Wt9x". Always passes passwordProblem() (dash = symbol).
+function generateTempPassword() {
+    const letters = 'abcdefghjkmnpqrstuvwxyzABCDEFGHJKMNPQRSTUVWXYZ';
+    const digits = '23456789';
+    const pick = (set) => {
+        const buf = new Uint32Array(1);
+        crypto.getRandomValues(buf);
+        return set[buf[0] % set.length];
+    };
+    for (;;) {
+        const groups = [0, 1, 2].map(() => {
+            const chars = [pick(letters), pick(letters), pick(digits), pick(letters + digits)];
+            return chars.join('');
+        });
+        const pw = groups.join('-');
+        if (!passwordProblem(pw)) return pw;
+    }
+}
+
+// Admin: give someone who forgot their password a temporary one.
+async function adminResetPassword(email) {
+    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can reset passwords.'); return; }
+    if (window.SANDBOX_MODE) { showAlert('Not available in sandbox', 'Password resets affect real accounts, so they are turned off in sandbox mode.'); return; }
+    const safeEmail = escapeHtml(email);
+    showConfirm('Reset Password', `Give <strong>${safeEmail}</strong> a temporary password?<br><br>
+        &bull; Their current password stops working, and they are signed out everywhere.<br>
+        &bull; You'll see the temporary password on the next screen. Give it to them by <strong>phone or Teams</strong> (not email).<br>
+        &bull; When they sign in with it, they'll be asked to choose their own password.<br><br>
+        Their authenticator app is not changed. If they also lost their phone, use <strong>Reset MFA</strong> too.`, async () => {
+        const temp = generateTempPassword();
+        try {
+            await db.adminSetTempPassword(email, temp);
+        } catch (err) {
+            showAlert('Could not reset password', escapeHtml(err.message || 'Unknown error.'));
+            return;
+        }
+        showAlert('Temporary Password', `Give this temporary password to <strong>${safeEmail}</strong>:
+            <div style="margin:14px 0;text-align:center">
+                <code id="temp-pw-display" style="display:inline-block;font-family:var(--font-mono);font-size:22px;letter-spacing:2px;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:10px 16px;user-select:all">${escapeHtml(temp)}</code>
+                <div><button type="button" class="btn btn-sm" style="margin-top:8px" onclick="copyTempPassword(this)">Copy</button></div>
+            </div>
+            It's shown only once. Ask them to sign in with it and their authenticator code; they'll then choose their own password.`);
+    }, { confirmText: 'Reset Password', danger: true });
+}
+
+function copyTempPassword(btn) {
+    const text = document.getElementById('temp-pw-display')?.textContent || '';
+    navigator.clipboard.writeText(text).then(
+        () => { btn.textContent = 'Copied'; },
+        () => { btn.textContent = 'Select it and press Cmd+C'; }
+    );
 }
 
 async function adminResetMfa(email) {

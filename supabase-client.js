@@ -100,6 +100,43 @@ const db = {
         if (error) throw error;
     },
 
+    // True if an admin set a temporary password that this user must replace.
+    async passwordChangeRequired() {
+        const { data, error } = await supa.rpc('password_change_required');
+        if (error) throw error;
+        return data === true;
+    },
+
+    // Admin: give another user a temporary password. They must choose a new
+    // one at their next sign-in. Signs them out everywhere.
+    async adminSetTempPassword(email, tempPassword) {
+        const { error } = await supa.rpc('admin_set_temp_password', {
+            target_email: email,
+            temp_password: tempPassword,
+        });
+        if (error) throw error;
+    },
+
+    // Active administrators (name + email), for the "lost authenticator" help.
+    async getAdminContacts() {
+        const { data, error } = await supa.rpc('get_admin_contacts');
+        if (error) throw error;
+        return data || [];
+    },
+
+    // Change your own password. The database checks the current password
+    // (public.change_my_password), so no authenticator code is needed.
+    // Afterwards, sign out every OTHER device so an old session can't linger.
+    async changeMyPassword(currentPassword, newPassword) {
+        const { error } = await supa.rpc('change_my_password', {
+            current_password: currentPassword,
+            new_password: newPassword,
+        });
+        if (error) throw error;
+        const { error: outErr } = await supa.auth.signOut({ scope: 'others' });
+        if (outErr) console.warn('[changeMyPassword] could not sign out other sessions:', outErr.message);
+    },
+
     async getSession() {
         const { data: { session } } = await supa.auth.getSession();
         return session;

@@ -8,6 +8,27 @@ How "approved" works: only emails on the `allowed_emails` table can create an
 account. That list is managed by admins and enforced by a database trigger
 (`is_email_allowed`), not just the browser.
 
+## Sign-in rules enforced by the database (added 2026-11-06)
+
+Being logged in is not enough to see data. Every public table, plus the
+`community-files` storage bucket, carries a RESTRICTIVE policy that calls
+`public.session_is_trusted()`. RESTRICTIVE means it is checked **in addition to**
+the normal policies above. A login is trusted only when all of these hold:
+
+1. its email is **active** in `allowed_emails`, so archived or revoked users are cut off
+   even if they still know their password;
+2. it has **no pending temporary password** from an admin reset; and
+3. it **passed the authenticator step** (`aal2`), or an admin has switched
+   "Require MFA" off, or the user has no authenticator yet (first-time setup).
+
+Functions the sign-in screen needs before the code is entered
+(`is_email_allowed`, `get_admin_contacts`, `password_change_required`,
+`change_my_password`) are SECURITY DEFINER and keep working.
+
+**Emergency undo** (if people are locked out), run in the SQL Editor:
+`supabase/rollback/undo_require_trusted_session.sql` (tables) and
+`supabase/rollback/undo_require_trusted_session_storage.sql` (files).
+
 ## The audit queries
 
 Run these in the **Supabase SQL editor** (Project → SQL Editor) any time you've
@@ -34,12 +55,24 @@ SELECT tablename, policyname, cmd, roles, qual AS using_clause, with_check
 FROM pg_policies
 WHERE schemaname = 'public'
 ORDER BY tablename, cmd;
+
+-- 4. Any table MISSING the sign-in rule: should be ZERO rows.
+--    (If a new table was added, re-run
+--     supabase/migrations/20261106150000_require_trusted_session.sql.)
+SELECT c.relname AS "MISSING require_trusted_session"
+FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace
+WHERE n.nspname = 'public' AND c.relkind = 'r'
+  AND NOT EXISTS (SELECT 1 FROM pg_policies p
+                  WHERE p.schemaname = 'public' AND p.tablename = c.relname
+                    AND p.policyname = 'require_trusted_session')
+ORDER BY 1;
 ```
 
 **What a healthy result looks like:**
 
 - Query **#1 returns no rows** (every table enforces RLS).
 - Query **#2 returns no rows** (no table is exposed to the public key).
+- Query **#4 returns no rows** (every table has the sign-in rule).
 - Query **#3** shows every `roles` column as `{authenticated}`. Anything showing
   `{anon}` or `{public}`, or a write policy with `using/with_check = true` that
   *should* be admin-gated, is a problem: see below.
@@ -82,3 +115,12 @@ back and a fresh database stands up secured. Never edit old migrations.
   INSERT `with_check=true`, `p32` DELETE `using=true`) that let any logged-in
   user add or remove authorized users. Locked back to admins only. See
   `supabase/migrations/20260605020000_drop_stray_allowed_emails_policies.sql`.
+- **2026-11-06**: Password and MFA overhaul. Found that MFA and "archived user"
+  were enforced only in the browser, so a password alone, or an archived user's
+  password, could read data via the API. Also found that Settings > Change
+  Password never checked the current password. Fixed both: the database now
+  enforces sign-in rules on all 16 tables and the `community-files` bucket
+  (migrations `20261106140000` to `20261106170000`), and password changes
+  are checked server-side (`20261106120000`). Added admin-assisted password
+  reset with forced change (`20261106160000`). Verified live: password-only
+  logins and strangers get no rows or files; full sign-ins work normally.

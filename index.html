@@ -23,7 +23,29 @@
                     <input type="password" id="login-password" placeholder="Password" autocomplete="current-password" name="password">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">Sign In</button>
+                <p class="login-toggle"><a href="#" onclick="toggleForgotHelp(); return false;">Forgot password?</a></p>
+                <div id="forgot-help" style="display:none;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:12px 14px;margin-top:8px;font-size:12.5px;color:var(--slate-600);text-align:left">
+                    <p style="margin:0 0 6px;font-weight:600;color:var(--slate-700)">Forgot your password?</p>
+                    <p style="margin:0 0 6px">Contact a Sensor Network Tracker administrator. They can give you a temporary password by phone or Teams.</p>
+                    <p style="margin:0">Sign in with the temporary password and your authenticator code as usual. You'll then be asked to choose a new password.</p>
+                </div>
                 <p class="login-toggle">Don't have an account? <a href="#" onclick="showSignUpForm(); return false;">Sign Up</a></p>
+            </form>
+            <form id="force-change-section" style="display:none" onsubmit="handleForcedPasswordChange(); return false;" autocomplete="on">
+                <h3 style="font-size:15px;color:var(--slate-800);margin-bottom:8px">Choose a new password</h3>
+                <p style="font-size:13px;color:var(--slate-500);margin-bottom:16px">You signed in with a temporary password from an administrator. Choose your own password to continue.</p>
+                <div class="login-field" id="force-current-wrap" style="display:none">
+                    <input type="password" id="force-current" placeholder="Temporary password" autocomplete="current-password">
+                </div>
+                <div class="login-field">
+                    <input type="password" id="force-new" placeholder="New password" autocomplete="new-password">
+                </div>
+                <div class="login-field">
+                    <input type="password" id="force-confirm" placeholder="Confirm new password" autocomplete="new-password">
+                </div>
+                <p style="font-size:12px;color:var(--slate-400);margin:-4px 0 12px;text-align:left">At least 8 characters, with a letter, a number, and a symbol.</p>
+                <button type="submit" class="btn btn-primary" style="width:100%" id="force-submit-btn">Save Password &amp; Continue</button>
+                <p class="login-toggle"><a href="#" onclick="backToSignIn(); return false;">Sign out</a></p>
             </form>
             <form id="signup-form-section" style="display:none" onsubmit="handleSignUp(); return false;" autocomplete="on">
                 <div class="login-field">
@@ -33,7 +55,7 @@
                     <input type="text" id="signup-name" placeholder="Your full name" autocomplete="name" name="name">
                 </div>
                 <div class="login-field">
-                    <input type="password" id="signup-password" placeholder="Create a password (min 6 characters)" autocomplete="new-password" name="password">
+                    <input type="password" id="signup-password" placeholder="Create a password (8+ characters, letter, number, symbol)" autocomplete="new-password" name="password">
                 </div>
                 <div class="login-field">
                     <input type="password" id="signup-password-confirm" placeholder="Confirm password" autocomplete="new-password" name="password-confirm">
@@ -43,8 +65,13 @@
             </form>
             <div id="mfa-setup-section" style="display:none">
                 <h3 style="font-size:15px;color:var(--slate-800);margin-bottom:8px">Set Up Authenticator</h3>
-                <p style="font-size:13px;color:var(--slate-500);margin-bottom:16px">Scan this QR code with an authenticator app (Google Authenticator, Authy, or similar), then enter the 6-digit code to verify.</p>
-                <div id="mfa-setup-qr" style="text-align:center;margin-bottom:16px"></div>
+                <p style="font-size:13px;color:var(--slate-500);margin-bottom:16px">On your phone, open an authenticator app (Microsoft Authenticator, Google Authenticator, or similar), add an account, and scan this QR code. Then enter the 6-digit code it shows.</p>
+                <div id="mfa-setup-qr" style="text-align:center;margin-bottom:12px"></div>
+                <details id="mfa-setup-key-wrap" style="display:none;font-size:12.5px;color:var(--slate-500);margin-bottom:16px;text-align:left">
+                    <summary style="cursor:pointer;color:var(--navy-600);font-weight:600;text-align:center">Can't scan? Enter a key instead</summary>
+                    <p style="margin:8px 0 6px">In your authenticator app, choose <strong>enter a setup key</strong> (or "enter code manually") and type this key:</p>
+                    <code id="mfa-setup-key" style="display:block;text-align:center;word-break:break-all;font-size:13px;background:var(--slate-50);padding:10px;border-radius:6px;font-family:var(--font-mono);letter-spacing:1px;user-select:all"></code>
+                </details>
                 <form onsubmit="handleMfaSetupVerify(); return false;">
                     <div class="login-field">
                         <input type="text" id="mfa-setup-code" placeholder="000000" maxlength="6" autocomplete="one-time-code" style="text-align:center;font-family:var(--font-mono);font-size:18px;letter-spacing:4px">
@@ -59,6 +86,12 @@
                     <input type="text" id="mfa-challenge-code" placeholder="000000" maxlength="6" autocomplete="one-time-code" style="text-align:center;font-family:var(--font-mono);font-size:18px;letter-spacing:4px">
                 </div>
                 <button type="submit" class="btn btn-primary" style="width:100%">Verify</button>
+                <p class="login-toggle"><a href="#" onclick="toggleMfaHelp(); return false;">Can't access your authenticator app?</a></p>
+                <div id="mfa-help" style="display:none;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:12px 14px;margin-top:8px;font-size:12.5px;color:var(--slate-600);text-align:left">
+                    <p style="margin:0 0 6px;font-weight:600;color:var(--slate-700)">New phone, or lost access to the app?</p>
+                    <p style="margin:0 0 6px">An administrator can reset your authenticator. Next time you sign in you'll be walked through setting it up again. Your account and data are not affected.</p>
+                    <div id="mfa-help-admins" style="margin:0"></div>
+                </div>
                 <p class="login-toggle"><a href="#" onclick="backToSignIn(); return false;">Sign in with a different account</a></p>
             </form>
             <div id="login-loading" style="display:none;text-align:center;padding:20px;color:var(--slate-400)">Loading...</div>
@@ -498,14 +531,7 @@
                                 <div class="form-group"><label>Current Password</label><input type="password" id="pw-current" required autocomplete="current-password"></div>
                                 <div class="form-group"><label>New Password</label><input type="password" id="pw-new" required autocomplete="new-password"></div>
                                 <div class="form-group"><label>Confirm New Password</label><input type="password" id="pw-confirm" required autocomplete="new-password"></div>
-                                <p class="settings-description" style="margin-top:0">Must be at least 8 characters with a letter, number, and symbol.</p>
-                            </div>
-                            <div id="pw-step-mfa" style="display:none">
-                                <div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:16px 20px;margin-bottom:16px">
-                                    <p style="font-size:14px;font-weight:600;color:var(--navy-500);margin-bottom:6px">Confirm with your authenticator</p>
-                                    <p style="font-size:13px;color:var(--slate-500);margin-bottom:12px">Enter the 6-digit code from your authenticator app to confirm the password change.</p>
-                                    <input type="text" id="pw-mfa-code" maxlength="6" placeholder="000000" autocomplete="one-time-code" style="text-align:center;font-family:var(--font-mono);font-size:20px;letter-spacing:6px;padding:10px;width:160px">
-                                </div>
+                                <p class="settings-description" style="margin-top:0">Must be at least 8 characters with a letter, number, and symbol. Changing your password signs you out on your other devices.</p>
                             </div>
                             <div id="pw-error" class="login-error" role="alert"></div>
                             <div id="pw-success" style="display:none;color:#16a34a;font-size:13px;font-weight:600;margin-bottom:8px"></div>

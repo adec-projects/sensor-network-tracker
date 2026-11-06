@@ -66,6 +66,24 @@ only in the Supabase dashboard and must be handed over carefully.
 
 ---
 
+## 3a. Day-to-day account help (no IT ticket needed)
+
+All of this happens inside the app, in **Settings → Users**, by any Admin. There is
+no email-based reset, so nothing depends on an outside email service.
+
+| Problem | Fix |
+|---|---|
+| Forgot password | Admin clicks **Reset password**, then reads the one-time temporary password to the person by phone or Teams. They sign in with it and must choose a new password. |
+| New or lost phone (authenticator) | Admin clicks **Reset MFA**. The person sets up the authenticator again at next sign-in. |
+| Both | Use both buttons. |
+| Person leaves | **Archive** them. The database blocks their access immediately, even if they remember their password. |
+| All admins unavailable | In the Supabase dashboard, Authentication → Users, an owner can delete a user's MFA factor or send a reset. This is the last resort. |
+
+How this is enforced is described in `SECURITY.md` ("Sign-in rules enforced by the
+database") and `ARCHITECTURE.md` (Authentication).
+
+---
+
 ## 4. The migration path (data into DEC's database)
 
 The heavy technical lifting is **already documented** in this repo, written for
@@ -175,6 +193,12 @@ Bring these as your agenda. Each one is a decision only DEC can make:
       to a DEC-owned account.
 - [ ] Hand over the database password and keys securely (section 6, #6).
 - [ ] Confirm DEC has successfully opened and read the export.
+- [ ] Make sure at least two DEC staff are app **Admins** (Settings → Users). Admins
+      are the only people who can help someone who forgot their password or lost
+      their authenticator.
+- [ ] Archive Ayla's app accounts (Settings → Users → Archive):
+      `aylacrosby531@gmail.com` (personal test account) and, on the last day,
+      `ayla.crosby@alaska.gov`. Archiving cuts off data access immediately.
 
 **DEC, after handoff:**
 - [ ] Load the export into the target system following the runbook, and run the

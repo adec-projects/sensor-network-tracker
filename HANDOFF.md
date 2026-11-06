@@ -22,6 +22,10 @@ overview in [`docs/developer-notes.md`](docs/developer-notes.md).
 ## Migration constraints (detail in the guide)
 - Auth (Supabase Auth / `auth.users`), RLS policies, DB functions/triggers/cron,
   and file storage are platform-specific and require MS SQL/Azure equivalents.
+  This includes the sign-in rules added Nov 2026 (`session_is_trusted`, the
+  `require_trusted_session` policies, admin password reset). See `SECURITY.md`.
+  Password hashes and authenticator secrets do not migrate; users will set new
+  credentials in the State system.
 - Six `text[]` array columns normalize to child tables (guide §2; expansion
   queries in the runbook).
 - `notes.date` / `comms.date` are Alaska wall-clock event times in a `timestamptz`
