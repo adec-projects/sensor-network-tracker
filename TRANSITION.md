@@ -234,7 +234,7 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 - [ ] Archive Ayla's app accounts (Settings → Users → Archive):
       the personal Gmail test account and, on the last day, the alaska.gov work account.
       Archiving cuts off data access immediately.
-- [ ] Delete the `snt-transfer-test` Supabase project (test copy; holds contact data).
+- [x] Delete the `snt-transfer-test` Supabase project (test copy; holds contact data). *Done Nov 6, 2026.*
 - [x] Delete local copies of app/Salesforce data from Ayla's laptop
       (`handoff-backup-20261106/`, `~/sf-transfer-work/`, `sf-export/`). *Done Nov 6, 2026.*
 
