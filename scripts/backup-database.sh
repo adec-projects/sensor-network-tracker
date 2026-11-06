@@ -7,13 +7,16 @@
 # timestamped folder containing the full table structure, all the data, and a
 # row-count summary you can check against after DEC loads it into their system.
 #
-# What you need: the database password from the Supabase dashboard
-#   (Project Settings -> Database -> Database password). That's it.
+# What you need:
+#   1. The database password from the Supabase dashboard
+#      (Project Settings -> Database -> Database password).
+#   2. The PostgreSQL command-line tools (pg_dump). On a Mac:
+#        brew install libpq
+#      (No Docker needed.)
 #
 # How to run, from the project folder:
 #   ./scripts/backup-database.sh
 #
-# It uses the Supabase command-line tool that's already installed on this machine.
 # Nothing is changed in the database - this only reads.
 
 set -euo pipefail
@@ -28,9 +31,17 @@ echo " Sensor Network Tracker - database backup for DEC handoff"
 echo "=============================================================="
 echo
 
-if ! command -v supabase >/dev/null 2>&1; then
-  echo "ERROR: the 'supabase' tool isn't installed on this machine."
-  echo "Install it with:  brew install supabase/tap/supabase"
+# Find pg_dump: on the PATH, or where Homebrew's libpq puts it (it isn't
+# added to the PATH automatically).
+PG_DUMP=""
+for c in "$(command -v pg_dump 2>/dev/null || true)" \
+         /opt/homebrew/opt/libpq/bin/pg_dump /usr/local/opt/libpq/bin/pg_dump; do
+  if [ -n "$c" ] && [ -x "$c" ]; then PG_DUMP="$c"; break; fi
+done
+if [ -z "$PG_DUMP" ]; then
+  echo "ERROR: pg_dump (PostgreSQL tools) isn't installed on this machine."
+  echo "On a Mac, install it with:   brew install libpq"
+  echo "Then run this script again."
   exit 1
 fi
 
@@ -42,27 +53,27 @@ if [ -z "${PGPW}" ]; then
   exit 1
 fi
 
-# URL-encode the password so special characters don't break the connection.
-if command -v python3 >/dev/null 2>&1; then
-  ENC=$(python3 -c "import urllib.parse,sys;print(urllib.parse.quote(sys.argv[1],safe=''))" "$PGPW")
-else
-  ENC="$PGPW"
-  echo "(note: python3 not found; if the connection fails and your password has"
-  echo " special characters like @ : / # , that's likely why.)"
-fi
-
-DBURL="postgresql://postgres.${PROJECT_REF}:${ENC}@${HOST}:${PORT}/postgres"
+# Pass connection details via environment variables, so the password never
+# appears in the process list or needs URL-encoding.
+export PGHOST="$HOST" PGPORT="$PORT" PGDATABASE="postgres"
+export PGUSER="postgres.${PROJECT_REF}" PGPASSWORD="$PGPW" PGSSLMODE="require"
 
 mkdir -p "$OUT"
 echo
 echo "Writing backup into:  $OUT/"
 echo
 
+# Only the app's own schema ("public"). Supabase's internal schemas (auth,
+# storage, etc.) are platform-specific; user emails and roles are preserved in
+# public.profiles and public.allowed_emails. Password hashes are deliberately
+# NOT exported.
+COMMON=(--schema=public --no-owner --no-privileges)
+
 echo "[1/3] Saving the table structure (schema.sql) ..."
-supabase db dump --db-url "$DBURL" -f "$OUT/schema.sql"
+"$PG_DUMP" "${COMMON[@]}" --schema-only -f "$OUT/schema.sql"
 
 echo "[2/3] Saving all the data (data.sql) ..."
-supabase db dump --db-url "$DBURL" --data-only -f "$OUT/data.sql"
+"$PG_DUMP" "${COMMON[@]}" --data-only -f "$OUT/data.sql"
 
 echo "[3/3] Counting rows per table (row-counts.txt) ..."
 # Count the data rows inside each COPY block of the dump - no extra tools needed.
@@ -71,6 +82,7 @@ awk '
   incopy && /^\\\.$/ { printf "%-28s %d\n", t, c; incopy=0; next }
   incopy        { c++ }
 ' "$OUT/data.sql" | sort > "$OUT/row-counts.txt"
+unset PGPASSWORD
 
 echo
 echo "=============================================================="
@@ -85,4 +97,5 @@ echo
 echo " Next: also download the 'community-files' storage bucket from the"
 echo " Supabase dashboard (Storage -> community-files), keep it with this folder,"
 echo " and deliver the whole thing to DEC on a secure drive or share (not email)."
+echo " This folder contains contact details: do NOT commit it to the repo."
 echo "=============================================================="
