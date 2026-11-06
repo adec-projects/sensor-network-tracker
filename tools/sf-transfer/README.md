@@ -56,7 +56,9 @@ Try it on a test copy of the app first.
 * **Collocations** logged on the same date at the same place become one note with all
   the sensors; Salesforce's "Collocation Date Range and Location" field is used to
   suggest any sensors that were missed.
-* **Adds missing contacts and sensors only.** Existing app records are never changed.
+* **Adds missing contacts and sensors only**: by default, just the ones a transferred
+  record mentions (`--all-new-contacts` on *finalize* adds every missing one). Existing
+  app records are never changed.
 * **Asks a person** whenever it isn't sure (see *Review*).
 * Attachments/files are **not** transferred (by decision). Rich-text Salesforce Notes
   *are* transferred, as notes.
@@ -132,10 +134,11 @@ writes:
 
 **The reviewer's part** (explained in plain language in the reviewer guide):
 
-1. Open `review.html` from this folder in Chrome, Edge, Firefox, or Safari (double-click it,
-   or use the copy on the app's website, `.../tools/sf-transfer/review.html`). It runs
-   entirely in their browser; nothing is uploaded.
-2. Click **Open review package** and pick the file.
+1. Open the review page in Chrome, Edge, Firefox, or Safari:
+   <https://adec-projects.github.io/sensor-network-tracker/tools/sf-transfer/review.html>
+   (or double-click `review.html` in this folder). It runs entirely in their browser;
+   nothing is uploaded.
+2. Click **Open review package…** and pick the file.
 3. Work through **Needs a decision**: fix text, type, date, and the tagged
    communities/sensors/contacts; then choose **Import**, **Keep separate**, or **Skip**.
    Progress is saved in the browser, so they can stop and come back.
@@ -154,15 +157,22 @@ What gets flagged:
 | Same event? | Same subject by the same person a few days apart, or two audits with the same audit pod within 3 days. |
 | Partly in app | Some copies were transferred before. Usually *Skip*. |
 
-Several reviewers can split the work: each saves their own decisions file, and you pass
-all of them to *finalize* (later files win where they overlap).
+Several reviewers can split the work: each saves their own decisions file. Every file
+arrives named `decisions.json`, so rename them as they come in (e.g.
+`decisions-reviewer1.json`) and pass each one to *finalize* with its own `--decisions`
+(later files win where they overlap).
 
 ## Step 5: Finalize
 
 ```
 python3 tools/sf-transfer/sf_transfer.py finalize \
-    --work ~/sf-transfer-work --decisions ~/Downloads/decisions.json
+    --work ~/sf-transfer-work \
+    --decisions ~/sf-transfer-work/decisions-reviewer1.json \
+    --decisions ~/sf-transfer-work/decisions-reviewer2.json
 ```
+
+Add `--all-new-contacts` to also add Salesforce contacts and sensors that no transferred
+record mentions (by default only the mentioned ones are added).
 
 Writes `~/sf-transfer-work/output/`:
 
@@ -184,11 +194,25 @@ record always produces the same id. Multi-value columns (`merged_sf_ids`,
 
 ## Step 6: Load into the app
 
-**Try it on a test copy first** (`scripts/make-test-copy.sh` makes one). Then, for the
-live app, with the PostgreSQL tools installed (`brew install libpq` on a Mac):
+**Try it on a test copy first** (`scripts/make-test-copy.sh` makes one).
+
+**One-time prerequisite:** the target database needs the migration
+`supabase/migrations/20261106200000_audits_sf_id.sql` (already applied to the live app on
+2026-11-06). To check, run this in the Supabase SQL Editor; one row back means it's there:
 
 ```
-psql "postgresql://postgres.<project-ref>@<pooler-host>:5432/postgres" \
+SELECT 1 FROM information_schema.columns WHERE table_name = 'audits' AND column_name = 'sf_id';
+```
+
+If no row comes back, paste the migration file's contents into the SQL Editor and click
+**Run**.
+
+Then load, with the PostgreSQL tools installed (`brew install libpq` on a Mac; Homebrew
+doesn't put them on the PATH, hence the full path; on Intel Macs use
+`/usr/local/opt/libpq/bin/psql`):
+
+```
+/opt/homebrew/opt/libpq/bin/psql "postgresql://postgres.<project-ref>@<pooler-host>:5432/postgres" \
      -v ON_ERROR_STOP=1 -f ~/sf-transfer-work/output/load-into-app.sql
 ```
 
@@ -197,8 +221,7 @@ psql "postgresql://postgres.<project-ref>@<pooler-host>:5432/postgres" \
 password. It prints nothing while it works, which usually takes a minute or two, then shows the
 Salesforce-imported totals. Paste the password once and wait; anything typed meanwhile
 is run by the shell afterward. Make sure the whole command is pasted as **one** line.) The file runs as one transaction (all or nothing) and is
-**safe to run more than once**: anything already present is left alone. It needs the
-migration `supabase/migrations/20261106200000_audits_sf_id.sql` to have been applied.
+**safe to run more than once**: anything already present is left alone.
 
 To undo a load, every transferred row has `source = 'salesforce_import'` and its
 Salesforce id in `sf_id`, so it can be identified and removed.
@@ -210,8 +233,9 @@ Salesforce id in `sf_id`, so it can be identified and removed.
 1. New Salesforce export (Step 1) and a **fresh** app backup (Step 2).
 2. Run **prepare** into the **same** working folder. Anything transferred last time is
    now in the app, so it's skipped automatically, as is anything already decided.
-3. Reviewers open the new package. To carry their earlier choices forward, they click
-   **Load earlier decisions** first. Only new items need a decision.
+3. Reviewers open the new package, then click **Load earlier decisions…** and pick
+   their previous `decisions.json` to carry their choices forward. Only new items need
+   a decision.
 4. **finalize** with all decisions files, then load.
 
 ## Tested

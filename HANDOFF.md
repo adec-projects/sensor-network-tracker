@@ -1,14 +1,14 @@
 # ADEC Sensor Network Tracker: Handoff Index
 
 Entry point and document map for migrating the project off Supabase
-(PostgreSQL) to Microsoft SQL Server. Current as of June 2026.
+(PostgreSQL) to Microsoft SQL Server. Current as of November 2026.
 
 ## System
 Internal ADEC tool tracking air-quality sensor pods (QuantAQ Modulairs), the
 Alaska communities they're deployed in, and site contacts; replaced a Salesforce
 workflow. Vanilla HTML/CSS/JS front end against a Supabase/PostgreSQL backend; all
 data access is centralized in `supabase-client.js` (the `db` helper). Architecture
-overview in [`docs/developer-notes.md`](docs/developer-notes.md).
+overview in [`ARCHITECTURE.md`](ARCHITECTURE.md); file map in [`docs/developer-notes.md`](docs/developer-notes.md).
 
 ## Backend documentation
 | Document | Contents |

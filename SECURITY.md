@@ -123,7 +123,8 @@ back and a fresh database stands up secured. Never edit old migrations.
   (migrations `20261106140000` to `20261106170000`), and password changes
   are checked server-side (`20261106120000`). Added admin-assisted password
   reset with forced change (`20261106160000`). Verified live: password-only
-  logins and strangers get no rows or files; full sign-ins work normally.
+  logins (for a user with an authenticator, MFA required) and strangers get no rows
+  or files; full sign-ins work normally.
   Follow-up the same day: the sub-query form of the new rule tripped Postgres's
   "infinite recursion" guard on `profiles`, whose UPDATE policies look up
   `profiles` themselves. Admin role changes failed as a result. On `profiles`

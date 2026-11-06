@@ -53,10 +53,14 @@ Two common examples:
      * **Skip** leaves it out (for example, it's already in the app).
 4. Your choices **save automatically** in this browser. You can close the page and come
    back; just open the same package file again.
-5. When the counter at the top says everything is decided, click **Save decisions
-   file**. It saves `decisions.json` (check your Downloads folder; some browsers save it
+5. When the counter at the top says everything is decided (or, if you're sharing the
+   review, when your part is done), click **Save decisions file**. It saves `decisions.json` (check your Downloads folder; some browsers save it
    next to the page instead).
 6. Send `decisions.json` back to OIT, by secure share.
+
+**Reviewing again later?** If OIT sends a new package for a second round, open it and then
+click **Load earlier decisions…** and pick your previous `decisions.json`. Everything you
+already decided carries over, so only new items need you.
 
 Items marked **Ready** will be brought over as shown. You don't need to look at them,
 but you can change or skip any of them.

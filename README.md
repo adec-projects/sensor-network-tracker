@@ -8,7 +8,7 @@ and the contacts at each site. It replaced a Salesforce-based workflow.
 
 ---
 
-## For reviewers (State of Alaska OIT): start here
+## For OIT (technical handoff): start here
 
 This project is being transitioned to DEC for migration into a State-managed database.
 The documents below, in order, are the fastest way to understand what you are
@@ -107,9 +107,13 @@ archive/                Retired one-off import tools and setup SQL (historical o
 | [`docs/data-dictionary.md`](docs/data-dictionary.md) | What every table and column means |
 | [`docs/mssql-migration-guide.md`](docs/mssql-migration-guide.md) | PostgreSQL to SQL Server mapping |
 | [`docs/mssql-migration-runbook.md`](docs/mssql-migration-runbook.md) | Step-by-step data transfer |
+| [`tools/sf-transfer/README.md`](tools/sf-transfer/README.md) | Moving remaining Salesforce records into the app (for OIT) |
+| [`tools/sf-transfer/REVIEWER-GUIDE.md`](tools/sf-transfer/REVIEWER-GUIDE.md) | Plain-language guide for people reviewing that transfer |
 | [`docs/importers.md`](docs/importers.md) | The one-off import tools in `archive/` |
 | [`docs/developer-notes.md`](docs/developer-notes.md) | File map and conventions for the code |
 | [`user-guide.html`](user-guide.html) | End-user guide for DEC staff |
+| [`scripts/`](scripts/) | `backup-database.sh` (full backup), `make-test-copy.sh` (test copy of the app) |
+| [`supabase/rollback/`](supabase/rollback/) | Emergency undo for the sign-in security rules |
 
 ## Access
 

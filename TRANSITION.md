@@ -1,7 +1,7 @@
 # Transition & Handoff Plan
 
-**Prepared for the DEC handoff meeting, Thursday Nov 6, 2026, 8:30 AM.**
-Ayla's last day is approximately **Nov 19, 2026** (about two weeks out).
+**Prepared for the DEC handoff meeting, Friday Nov 6, 2026, 8:30 AM.**
+Ayla's last day is approximately **Nov 18, 2026** (about two weeks out).
 
 This document is the people-and-access plan for handing the Sensor Network Tracker
 off to DEC. It sits on top of the technical migration docs that already exist in
@@ -56,7 +56,7 @@ This is the "who holds the keys" table. Walk DEC through it.
 | **The database + all data** | Supabase project `uejryzioxogquflijgyf` | **Ayla's personal Supabase login** | **High. This is where the data is.** | **Export the data (section 5).** Optionally transfer the Supabase project to a DEC-owned login |
 | **Logins / user accounts** | Supabase Auth (inside the same project) | Same Supabase login | High | Does not migrate as-is; DEC's new system will have its own logins. The list of who had access is preserved in the export (`profiles`, `allowed_emails`) |
 | **Uploaded files** | Supabase Storage bucket `community-files` | Same Supabase login | Medium | Download the bucket contents separately (section 5, step 4) |
-| **Keep-the-database-awake job** | GitHub Action `keepalive.yml` in the repo | Same GitHub org | Low, but it stops if the repo goes quiet | Only matters while the Supabase project is still the live system. Irrelevant once migrated |
+| **Keep-the-database-awake job** | GitHub Action `keepalive.yml` in the repo | Same GitHub org | **Medium.** GitHub switches scheduled jobs off after 60 days with no commits (this happened Oct 21 - Nov 5, 2026). If it's off for 7+ days with nobody using the app, Supabase pauses the database. | While Supabase is the live system, check GitHub → **Actions** → *Supabase keep-alive* about monthly; if it shows as disabled, click **Enable workflow**, then **Run workflow**. Irrelevant once migrated |
 | **Secret keys / passwords** | Supabase dashboard (database password, service key) | Ayla only | High | Hand over in person/securely at the end, or rotate after transfer. **Never put these in this repo or an email** |
 | **QuantAQ sensor vendor** | n/a | n/a | None | No live integration exists. Nothing to transfer |
 
@@ -66,7 +66,7 @@ only in the Supabase dashboard and must be handed over carefully.
 
 ---
 
-## 3b. Bringing the remaining Salesforce records over
+## 3a. Bringing the remaining Salesforce records over
 
 Salesforce and the app will be used side by side for a while. The tool in
 [`tools/sf-transfer/`](tools/sf-transfer/README.md) moves Salesforce notes,
@@ -78,8 +78,9 @@ items in `review.html`. Test it first on a copy made with `scripts/make-test-cop
 
 **Status (Nov 6, 2026):** built and tested end to end on the spring 2026 export in a
 test copy of the app. **Not yet run on the live app or on a current Salesforce export.**
-A Supabase test project (`snt-transfer-test`, owned by Ayla's account) holds a copy of
-the app with test transfers loaded; DEC can use it to practice, or delete it.
+Testing used a temporary Supabase test project, deleted afterward because it held a copy
+of contact data. To test again, create a new empty Supabase project and run
+`scripts/make-test-copy.sh`.
 
 **Who does what:**
 
@@ -89,7 +90,7 @@ the app with test transfers loaded; DEC can use it to practice, or delete it.
 | OIT | Backs up the app, runs *prepare*, *finalize*, and the load. **Also coordinates the review:** picks reviewers with DEC, sends them the package and reviewer guide, walks them through the review page, answers questions, and collects their decisions. | `tools/sf-transfer/README.md` (Step 4) |
 | Reviewer(s) who know the network | Review flagged items in the browser (~1-2 hours) | `tools/sf-transfer/REVIEWER-GUIDE.md` |
 
-## 3a. Day-to-day account help (no IT ticket needed)
+## 3b. Day-to-day account help (no IT ticket needed)
 
 All of this happens inside the app, in **Settings → Users**, by any Admin. There is
 no email-based reset, so nothing depends on an outside email service.
@@ -100,7 +101,7 @@ no email-based reset, so nothing depends on an outside email service.
 | New or lost phone (authenticator) | Admin clicks **Reset MFA**. The person sets up the authenticator again at next sign-in. |
 | Both | Use both buttons. |
 | Person leaves | **Archive** them. The database blocks their access immediately, even if they remember their password. |
-| All admins unavailable | In the Supabase dashboard, Authentication → Users, an owner can delete a user's MFA factor or send a reset. This is the last resort. |
+| All admins unavailable | Last resort, by a Supabase project owner in the dashboard: to fix a lost authenticator, delete the user's MFA factor (Authentication → Users). To restore admin access, make a trusted person an admin in the SQL Editor: `UPDATE allowed_emails SET role = 'admin' WHERE email = '…'; UPDATE profiles SET role = 'admin' WHERE email = '…';` That admin can then use **Reset password** in the app. |
 
 How this is enforced is described in `SECURITY.md` ("Sign-in rules enforced by the
 database") and `ARCHITECTURE.md` (Authentication).
@@ -136,8 +137,9 @@ The schema and the data export are the whole spec.
 ## 5. The data export (the safeguard) - do this before the last day
 
 This is the most important deliverable. Two ways to do it; **Option A is the full,
-faithful backup and is recommended.** Both need the database password from the
-Supabase dashboard (Project Settings → Database). Ayla has this.
+faithful backup and is recommended.** Option A needs the database password (Supabase
+dashboard → Project Settings → Database; the project owner has it or can reset it).
+Option B only needs a login to the Supabase dashboard.
 
 ### Option A: one complete backup file (recommended)
 
@@ -222,16 +224,15 @@ Bring these as your agenda. Each one is a decision only DEC can make:
       are the only people who can help someone who forgot their password or lost
       their authenticator.
 - [ ] Archive Ayla's app accounts (Settings → Users → Archive):
-      `aylacrosby531@gmail.com` (personal test account) and, on the last day,
-      `ayla.crosby@alaska.gov`. Archiving cuts off data access immediately.
+      the personal Gmail test account and, on the last day, the alaska.gov work account.
+      Archiving cuts off data access immediately.
+- [ ] Delete the `snt-transfer-test` Supabase project (test copy; holds contact data).
 
 **DEC, after handoff:**
 - [ ] Load the export into the target system following the runbook, and run the
       after-load row-count check to confirm nothing dropped.
 - [ ] Run the Salesforce transfer (`tools/sf-transfer/`) with reviewers who know the network, and
       run it once more just before Salesforce access ends.
-- [ ] Delete the `snt-transfer-test` Supabase project when it's no longer needed (it
-      holds a copy of real contact data).
 - [ ] Keep Supabase read-only for 30 to 60 days as a fallback, then decommission.
 - [ ] Reset/rotate any passwords Ayla shared, once the accounts are DEC-controlled.
 
@@ -263,3 +264,7 @@ everything we need."
 | `ARCHITECTURE.md` | How the website and database fit together |
 | `README.md` / `docs/developer-notes.md` | Project overview and file map |
 | `scripts/backup-database.sh` | One-command data export |
+| `scripts/make-test-copy.sh` | Copies the live app into an empty test project |
+| `supabase/rollback/` | Emergency undo for the sign-in security rules |
+| `tools/sf-transfer/README.md` | Moving remaining Salesforce records into the app (OIT) |
+| `tools/sf-transfer/REVIEWER-GUIDE.md` | Plain-language guide for transfer reviewers |

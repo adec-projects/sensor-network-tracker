@@ -12,7 +12,7 @@ This repo contains several standalone HTML pages used to load data into Supabase
 
 Each importer is a self-contained page that loads the Supabase JS library from a CDN, authenticates against the same project as the main app, and writes to one or more tables. They're deliberately kept as plain HTML so they survive framework changes and can be used even after the main app evolves.
 
-**All importers write directly to the production Supabase database.** There is no dev database. Open them only when you intend to run them.
+**All importers write directly to the production Supabase database.** Open them only when you intend to run them. To try one safely first, make a test copy of the app with `scripts/make-test-copy.sh`.
 
 ## Available importers
 
