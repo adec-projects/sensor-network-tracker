@@ -26,6 +26,8 @@ import sys
 import textwrap
 import urllib.parse
 import webbrowser
+import re
+import zipfile
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 REPO = os.path.dirname(os.path.dirname(HERE))
@@ -95,7 +97,14 @@ def open_thing(path_or_url):
 
 def fail(msg):
     say("\n*** " + msg)
-    say("\nNothing has been loaded into the app. Fix the problem above and run this program again.")
+    stopped("Nothing has been loaded into the app. Fix the problem above and run this program again.")
+
+
+def stopped(why):
+    print("\n" + "#" * 78)
+    print("#   THE PROGRAM HAS STOPPED.  Don't paste anything else into this window.")
+    print("#" * 78)
+    say(why)
     sys.exit(1)
 
 
@@ -329,6 +338,91 @@ def undo(args):
             say("   Kept %d new %s because something entered later refers to them." % (n, k))
 
 
+# --------------------------------------------------------------------------- the export
+NEEDED = ("Account", "Task", "Event")
+_PART = re.compile(r"^(WE_[A-Za-z0-9]+)_\d+\.zip$", re.I)
+
+
+def check_zip(path):
+    """-> (ok, message). Opens the file to catch half-downloaded / cloud-only files."""
+    if os.path.isdir(path):
+        return True, ""
+    try:
+        with open(path, "rb") as fh:
+            head = fh.read(4)
+    except OSError as e:
+        return False, ("Windows couldn't open that file (%s). If it's in a OneDrive folder, right-click it > "
+                       "'Always keep on this device' and wait for it to finish, or copy it to your Desktop "
+                       "and drag it from there." % (e.strerror or e))
+    if head[:2] != b"PK":
+        return False, ("That file isn't a complete ZIP. It may still be downloading, or be a shortcut. "
+                       "Check it finished downloading (the Salesforce email link), then try again.")
+    try:
+        with zipfile.ZipFile(path) as z:
+            z.namelist()
+    except Exception as e:
+        return False, "That ZIP file is damaged or incomplete (%s). Download it again from the Salesforce email." % e
+    return True, ""
+
+
+def export_parts(path):
+    """The dragged file plus any other parts of the same export in the same folder."""
+    m = _PART.match(os.path.basename(path))
+    if not m:
+        return [path]
+    folder = os.path.dirname(path) or "."
+    parts = [os.path.join(folder, f) for f in os.listdir(folder)
+             if _PART.match(f) and _PART.match(f).group(1).lower() == m.group(1).lower()]
+    return sorted(parts, key=lambda f: int(re.findall(r"_(\d+)\.zip$", f, re.I)[0]))
+
+
+def choose_export():
+    exports = []
+    while True:
+        raw = ask("\nDrag a Salesforce ZIP file here and press Enter%s:" %
+                  (" (or just Enter if that's all of them)" if exports else ""))
+        if raw.lower() in ("q", "quit"):
+            sys.exit(0)
+        if raw:
+            path = clean_path(raw)
+            if not os.path.exists(path):
+                say("Can't find a file at:\n   %s\nTry dragging the file in again (don't type the name)." % path)
+                continue
+            if not (os.path.isdir(path) or path.lower().endswith(".zip")):
+                say("That isn't a ZIP file. The Salesforce export is a .zip file whose name starts with WE_.")
+                continue
+            for part in export_parts(path):
+                if part in exports:
+                    continue
+                ok, why = check_zip(part)
+                if ok:
+                    exports.append(part)
+                    say("   added: %s" % os.path.basename(part))
+                else:
+                    say("   NOT added: %s\n   %s" % (os.path.basename(part), why))
+            if not exports:
+                continue
+        elif not exports:
+            say("Please drag in a ZIP file first.")
+            continue
+        # Do we have the data tables yet?
+        say("Checking the export ...")
+        try:
+            sf = T.SalesforceExport(exports, require=False)
+        except (Exception, SystemExit) as e:
+            say("Couldn't read the export: %s\nDownload it again from the Salesforce email, then drag it in." % e)
+            exports = []
+            continue
+        missing = [n for n in NEEDED if not sf.tables[n]]
+        if not missing:
+            return sf, exports
+        say("""
+        The ZIP file(s) added so far don't contain the main data tables (%s.csv).
+        Salesforce sometimes splits an export into several ZIP files, and the tables are in one
+        of the others. Drag in the other ZIP file(s) from the same export (check the
+        Salesforce email: it lists every file; download them all).""" % ".csv, ".join(missing))
+
+
 # --------------------------------------------------------------------------- main flow
 def main():
     p = argparse.ArgumentParser(description="Guided Salesforce -> Sensor Network Tracker transfer.")
@@ -369,29 +463,10 @@ def main():
     say("""
     Find the Salesforce export ZIP file you downloaded (usually in Downloads; its name starts
     with WE_). Drag it from File Explorer (Mac: Finder) into this window, then press Enter.
-    If the export came as several ZIP files, add them one at a time. When you've added them
-    all, press Enter on an empty line.""")
-    exports = []
-    while True:
-        raw = ask("\nZIP file %d (or just Enter if done):" % (len(exports) + 1))
-        if not raw:
-            if exports:
-                break
-            say("Please add at least one ZIP file.")
-            continue
-        path = clean_path(raw)
-        if not os.path.exists(path):
-            say("Can't find that file: %s  (Try dragging it in again.)" % path)
-        elif not (os.path.isdir(path) or path.lower().endswith(".zip")):
-            say("That isn't a ZIP file. The Salesforce export is a .zip file.")
-        else:
-            exports.append(path)
-            say("   added: %s" % os.path.basename(path))
-    try:
-        sf = T.SalesforceExport(exports)
-    except SystemExit as e:
-        fail(str(e))
-    say("Read the export: %d activity records, %d accounts, %d sensors (assets), %d contacts."
+    If the export came as several ZIP files, the other parts are found automatically when
+    they're in the same folder.""")
+    sf, exports = choose_export()
+    say("\nRead the export: %d activity records, %d accounts, %d sensors (assets), %d contacts."
         % (len(sf.tables["Task"]) + len(sf.tables["Event"]), len(sf.tables["Account"]),
            len(sf.tables["Asset"]), len(sf.tables["Contact"])))
 
@@ -558,3 +633,16 @@ if __name__ == "__main__":
     except KeyboardInterrupt:
         print("\n\nStopped. Nothing was loaded unless you had already typed LOAD.")
         sys.exit(1)
+    except SystemExit:
+        raise
+    except Exception as e:                       # anything unexpected: explain, don't dump
+        import traceback
+        log = os.path.join(WORK, "last-error.txt")
+        try:
+            os.makedirs(WORK, exist_ok=True)
+            with open(log, "w", encoding="utf-8") as fh:
+                fh.write(traceback.format_exc())
+        except OSError:
+            log = "(couldn't save details)"
+        stopped("Something unexpected went wrong:\n   %s: %s\n\nNothing was loaded unless you had already "
+                "typed LOAD. Full details were saved to:\n   %s" % (type(e).__name__, e, log))

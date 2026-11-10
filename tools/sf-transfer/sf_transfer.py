@@ -72,13 +72,13 @@ SF_ID = re.compile(r"^[a-zA-Z0-9]{15}(?:[a-zA-Z0-9]{3})?$")
 class SalesforceExport:
     """One or more Data Export ZIPs (or unzipped folders), merged."""
 
-    def __init__(self, paths):
+    def __init__(self, paths, require=True):
         self.tables = {name: {} for name in SF_OBJECTS}   # name -> {Id: row}
         self.file_bodies = {}                              # ContentVersion Id -> reader()
         for p in paths:
             self._add(p)
         missing = [n for n in ("Account", "Task", "Event") if not self.tables[n]]
-        if missing:
+        if missing and require:
             raise SystemExit(
                 "ERROR: the export is missing " + ", ".join(m + ".csv" for m in missing) +
                 ". Make sure you pointed at the Salesforce Data Export ZIP file(s) and that\n"
@@ -104,6 +104,7 @@ class SalesforceExport:
 
     def _member(self, base, reader):
         stem, ext = os.path.splitext(base)
+        stem = next((n for n in SF_OBJECTS if n.lower() == stem.lower()), stem)
         if ext.lower() == ".csv" and stem in SF_OBJECTS:
             text = reader().decode("utf-8-sig", errors="replace")
             for row in csv.DictReader(io.StringIO(text)):
