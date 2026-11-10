@@ -76,6 +76,18 @@ but you can change or skip any of them.
 | **Maybe already in app** | Something very similar was typed into the app by hand on the same date. The message quotes it. | If it's the same thing, **Skip**. If it's different, **Import**. |
 | **Partly in app** | Some copies were brought over in an earlier transfer. | Usually **Skip**. |
 
+## New records tab
+
+Click **New records** (top of the page) to see what the transfer will **add** to the app
+because it isn't there yet:
+
+* **New sensors**: pods in Salesforce that aren't in the app. Their status in the app
+  starts blank (staff set it). Choose **Skip** for any that shouldn't be added.
+* **New contacts**: people in Salesforce who aren't in the app. Choose **Skip** for
+  anyone who shouldn't be added (for example, someone who has left).
+
+Everything here is added unless you choose **Skip**. Nothing already in the app is changed.
+
 ## Splitting the work
 
 More than one person can share the review. Use the filter buttons at the top to divide

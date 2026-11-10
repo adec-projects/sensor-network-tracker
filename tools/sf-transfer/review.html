@@ -165,11 +165,14 @@
   function render() {
     const E = pkg.entries, codes = {};
     E.forEach(e => e.reasons.forEach(r => codes[r.code] = (codes[r.code] || 0) + 1));
+    const nNew = (pkg.new_sensors || []).length + (pkg.new_contacts || []).length;
     const tabs = [["needs", "Needs a decision", E.filter(needs).length], ["review", "All flagged", E.filter(e => e.status === "review").length],
-                  ["ready", "Ready", E.filter(e => e.status === "ready").length], ["all", "Everything", E.length]]
+                  ["ready", "Ready", E.filter(e => e.status === "ready").length], ["all", "Everything", E.length],
+                  ["new", "New records", nNew]]
       .concat(Object.keys(codes).map(c => ["r:" + c, REASON_LABEL[c] || c, codes[c]]));
     $("filters").innerHTML = tabs.map(([k, l, n]) => `<button data-f="${k}" class="${filter === k ? "on" : ""}">${esc(l)} (${n})</button>`).join("");
     $("filters").querySelectorAll("button").forEach(b => b.onclick = () => { filter = b.dataset.f; render(); });
+    if (filter === "new") { renderNew(); updateCount(); return; }
     const shown = E.filter(e => filter === "all" ? true : filter === "needs" ? needs(e) : filter === "review" ? e.status === "review"
       : filter === "ready" ? e.status === "ready" : e.reasons.some(r => "r:" + r.code === filter));
     shown.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
@@ -243,6 +246,40 @@
     return el;
   }
   const clone = (o) => JSON.parse(JSON.stringify(o));
+
+  // ---- "New records": communities / sensors / contacts missing from the app.
+  function renderNew() {
+    const list = $("list"); list.innerHTML = "";
+    const S = pkg.new_sensors || [], P = pkg.new_contacts || [];
+    const und = pkg.undecided_accounts || [];
+    const section = (title, note) => { const h = document.createElement("div"); h.className = "intro"; h.style.margin = "14px 0 8px";
+      h.innerHTML = `<h2 style="margin:0 0 4px">${esc(title)}</h2><div class="note">${note}</div>`; list.appendChild(h); };
+    if (und.length) section("Heads up", `${und.length} Salesforce account(s) weren't matched to an app community, so records ` +
+      "linked only to them have no community tag. Tell the person running the transfer if that looks wrong.");
+    section(`New sensors (${S.length})`, "Pods in Salesforce that aren't in the app yet. Type comes from the Salesforce status; " +
+      "the app status is left blank for staff to set. Choose <strong>Skip</strong> for any that shouldn't be added.");
+    S.forEach(x => list.appendChild(newCard("S-" + x.id, "Sensor", x.id,
+      [["Type", x.type], ["Community", names.community[x.community_id] || x.community_id || "(none)"], ["SOA tag", x.soa_tag_id],
+       ["Purchased", x.date_purchased], ["Installed", x.date_installed], ["Salesforce status", x.sf_status],
+       ["Added as", x.active === false ? "archived (retired/donated in Salesforce)" : "active"]])));
+    section(`New contacts (${P.length})`, "Salesforce contacts not found in the app (matched by email, then name). " +
+      "Choose <strong>Skip</strong> for any that shouldn't be added (e.g. someone who has left).");
+    P.forEach(x => list.appendChild(newCard("C-" + x.id, "Contact", x.name,
+      [["Title", x.role], ["Organization", x.org], ["Email", x.email], ["Phone", x.phone],
+       ["Community", names.community[x.community_id] || x.community_id || "(none)"]])));
+  }
+  function newCard(key, kind, title, fields) {
+    const skip = (decisions[key] || {}).action === "skip";
+    const el = document.createElement("div"); el.className = "card " + (skip ? "done-skip" : "done-import");
+    el.innerHTML = `<div class="meta"><span class="pill">${esc(kind)}</span></div><strong>${esc(title)}</strong>
+      <div class="grid" style="margin-top:6px">${fields.filter(([, v]) => v).map(([k, v]) => `<label>${esc(k)}</label><div style="padding-top:5px">${esc(v)}</div>`).join("")}</div>
+      <div class="actions"><button class="import ${skip ? "" : "on"}" data-n="create">Create</button><button class="skip ${skip ? "on" : ""}" data-n="skip">Skip</button></div>`;
+    el.querySelectorAll("[data-n]").forEach(b => b.onclick = () => {
+      if (b.dataset.n === "skip") decisions[key] = { action: "skip" }; else delete decisions[key];
+      store(); el.replaceWith(newCard(key, kind, title, fields));
+    });
+    return el;
+  }
 
   function chipRow(k, label, e) {
     const have = (e.tags[k] || []);

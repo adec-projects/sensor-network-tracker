@@ -85,8 +85,15 @@ Export (a Salesforce admin requests it in Setup), a fresh app backup
 (`scripts/backup-database.sh`), and someone who knows the network to review the flagged
 items in `review.html`. Test it first on a copy made with `scripts/make-test-copy.sh`.
 
-**Status (Nov 6, 2026):** built and tested end to end on the spring 2026 export in a
-test copy of the app. **Not yet run on the live app or on a current Salesforce export.**
+**Status (Nov 10, 2026):** built and tested end to end on the spring 2026 export in a
+test copy of the app; new-community/sensor/contact creation tested on sample data.
+**Ayla is running it on a current Salesforce export the week of Nov 10**, so the app
+holds everything from Salesforce before she leaves. The result will be recorded below.
+The tool stays in the repo, documented, so it can be re-run later with a new export if
+needed.
+
+**After that transfer, enter new information in the app.** Anything entered only in
+Salesforce after the export date won't be in the app unless the tool is run again.
 Testing used a temporary Supabase test project, deleted afterward because it held a copy
 of contact data. To test again, create a new empty Supabase project and run
 `scripts/make-test-copy.sh`.

@@ -17,9 +17,10 @@ Each run only brings over what isn't in the app yet.
 | `README.md` | This guide, for whoever **runs** the transfer (OIT). |
 | `REVIEWER-GUIDE.md` | Plain-language guide for **reviewers** (anyone who knows the network). Send them this. |
 
-**At a glance:** a Salesforce admin exports the data → OIT runs **prepare** → reviewers
-decide the flagged items in **review.html** → OIT runs **finalize** and **loads** it.
-Try it on a test copy of the app first.
+**At a glance:** a Salesforce admin exports the data → run **prepare** → match any
+unmatched Salesforce accounts in **community-map.csv** and run prepare again → reviewers decide flagged
+items and new records in **review.html** → run **finalize** → **load** into a test copy,
+check it, then load the live app.
 
 > **OIT coordinates the review.** Reviewers are program staff, not IT, and won't know
 > about this process unless OIT tells them. OIT is responsible for choosing the
@@ -56,9 +57,19 @@ Try it on a test copy of the app first.
 * **Collocations** logged on the same date at the same place become one note with all
   the sensors; Salesforce's "Collocation Date Range and Location" field is used to
   suggest any sensors that were missed.
-* **Adds missing contacts and sensors only**: by default, just the ones a transferred
-  record mentions (`--all-new-contacts` on *finalize* adds every missing one). Existing
-  app records are never changed.
+* **Creates what's missing from the app; never changes what's there.**
+  * **Communities are never created.** Each Salesforce Account is matched to a
+    community **already in the app**; a person confirms the ones the tool can't match
+    in `community-map.csv` (*Step 3b*). If a community is missing, add it in the app first.
+  * **Sensors:** every QuantAQ pod in Salesforce that isn't in the app is added with its
+    SOA tag, purchase/install dates, community, and a **type** from its Salesforce status
+    (Audit pod → Audit Pod, Permanent Pod → Permanent Pod, Installed → Community Pod,
+    otherwise Not Assigned). The app **status is left blank** for staff to set (Salesforce
+    statuses can be months old). Retired/donated pods are added as archived.
+  * **Contacts:** every Salesforce contact not found in the app (matched by email, then
+    name) is added.
+  * New sensors and contacts appear in the review page's **New records** tab, where any
+    can be skipped. Existing app records are never modified.
 * **Asks a person** whenever it isn't sure (see *Review*).
 * Attachments/files are **not** transferred (by decision). Rich-text Salesforce Notes
   *are* transferred, as notes.
@@ -110,11 +121,38 @@ python3 tools/sf-transfer/sf_transfer.py prepare \
 (One `--export` per ZIP file.) It prints a report (also saved as `report.txt`) and
 writes:
 
+* `community-map.csv`: one row per Salesforce *Account* and the app community it
+  belongs to. **If the report says accounts need a decision, do Step 3b before review.**
 * `review-package.json`: the file for reviewers.
-* `community-map.csv`: how each Salesforce *Account* was matched to an app community.
-  If one is wrong or blank, fix the `community_id` column (use an id from the app,
-  e.g. `bethel`, `fbx-ncore`) and run **prepare** again. Your fixes are kept on
-  every later run.
+* `report.txt`: what was found, skipped, merged, and flagged.
+* `app-communities.csv`: every community already in the app, with its id.
+
+## Step 3b: Match Salesforce accounts to communities (`community-map.csv`)
+
+Salesforce *Accounts* are a mix of communities (towns, villages, sites) and
+organizations (libraries, tribal councils, schools, vendors). The tool matches most of
+them to an app community automatically; a person decides the rest. **The tool never
+creates communities**: if one is missing from the app, add it in the app first, make a
+fresh backup (Step 2), and run *prepare* again.
+
+1. Open `community-map.csv` (in the working folder) in Excel. Rows needing a decision are
+   at the **top**, with a blank **action** and `NEEDS A DECISION` under *how_matched*.
+   *records_linked* shows how many Salesforce records hang off each account, so you can
+   see which matter.
+2. In the **action** column, type one of:
+
+   | action | Meaning | Also fill in |
+   |---|---|---|
+   | `existing` | It belongs to a community in the app | `community_id`: the app's id (e.g. `bethel`, `fbx-ncore`); every id is listed in `app-communities.csv` in the working folder |
+   | `not a community` | An organization, vendor, etc. with no community | nothing |
+
+3. You can also change rows the tool matched automatically if a match is wrong.
+4. **Save as CSV** (keep the name `community-map.csv`) and run the same **prepare**
+   command again. The report should now say **0** accounts need a decision.
+
+Your decisions are kept in this file and reused on every later run (keep the working
+folder, or copy `community-map.csv` into the next run's working folder). New sensors and
+contacts are assigned to the community their Salesforce account maps to.
 
 ## Step 4: Review (people who know the network), coordinated by OIT
 
@@ -171,8 +209,9 @@ python3 tools/sf-transfer/sf_transfer.py finalize \
     --decisions ~/sf-transfer-work/decisions-reviewer2.json
 ```
 
-Add `--all-new-contacts` to also add Salesforce contacts and sensors that no transferred
-record mentions (by default only the mentioned ones are added).
+By default every missing sensor and contact is added (minus any a reviewer skipped in
+**New records**). Add `--only-mentioned` to add only those a transferred record refers
+to.
 
 Writes `~/sf-transfer-work/output/`:
 
@@ -181,7 +220,7 @@ Writes `~/sf-transfer-work/output/`:
 | `notes.csv`, `note_tags.csv` | Notes, and the sensors/communities/contacts each is tagged to |
 | `comms.csv`, `comm_tags.csv` | Communications and their tags |
 | `audits.csv` | Audit records |
-| `contacts_new.csv`, `sensors_new.csv` | Only contacts/sensors missing from the app |
+| `sensors_new.csv`, `contacts_new.csv` | Only sensors/contacts missing from the app (loaded first, so records can point at them) |
 | `load-into-app.sql` | Loads all of the above into the Supabase app |
 | `pending-review.csv` | Flagged items nobody decided yet. **Not included**; decide them and re-run finalize. |
 | `skipped.csv` | Everything left out, and why |
@@ -231,8 +270,9 @@ Salesforce id in `sf_id`, so it can be identified and removed.
 ## Running it again later
 
 1. New Salesforce export (Step 1) and a **fresh** app backup (Step 2).
-2. Run **prepare** into the **same** working folder. Anything transferred last time is
-   now in the app, so it's skipped automatically, as is anything already decided.
+2. Run **prepare** into the **same** working folder (or copy the previous
+   `community-map.csv` into the new one). Anything transferred last time is now in the
+   app, so it's skipped automatically. Decide any **new** unmatched accounts (Step 3b).
 3. Reviewers open the new package, then click **Load earlier decisions…** and pick
    their previous `decisions.json` to carry their choices forward. Only new items need
    a decision.
@@ -246,12 +286,22 @@ records recognized as already transferred, the rest merged, reviewed, loaded, an
 in the app (merged notes on every tagged sensor, audits in sensors' *Audits* sections).
 Loading the same file twice added nothing.
 
+Creating new sensors and contacts (*New records*) and the account decisions in
+`community-map.csv` (Step 3b) were added in November 2026 and tested on a small sample
+export covering matched/unmatched accounts, an organization, new/retired pods, and
+new/existing contacts. **Check the first
+real run's new records carefully** in a test copy before loading the live app.
+
 ## Limits worth knowing
 
 * Communications can be tagged to communities and contacts, not sensors (an app
   rule). Sensor names are written into the communication's text instead.
 * Records with no community or sensor are filed under the app's *Transferred from SF -
-  no community* entry, as in the June 2026 import.
+  no community* entry, as in the June 2026 import. Matching accounts in
+  `community-map.csv` (Step 3b) keeps this to a minimum.
+* Only QuantAQ pods are created as individual sensors. Other brands (AQMesh,
+  PurpleAir, AirSENCE) map to the app's single entry for that brand, with the specific unit
+  named in the note text.
 * Device-history records linked only to a sensor get no community tag unless the text
   names one. Salesforce only knows where the sensor is *now*, which may not be where it
   was when the note was written, so the tool doesn't guess.

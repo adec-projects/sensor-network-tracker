@@ -218,25 +218,7 @@ class Matcher:
             self.comm_by_name.setdefault(norm(r["name"]), r["id"])
         self.site_aliases = [(re.compile(p, re.I), cid) for p, cid in SITE_ALIASES if cid in self.comm_ids]
         self.accounts = sf.tables["Account"]
-        self.account_map = {}          # sf account id -> (community id or "", method)
-        overrides = {r["sf_account_id"]: (r.get("community_id") or "").strip()
-                     for r in community_map_rows if r.get("sf_account_id")}
-        for aid, a in self.accounts.items():
-            if aid in overrides:
-                cid = overrides[aid]
-                if cid and cid not in self.comm_ids:
-                    log(f"  WARNING: community-map.csv maps '{a.get('Name')}' to unknown community '{cid}' - ignored")
-                    cid = ""
-                self.account_map[aid] = (cid, "community-map.csv")
-            else:
-                self.account_map[aid] = self._auto_account(a)
-        # parent-account fallback (e.g. a school account under a town account)
-        for aid, (cid, how) in list(self.account_map.items()):
-            if not cid and how != "community-map.csv":
-                parent = self.accounts.get(aid, {}).get("ParentId") or ""
-                pcid, _ = self.account_map.get(parent, ("", ""))
-                if pcid:
-                    self.account_map[aid] = (pcid, "parent account")
+        self._map_accounts(community_map_rows)
         # --- sensors
         self.app_sensors = {r["id"]: r for r in app["sensors"]}
         self.assets = sf.tables["Asset"]
@@ -265,6 +247,55 @@ class Matcher:
                       for uid, u in sf.tables["User"].items()}
 
     # ---- communities
+    def _map_accounts(self, rows):
+        """Decide which app community each Salesforce Account belongs to.
+
+        The tool never creates communities: add any missing community in the app first.
+        community-map.csv (written by every `prepare`, edited by a person) wins:
+          action = existing         -> community_id is an existing app community
+          action = not a community  -> the account is an organization, not a place
+          action blank              -> not decided yet; the tool's best guess is used
+                                       and the account is listed as needing a decision
+        """
+        rows = {r["sf_account_id"]: r for r in rows if (r.get("sf_account_id") or "").strip()}
+        act = lambda r: norm((r or {}).get("action")).replace("-", " ").replace("_", " ")
+        self.account_map, self.account_decision = {}, {}
+        for aid, a in self.accounts.items():
+            r = rows.get(aid)
+            a_act = act(r)
+            cid = ((r or {}).get("community_id") or "").strip()
+            if a_act == "existing" or (not a_act and cid and r and r.get("how_matched") == "community-map.csv"):
+                if cid not in self.comm_ids:
+                    log(f"  WARNING: community-map.csv maps '{a.get('Name')}' to '{cid}', which isn't an app community"
+                        " (see app-communities.csv) - needs a fix")
+                    self.account_map[aid] = ("", "community-map.csv: unknown id")
+                    self.account_decision[aid] = ""
+                else:
+                    self.account_map[aid] = (cid, "community-map.csv")
+                    self.account_decision[aid] = "existing"
+            elif a_act in ("not a community", "none", "no", "skip"):
+                self.account_map[aid] = ("", "not a community (community-map.csv)")
+                self.account_decision[aid] = "not a community"
+            else:
+                if a_act:
+                    log(f"  WARNING: community-map.csv: action '{r.get('action')}' for '{a.get('Name')}' isn't "
+                        "'existing' or 'not a community' - treated as undecided")
+                self.account_map[aid] = self._auto_account(a)
+                how = self.account_map[aid][1]
+                self.account_decision[aid] = ("existing" if self.account_map[aid][0]
+                                              else "not a community" if how.startswith("vendor") else "")
+        # Parent-account fallback for undecided accounts (a school under its town).
+        for aid, (cid, how) in list(self.account_map.items()):
+            if not cid and not self.account_decision.get(aid):
+                parent = self.accounts.get(aid, {}).get("ParentId") or ""
+                pcid, _ = self.account_map.get(parent, ("", ""))
+                if pcid:
+                    self.account_map[aid] = (pcid, "parent account")
+                    self.account_decision[aid] = "existing"
+
+    def undecided_accounts(self):
+        return [aid for aid in self.accounts if not self.account_decision.get(aid)]
+
     def _auto_account(self, a):
         name = (a.get("Name") or "").strip()
         name = re.sub(r"\b(?:ft|ft\.)\s", "Fort ", name, flags=re.I)   # "Ft Yukon" -> "Fort Yukon"
@@ -315,13 +346,25 @@ class Matcher:
     def asset_label(self, aid):
         return (self.assets.get(aid, {}).get("Name") or "").strip()
 
+    # Salesforce Asset "Status" -> app sensor type. Status itself is NOT copied:
+    # Salesforce statuses may be months old, and staff set the live status in the app.
+    SF_STATUS_TO_TYPE = {"audit pod": "Audit Pod", "permanent pod": "Permanent Pod",
+                         "installed": "Community Pod", "installed - needs repair": "Community Pod"}
+    SF_STATUS_RETIRED = ("retired", "donated")
+
     def _new_sensor_fields(self, aid, sid):
         a = self.assets[aid]
+        sf_status = (a.get("Status") or "").strip()
+        retired = norm(sf_status).startswith(self.SF_STATUS_RETIRED)
         return {"id": sid, "soa_tag_id": (a.get("SOA_Tag_ID__c") or "").strip(),
-                "type": "Not Assigned", "community_id": self.account_community(a.get("AccountId")) or "",
+                "type": self.SF_STATUS_TO_TYPE.get(norm(sf_status), "Not Assigned"),
+                "community_id": self.account_community(a.get("AccountId")) or "",
                 "date_purchased": (a.get("PurchaseDate") or "")[:10],
                 "date_installed": (a.get("InstallDate") or "")[:10],
-                "details": "Added by the Salesforce transfer tool (Salesforce asset: %s)." % a.get("Name", "")}
+                "active": not retired,
+                "sf_status": sf_status,
+                "details": ("Added by the Salesforce transfer tool. Salesforce asset: %s; Salesforce status at "
+                            "export: %s. Set the current status in the app." % (a.get("Name", ""), sf_status or "none"))}
 
     _SENSOR_PATTERNS = [
         # MOD-00665, Mod_665, Modulair 665, QuantAQ_X_PM_01657, MOD-X-PM-1657
@@ -806,18 +849,30 @@ def sweep(entries, app, m):
 def load_community_map(path):
     if not os.path.exists(path):
         return []
-    with open(path, newline="", encoding="utf-8") as fh:
+    with open(path, newline="", encoding="utf-8-sig") as fh:   # -sig: Excel adds a BOM
         return list(csv.DictReader(fh))
 
 
-def write_community_map(path, sf, m):
+COMMUNITY_MAP_FIELDS = ["sf_account_name", "action", "community_id", "how_matched",
+                        "records_linked", "sf_parent_account", "sf_account_id"]
+
+
+def write_community_map(path, sf, m, linked_counts):
+    """One row per Salesforce Account. Undecided rows (blank action) come first."""
     rows = []
-    for aid, a in sorted(sf.tables["Account"].items(), key=lambda kv: (kv[1].get("Name") or "").lower()):
+    for aid, a in sf.tables["Account"].items():
         cid, how = m.account_map.get(aid, ("", ""))
+        decision = m.account_decision.get(aid, "")
+        parent_acct = sf.tables["Account"].get(a.get("ParentId") or "", {})
         rows.append({"sf_account_id": aid, "sf_account_name": (a.get("Name") or "").strip(),
-                     "community_id": cid, "community_name": m.comm_name.get(cid, ""), "how_matched": how})
+                     "action": decision, "community_id": cid if decision else "",
+                     "how_matched": how if decision else
+                         "NEEDS A DECISION: 'existing' + an id from app-communities.csv, or 'not a community'",
+                     "records_linked": linked_counts.get(aid, 0),
+                     "sf_parent_account": (parent_acct.get("Name") or "").strip()})
+    rows.sort(key=lambda r: (r["action"] != "", -int(r["records_linked"] or 0), r["sf_account_name"].lower()))
     with open(path, "w", newline="", encoding="utf-8") as fh:
-        w = csv.DictWriter(fh, fieldnames=list(rows[0].keys()))
+        w = csv.DictWriter(fh, fieldnames=COMMUNITY_MAP_FIELDS, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
 
@@ -830,10 +885,27 @@ def cmd_prepare(args):
     app = read_app_backup(args.app_backup)
     map_path = os.path.join(args.work, "community-map.csv")
     m = Matcher(sf, app, load_community_map(map_path))
-    write_community_map(map_path, sf, m)
 
     log("Building records, merging copies, sweeping for duplicates ...")
     records, skipped_raw = build_records(sf, m)
+    # How much hangs off each Salesforce Account (helps decide community-map.csv rows).
+    linked = collections.Counter()
+    for t in ("Task", "Event"):
+        for x in sf.rows(t):
+            if not RX["blast"].search(x.get("Subject") or ""):
+                for i in {x.get("AccountId") or "", x.get("WhatId") or ""}:
+                    if i.startswith("001"):
+                        linked[i] += 1
+    for t in ("Contact", "Asset"):
+        for x in sf.rows(t):
+            if x.get("AccountId"):
+                linked[x["AccountId"]] += 1
+    write_community_map(map_path, sf, m, linked)
+    with open(os.path.join(args.work, "app-communities.csv"), "w", newline="", encoding="utf-8") as fh:
+        w = csv.writer(fh)
+        w.writerow(["community_id", "name", "parent_id"])
+        for r in sorted(app["communities"], key=lambda r: (r["name"] or "").lower()):
+            w.writerow([r["id"], norm(r["name"]).title() if "\n" in (r["name"] or "") else r["name"], r.get("parent_id") or ""])
     entries = consolidate(records, m)
     entries, skipped_entries = sweep(entries, app, m)
     for e in entries:
@@ -855,6 +927,8 @@ def cmd_prepare(args):
         },
         "new_sensors": list(m.new_sensors.values()),
         "new_contacts": list(m.new_contacts.values()),
+        "undecided_accounts": [{"sf_account_id": aid, "name": (m.accounts[aid].get("Name") or "").strip(),
+                                "records_linked": linked.get(aid, 0)} for aid in m.undecided_accounts()],
         "entries": entries,
         "skipped": [{"sf_id": s, "reason": why} for s, why in skipped_raw] +
                    [{"sf_id": e["sf_ids"][0], "sf_ids": e["sf_ids"], "text": e["text"], "date": e["date"], "reason": why}
@@ -865,8 +939,22 @@ def cmd_prepare(args):
     report = write_report(args.work, package, records, m)
     log("")
     log(report)
-    log("Next: give %s to the reviewers (secure share, not email)." % os.path.join(args.work, "review-package.json"))
-    log("They open tools/sf-transfer/review.html, decide the flagged items, and send back decisions.json.")
+    undecided = package["undecided_accounts"]
+    if undecided:
+        log("")
+        log("NEXT: %d Salesforce account(s) need a decision before review. Open" % len(undecided))
+        log("   %s" % map_path)
+        log("in Excel. The rows at the top have a blank 'action'. For each, type one of:")
+        log("   existing         and put the app's community id in community_id")
+        log("                    (ids are listed in app-communities.csv in the same folder)")
+        log("   not a community  an organization, vendor, etc.")
+        log("(The tool never creates communities. If one is missing, add it in the app first,")
+        log(" make a fresh backup, and run prepare again.)")
+        log("Save as CSV, then run this same prepare command again.")
+    else:
+        log("")
+        log("Next: give %s to the reviewer(s) (secure share, not email)." % os.path.join(args.work, "review-package.json"))
+        log("They open tools/sf-transfer/review.html, decide the flagged items, and send back decisions.json.")
 
 
 def write_report(work, pkg, records, m):
@@ -896,13 +984,17 @@ def write_report(work, pkg, records, m):
               "partly_in_app": "partly transferred before"}
     for code, n in reasons.most_common():
         lines.append("  %5d  %s" % (n, labels.get(code, code)))
-    lines += ["", "ALSO ADDED: %d new sensors, %d new contacts (only ones missing from the app)."
-              % (len(pkg["new_sensors"]), len(pkg["new_contacts"])),
+    lines += ["", "NEW RECORDS (only ones missing from the app; existing records are never changed):",
+              "  %5d  new sensors" % len(pkg["new_sensors"]),
+              "  %5d  new contacts" % len(pkg["new_contacts"]),
               "Records with no community or sensor go under 'Transferred from SF - no community': %d"
               % sum(1 for e in E if e.get("no_community_fallback"))]
-    unmatched = [(a.get("Name") or "") for aid, a in m.accounts.items() if not m.account_map.get(aid, ("", ""))[0]]
-    lines += ["", "Salesforce accounts with no app community: %d  (fix in community-map.csv, then re-run prepare)"
-              % len(unmatched)]
+    und = pkg.get("undecided_accounts") or []
+    lines += ["", "Salesforce accounts still needing a decision in community-map.csv: %d" % len(und)]
+    for u in sorted(und, key=lambda u: -u["records_linked"])[:15]:
+        lines.append("  %5d linked records  %s" % (u["records_linked"], u["name"]))
+    if len(und) > 15:
+        lines.append("  ... and %d more (see community-map.csv)" % (len(und) - 15))
     previews = sum(1 for r in records if r.get("body_is_preview"))
     if previews:
         lines += ["", "WARNING: %d rich-text notes only had Salesforce's short preview text, because the export"
@@ -1012,8 +1104,14 @@ def cmd_finalize(args):
             used_sensors.update(x for x in (a.get("audit_pod_id"), a.get("community_pod_id")) if x)
     bad_audits = [a for a in audits if not a["community_id"]]
     audits = [a for a in audits if a["community_id"]]       # the app requires a community on audits
-    new_contacts = [c for c in pkg["new_contacts"] if c["id"] in used_contacts or args.all_new_contacts]
-    new_sensors = [s for s in pkg["new_sensors"] if s["id"] in used_sensors or args.all_new_contacts]
+    # New sensors/contacts: all missing ones by default; a reviewer can skip any in the
+    # review page ("New records"), and --only-mentioned limits them to ones a
+    # transferred record refers to.
+    skipped_new = {k for k, d in decisions.items() if k[:2] in ("S-", "C-") and d.get("action") == "skip"}
+    new_contacts = [c for c in pkg["new_contacts"] if "C-" + c["id"] not in skipped_new and
+                    (c["id"] in used_contacts or not args.only_mentioned)]
+    new_sensors = [s for s in pkg["new_sensors"] if "S-" + s["id"] not in skipped_new and
+                   (s["id"] in used_sensors or not args.only_mentioned)]
 
     def write(name, rows, fields):
         with open(os.path.join(out, name), "w", newline="", encoding="utf-8") as fh:
@@ -1027,7 +1125,7 @@ def cmd_finalize(args):
     write("comm_tags.csv", comm_tags, ["comm_id", "tag_type", "tag_id"])
     write("audits.csv", audits, ["id", "community_id", "audit_pod_id", "community_pod_id", "status", "start_date", "end_date", "conducted_by", "notes", "source", "sf_id", "merged_sf_ids", "logged_by"])
     write("contacts_new.csv", new_contacts, ["id", "name", "role", "org", "email", "phone", "community_id", "communities"])
-    write("sensors_new.csv", new_sensors, ["id", "soa_tag_id", "type", "community_id", "date_purchased", "date_installed", "details"])
+    write("sensors_new.csv", new_sensors, ["id", "soa_tag_id", "type", "community_id", "date_purchased", "date_installed", "active", "details"])
     write("pending-review.csv", [{"entry_id": e["id"], "kind": e["kind"], "date": e["date"], "text": e["text"],
                                   "why": " | ".join(r["message"] for r in e["reasons"])} for e in pending],
           ["entry_id", "kind", "date", "text", "why"])
@@ -1036,7 +1134,8 @@ def cmd_finalize(args):
           [{"sf_ids": ";".join(e["sf_ids"]), "date": e["date"], "text": e["text"], "reason": "Skipped by reviewer"} for e in rskipped] +
           [{"sf_ids": a["sf_id"], "date": a["start_date"], "text": "", "reason": "Audit with no community (fix in review)"} for a in bad_audits],
           ["sf_ids", "date", "text", "reason"])
-    write_load_sql(os.path.join(out, "load-into-app.sql"), notes, note_tags, comms, comm_tags, audits, new_contacts, new_sensors)
+    write_load_sql(os.path.join(out, "load-into-app.sql"), notes, note_tags, comms, comm_tags, audits, new_contacts,
+                   new_sensors)
 
     summary = [
         "SALESFORCE TRANSFER - FINAL OUTPUT  (%s)" % dt.datetime.now().isoformat(timespec="seconds"),
@@ -1044,8 +1143,9 @@ def cmd_finalize(args):
         "notes:         %5d  (+%d tags)" % (len(notes), len(note_tags)),
         "comms:         %5d  (+%d tags)" % (len(comms), len(comm_tags)),
         "audits:        %5d" % len(audits),
-        "new contacts:  %5d" % len(new_contacts),
         "new sensors:   %5d" % len(new_sensors),
+        "new contacts:  %5d" % len(new_contacts),
+        "new sensors/contacts skipped by reviewer: %d" % len(skipped_new),
         "skipped by reviewer:            %d" % len(rskipped),
         "STILL WAITING FOR A DECISION:   %d  (listed in pending-review.csv; NOT included)" % len(pending),
         "audits left out (no community): %d" % len(bad_audits),
@@ -1068,10 +1168,11 @@ def write_load_sql(path, notes, note_tags, comms, comm_tags, audits, contacts, s
          "-- Requires migration 20261106200000_audits_sf_id.sql.",
          "BEGIN;", ""]
     for s in sensors:
-        L.append("INSERT INTO public.sensors (id, soa_tag_id, type, community_id, date_purchased, date_installed, details) "
-                 "VALUES (%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING;" % tuple(
-                     _sql(s.get(k) or "") if k in ("soa_tag_id", "date_purchased", "date_installed", "details") else _ref(s.get(k))
-                     for k in ("id", "soa_tag_id", "type", "community_id", "date_purchased", "date_installed", "details")))
+        L.append("INSERT INTO public.sensors (id, soa_tag_id, type, community_id, date_purchased, date_installed, active, details) "
+                 "VALUES (%s,%s,%s,%s,%s,%s,%s,%s) ON CONFLICT (id) DO NOTHING;" % (
+                     _sql(s["id"]), _sql(s.get("soa_tag_id") or ""), _sql(s.get("type") or "Not Assigned"),
+                     _ref(s.get("community_id")), _sql(s.get("date_purchased") or ""), _sql(s.get("date_installed") or ""),
+                     _sql(s.get("active", True) is not False), _sql(s.get("details") or "")))
     for c in contacts:
         L.append("INSERT INTO public.contacts (id, name, role, org, email, phone, community_id, communities) "
                  "SELECT %s,%s,%s,%s,%s,%s,%s,%s WHERE NOT EXISTS (SELECT 1 FROM public.contacts WHERE id = %s"
@@ -1140,8 +1241,9 @@ def main(argv=None):
     b = sub.add_parser("finalize", help="apply reviewer decisions; write spreadsheets + load-into-app.sql")
     b.add_argument("--work", required=True, help="the same working folder used for prepare")
     b.add_argument("--decisions", action="append", help="decisions.json from review.html (repeat to combine several)")
-    b.add_argument("--all-new-contacts", action="store_true",
-                   help="also add Salesforce contacts/sensors that no transferred record mentions")
+    b.add_argument("--only-mentioned", action="store_true",
+                   help="add only the new sensors/contacts that a transferred record refers to "
+                        "(default: add every sensor/contact missing from the app)")
     args = p.parse_args(argv)
     if os.path.abspath(args.work).startswith(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) and \
             os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".git")) and \
