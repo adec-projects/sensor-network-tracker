@@ -44,20 +44,21 @@ you type `LOAD`. A load can be undone. Allow about an hour.
 
 ### Run it
 
-1. Open the `sensor-network-tracker-main` folder (the one that contains the `tools`
-   folder).
-2. Open a terminal **in that folder**:
-   * **Windows 11:** right-click an empty spot in the folder → **Open in Terminal**.
-     (Windows 10: hold **Shift**, right-click an empty spot → **Open PowerShell window
-     here**.)
-   * **Mac:** open **Terminal** (Cmd+Space, type Terminal), type `cd ` (with a space),
-     drag the folder into the Terminal window, and press Enter.
-3. Type this and press Enter:
-   * **Windows:** `py tools\sf-transfer\guided_transfer.py`
-     (or type `py ` and drag `guided_transfer.py` from the `tools\sf-transfer` folder into
-     the window: this works even if the terminal is in a different folder)
-   * **Mac:** `python3 tools/sf-transfer/guided_transfer.py`
-4. Follow the prompts. It will:
+1. **Open a Terminal window.**
+   * **Windows:** right-click the **Start** button → **Terminal** (or search the Start
+     menu for *Terminal* or *PowerShell*).
+   * **Mac:** press Cmd+Space, type **Terminal**, press Enter.
+2. **Find the program file in File Explorer** (Mac: Finder): open the folder you extracted,
+   and keep opening `sensor-network-tracker-main` until you see a folder named `tools`.
+   Open `tools`, then `sf-transfer`. The file is **`guided_transfer.py`** (it may show as
+   just `guided_transfer`).
+3. **In the Terminal, type `py` and one space** (Mac: `python3` and one space). Don't
+   press Enter yet.
+4. **Drag `guided_transfer.py` into the Terminal window.** Its full location appears after
+   what you typed, e.g.
+   `py "C:\Users\you\Documents\sensor-network-tracker-main\tools\sf-transfer\guided_transfer.py"`
+5. **Press Enter.** You should see **STEP 1: what's going to happen**.
+6. Follow the prompts. It will:
    1. install one small database connector the first time (needs internet);
    2. ask you to **drag your Salesforce ZIP file** into the window;
    3. ask you to **paste the Supabase connection string** (Supabase → **Connect** →
@@ -70,12 +71,12 @@ you type `LOAD`. A load can be undone. Allow about an hour.
       (the reviewer guide explains each choice); click **Save decisions file**;
    7. run a **PRACTICE load** and show what *would* be added. Nothing changes;
    8. ask you to type **`LOAD`** to load for real, then show what was added.
-5. Check the result in the app (the program lists what to look at).
+7. Check the result in the app (the program lists what to look at).
 
-**Undo the most recent load:** open the terminal the same way and run
-`py tools\sf-transfer\guided_transfer.py --undo` (Mac:
-`python3 tools/sf-transfer/guided_transfer.py --undo`), then type `UNDO`. It removes
-exactly what that load added. New sensors/contacts that staff have used since are kept.
+**Undo the most recent load:** same steps 1 to 4, then type a space and **`--undo`** at the
+end, press Enter, and type `UNDO` when asked. (After a load, the program also prints the
+exact undo command to copy.) It removes exactly what that load added; new
+sensors/contacts that staff have used since are kept.
 
 **Where files go:** a folder named `sf-transfer-work` in your user folder
 (`C:\Users\<you>\sf-transfer-work`, Mac `~/sf-transfer-work`). It holds contact details:
@@ -87,7 +88,7 @@ remembers your community decisions.
 | You see | Do this |
 |---|---|
 | `'py' is not recognized…` / `command not found` | Close the Terminal and open a **new** one (new installs only appear in new windows). Still not recognized: re-run the Python installer (older installers: choose **Modify** and tick **Add python.exe to PATH**), or install **Python 3.13** from the Microsoft Store. |
-| `can't open file … guided_transfer.py` / `[Errno 2] No such file or directory` | The terminal isn't in the folder that contains `tools` (Windows "Extract All" often makes a folder inside a folder). Easiest fix: type `py ` (with a space), then **drag `guided_transfer.py`** (in `tools` → `sf-transfer`) from File Explorer into the Terminal, and press Enter. This works from any folder. For undo, add ` --undo` at the end. |
+| `can't open file … guided_transfer.py` / `[Errno 2] No such file or directory` | The file's location didn't come through. Type `py ` again and **drag** `guided_transfer.py` into the window (don't type the path). Make sure there's a space after `py`. |
 | "Couldn't install the database connector" | Your network or computer blocked the install. Ask IT to run `py -m pip install psycopg[binary]`. |
 | "The password wasn't accepted" | Reset the database password in Supabase (Project Settings → Database) and use the new one. |
 | "The load stopped at statement…" | Nothing was loaded (all or nothing). Send the message shown to whoever maintains the app. |

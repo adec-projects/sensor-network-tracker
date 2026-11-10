@@ -7,15 +7,9 @@ reading the Salesforce export, checking what's already in the app, matching
 Salesforce accounts to communities, the review page, a PRACTICE load that changes
 nothing, the real load, and an exact UNDO of what was loaded.
 
-How to start it (see README.md "Quick start" for screenshots-free instructions):
-
-    Windows:  py tools\\sf-transfer\\guided_transfer.py
-    Mac:      python3 tools/sf-transfer/guided_transfer.py
-
-To undo the most recent load:
-
-    Windows:  py tools\\sf-transfer\\guided_transfer.py --undo
-    Mac:      python3 tools/sf-transfer/guided_transfer.py --undo
+How to start it (see README.md "Quick start"): open a Terminal, type  py  and a space
+(Mac: python3 and a space), drag this file into the window, and press Enter.
+To undo the most recent load, do the same but add  --undo  at the end.
 
 Uses sf_transfer.py (same folder) for all the data logic, and the "psycopg"
 library to talk to the database (installed automatically the first time).
@@ -45,6 +39,8 @@ WORK = os.environ.get("SNT_TEST_WORK") or os.path.join(os.path.expanduser("~"), 
 DOWNLOADS = os.environ.get("SNT_TEST_DOWNLOADS") or os.path.join(os.path.expanduser("~"), "Downloads")
 AUDITS_MIGRATION = os.path.join(REPO, "supabase", "migrations", "20261106200000_audits_sf_id.sql")
 IS_WINDOWS = os.name == "nt"
+# The exact command to run this program again, from any folder (shown for --undo).
+RUN_CMD = '%s "%s"' % ("py" if IS_WINDOWS else "python3", os.path.abspath(__file__))
 
 
 # --------------------------------------------------------------------------- helpers
@@ -522,8 +518,7 @@ def main():
 
     step(9, "the real load")
     target = "the LIVE Sensor Network Tracker app" if ref == LIVE_REF else "database '%s' (not the live app)" % ref
-    say("This will add the records above to %s.\nIt can be undone afterwards with:  %s %s --undo"
-        % (target, "py" if IS_WINDOWS else "python3", os.path.join("tools", "sf-transfer", "guided_transfer.py")))
+    say("This will add the records above to %s.\nIt can be undone afterwards with:\n   %s --undo" % (target, RUN_CMD))
     if ask("\nType LOAD and press Enter to load them (anything else stops here, nothing loaded):") != "LOAD":
         say("Stopped. Nothing was loaded.")
         return
@@ -545,15 +540,15 @@ def main():
       - Open a new sensor (see the "New records" tab you reviewed).
       - Open an audit pod and look at its Audits section.
 
-    If something looks badly wrong, undo the whole load with:
-      %s %s --undo
+    If something looks badly wrong, undo the whole load by running this (copy it now and
+    keep it somewhere safe):
+      %s --undo
 
     When you're satisfied:
       - Write down today's date as the "Salesforce transfer date". Anything entered only in
         Salesforce after your export date won't be in the app.
       - Keep the folder %s for now if you might re-run or undo; delete it when you're sure
-        (it holds contact details).""" % ("py" if IS_WINDOWS else "python3",
-                                          os.path.join("tools", "sf-transfer", "guided_transfer.py"), WORK))
+        (it holds contact details).""" % (RUN_CMD, WORK))
     open_thing(APP_URL)
 
 
