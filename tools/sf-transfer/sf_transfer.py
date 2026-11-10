@@ -849,8 +849,15 @@ def sweep(entries, app, m):
 def load_community_map(path):
     if not os.path.exists(path):
         return []
-    with open(path, newline="", encoding="utf-8-sig") as fh:   # -sig: Excel adds a BOM
-        return list(csv.DictReader(fh))
+    # Excel may save as "CSV UTF-8" (with a BOM) or as plain "CSV" in the old Windows
+    # encoding; accept both.
+    for enc in ("utf-8-sig", "cp1252"):
+        try:
+            with open(path, newline="", encoding=enc) as fh:
+                return list(csv.DictReader(fh))
+        except UnicodeDecodeError:
+            continue
+    raise SystemExit("ERROR: couldn't read %s. In Excel, use File > Save As > 'CSV UTF-8'." % path)
 
 
 COMMUNITY_MAP_FIELDS = ["sf_account_name", "action", "community_id", "how_matched",
@@ -871,7 +878,12 @@ def write_community_map(path, sf, m, linked_counts):
                      "records_linked": linked_counts.get(aid, 0),
                      "sf_parent_account": (parent_acct.get("Name") or "").strip()})
     rows.sort(key=lambda r: (r["action"] != "", -int(r["records_linked"] or 0), r["sf_account_name"].lower()))
-    with open(path, "w", newline="", encoding="utf-8") as fh:
+    try:
+        fh = open(path, "w", newline="", encoding="utf-8-sig")   # BOM so Excel shows characters correctly
+    except PermissionError:
+        raise SystemExit("ERROR: can't update %s because it's open in another program (probably Excel).\n"
+                         "Close it there, then run this step again." % path)
+    with fh:
         w = csv.DictWriter(fh, fieldnames=COMMUNITY_MAP_FIELDS, extrasaction="ignore")
         w.writeheader()
         w.writerows(rows)
@@ -881,8 +893,10 @@ def cmd_prepare(args):
     os.makedirs(args.work, exist_ok=True)
     log("Reading the Salesforce export ...")
     sf = SalesforceExport(args.export)
-    log("Reading the app backup ...")
-    app = read_app_backup(args.app_backup)
+    # The guided program passes the app's data directly; otherwise read a backup file.
+    app = getattr(args, "app", None)
+    log("Reading the app's current data ..." if app else "Reading the app backup ...")
+    app = app or read_app_backup(args.app_backup)
     map_path = os.path.join(args.work, "community-map.csv")
     m = Matcher(sf, app, load_community_map(map_path))
 
@@ -940,6 +954,8 @@ def cmd_prepare(args):
     log("")
     log(report)
     undecided = package["undecided_accounts"]
+    if getattr(args, "guided", False):
+        return                          # guided_transfer.py gives its own instructions
     if undecided:
         log("")
         log("NEXT: %d Salesforce account(s) need a decision before review. Open" % len(undecided))
@@ -1065,9 +1081,13 @@ def apply_decisions(pkg, decisions):
 
 def cmd_finalize(args):
     pkg_path = os.path.join(args.work, "review-package.json")
+    if not os.path.exists(pkg_path):
+        raise SystemExit("ERROR: no review-package.json in %s. Run prepare first (with the same --work folder)." % args.work)
     pkg = json.load(open(pkg_path, encoding="utf-8"))
     decisions = {}
     for path in args.decisions or []:
+        if not os.path.exists(path):
+            raise SystemExit("ERROR: decisions file not found: %s" % path)
         d = json.load(open(path, encoding="utf-8"))
         decisions.update(d.get("decisions", d))       # later files win
     final, pending, rskipped = apply_decisions(pkg, decisions)
@@ -1217,6 +1237,13 @@ def write_load_sql(path, notes, note_tags, comms, comm_tags, audits, contacts, s
           "SELECT 'audits', count(*) FROM public.audits WHERE source = '%s';" % (SOURCE_TAG, SOURCE_TAG, SOURCE_TAG)]
     with open(path, "w", encoding="utf-8") as fh:
         fh.write("\n".join(L) + "\n")
+    # Same statements as data, plus the ids each would create, for guided_transfer.py
+    # (practice run, real load, and an exact undo of what a load added).
+    with open(os.path.join(os.path.dirname(path), "load-statements.json"), "w", encoding="utf-8") as fh:
+        json.dump({"statements": [x for x in L if x.startswith("INSERT")],
+                   "ids": {"notes": [n["id"] for n in notes], "comms": [c["id"] for c in comms],
+                           "audits": [a["id"] for a in audits], "sensors": [s["id"] for s in sensors],
+                           "contacts": [c["id"] for c in contacts]}}, fh)
 
 
 def _ids(r):
@@ -1245,6 +1272,13 @@ def main(argv=None):
                    help="add only the new sensors/contacts that a transferred record refers to "
                         "(default: add every sensor/contact missing from the app)")
     args = p.parse_args(argv)
+    # Accept "~/folder" everywhere (Windows shells don't expand it).
+    for k in ("work", "app_backup"):
+        if getattr(args, k, None):
+            setattr(args, k, os.path.expanduser(getattr(args, k)))
+    for k in ("export", "decisions"):
+        if getattr(args, k, None):
+            setattr(args, k, [os.path.expanduser(x) for x in getattr(args, k)])
     if os.path.abspath(args.work).startswith(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))) and \
             os.path.exists(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), ".git")) and \
             not os.path.abspath(args.work).startswith(os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))), "sf-export")):

@@ -107,7 +107,7 @@ archive/                Retired one-off import tools and setup SQL (historical o
 | [`docs/data-dictionary.md`](docs/data-dictionary.md) | What every table and column means |
 | [`docs/mssql-migration-guide.md`](docs/mssql-migration-guide.md) | PostgreSQL to SQL Server mapping |
 | [`docs/mssql-migration-runbook.md`](docs/mssql-migration-runbook.md) | Step-by-step data transfer |
-| [`tools/sf-transfer/README.md`](tools/sf-transfer/README.md) | Moving remaining Salesforce records into the app (for OIT) |
+| [`tools/sf-transfer/README.md`](tools/sf-transfer/README.md) | Moving Salesforce records into the app: *Quick start* runs a guided program (Windows or Mac) |
 | [`tools/sf-transfer/REVIEWER-GUIDE.md`](tools/sf-transfer/REVIEWER-GUIDE.md) | Plain-language guide for people reviewing that transfer |
 | [`docs/importers.md`](docs/importers.md) | The one-off import tools in `archive/` |
 | [`docs/developer-notes.md`](docs/developer-notes.md) | File map and conventions for the code |

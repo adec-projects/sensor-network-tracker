@@ -92,6 +92,10 @@ holds everything from Salesforce before she leaves. The result will be recorded 
 The tool stays in the repo, documented, so it can be re-run later with a new export if
 needed.
 
+**To run it** (Windows or Mac, no technical experience needed): follow *Quick start* at
+the top of `tools/sf-transfer/README.md`. One guided program does every step, including
+a practice load that changes nothing and an undo.
+
 **After that transfer, enter new information in the app.** Anything entered only in
 Salesforce after the export date won't be in the app unless the tool is run again.
 Testing used a temporary Supabase test project, deleted afterward because it held a copy

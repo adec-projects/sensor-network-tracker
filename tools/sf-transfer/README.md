@@ -10,12 +10,105 @@ run more than once, so you can:
 
 Each run only brings over what isn't in the app yet.
 
+## Quick start: the guided program (recommended, Windows or Mac)
+
+**You don't need any technical experience.** One program walks you through every step
+with plain prompts, runs a **practice load that changes nothing**, and only loads after
+you type `LOAD`. A load can be undone. Allow about an hour.
+
+### Before you start (one time on each computer)
+
+1. **Install Python.**
+   * **Windows:** go to <https://www.python.org/downloads/>, click the yellow
+     **Download Python** button, and run the downloaded file. On the first screen,
+     **tick "Add python.exe to PATH"** at the bottom, then click **Install Now**.
+   * **Mac:** same website and button; open the downloaded file and click through.
+2. **Get this repository onto your computer.**
+   On <https://github.com/adec-projects/sensor-network-tracker>, click the green
+   **Code** button → **Download ZIP**. Open your Downloads folder, right-click the ZIP →
+   **Extract All…** (Mac: double-click it). You'll get a folder named
+   `sensor-network-tracker-main`. Move it somewhere easy, like Documents.
+3. **Have ready:**
+   * the **Salesforce export ZIP file(s)** (see *Step 1* below if you don't have them yet;
+     tick the boxes to include files, so rich-text notes come through in full);
+   * your **Supabase login**, and the **database password** (Supabase → Project
+     Settings → Database; if nobody knows it, **Reset database password** there; nothing
+     else uses it);
+   * any **community that's missing from the app added in the app first**. The tool never
+     creates communities.
+
+### Run it
+
+1. Open the `sensor-network-tracker-main` folder (the one that contains the `tools`
+   folder).
+2. Open a terminal **in that folder**:
+   * **Windows 11:** right-click an empty spot in the folder → **Open in Terminal**.
+     (Windows 10: hold **Shift**, right-click an empty spot → **Open PowerShell window
+     here**.)
+   * **Mac:** open **Terminal** (Cmd+Space, type Terminal), type `cd ` (with a space),
+     drag the folder into the Terminal window, and press Enter.
+3. Type this and press Enter:
+   * **Windows:** `py tools\sf-transfer\guided_transfer.py`
+   * **Mac:** `python3 tools/sf-transfer/guided_transfer.py`
+4. Follow the prompts. It will:
+   1. install one small database connector the first time (needs internet);
+   2. ask you to **drag your Salesforce ZIP file** into the window;
+   3. ask you to **paste the Supabase connection string** (Supabase → **Connect** →
+      **Direct** → method **Session pooler** → copy) and then the **database password**
+      (nothing shows as you type; that's normal);
+   4. save a "before" copy of the app's data, for safety;
+   5. if some Salesforce accounts can't be matched to a community, **open them in Excel**
+      for you to decide (see *Step 3b*); save, close Excel, press Enter;
+   6. open the **review page** for you to decide flagged items and check new records
+      (the reviewer guide explains each choice); click **Save decisions file**;
+   7. run a **PRACTICE load** and show what *would* be added. Nothing changes;
+   8. ask you to type **`LOAD`** to load for real, then show what was added.
+5. Check the result in the app (the program lists what to look at).
+
+**Undo the most recent load:** open the terminal the same way and run
+`py tools\sf-transfer\guided_transfer.py --undo` (Mac:
+`python3 tools/sf-transfer/guided_transfer.py --undo`), then type `UNDO`. It removes
+exactly what that load added. New sensors/contacts that staff have used since are kept.
+
+**Where files go:** a folder named `sf-transfer-work` in your user folder
+(`C:\Users\<you>\sf-transfer-work`, Mac `~/sf-transfer-work`). It holds contact details:
+don't email it, and delete it when you're done. Keep it if you might undo or re-run; it
+remembers your community decisions.
+
+**If something goes wrong:**
+
+| You see | Do this |
+|---|---|
+| `'py' is not recognized…` / `command not found` | Python isn't installed or "Add to PATH" wasn't ticked. Re-run the Python installer, choose **Modify**/**Repair**, and tick it. |
+| `can't open file … guided_transfer.py` | The terminal isn't in the right folder. Close it and repeat *Run it*, step 2, from the folder that contains `tools`. |
+| "Couldn't install the database connector" | Your network or computer blocked the install. Ask IT to run `py -m pip install psycopg[binary]`. |
+| "The password wasn't accepted" | Reset the database password in Supabase (Project Settings → Database) and use the new one. |
+| "The load stopped at statement…" | Nothing was loaded (all or nothing). Send the message shown to whoever maintains the app. |
+| Excel: "can't update community-map.csv" | Close the file in Excel, then press Enter in the program. |
+
+You can stop at any prompt by typing **Q** (or pressing Ctrl+C). Nothing is loaded until
+you type `LOAD`.
+
+---
+
+## The files
+
 | File | What it is |
 |---|---|
-| `sf_transfer.py` | The tool. Python 3.8+, **standard library only** (nothing to install). |
-| `review.html` | The review page for people who know the network (opens in any browser, works offline). |
-| `README.md` | This guide, for whoever **runs** the transfer (OIT). |
-| `REVIEWER-GUIDE.md` | Plain-language guide for **reviewers** (anyone who knows the network). Send them this. |
+| `guided_transfer.py` | **The guided program** (above). Uses `sf_transfer.py` for all the data logic. |
+| `sf_transfer.py` | The tool itself, for running steps by hand (*Manual procedure* below). Python 3.8+, standard library only. |
+| `review.html` | The review page (opens in any browser, works offline; also at the app's website under `/tools/sf-transfer/review.html`). |
+| `README.md` | This guide. |
+| `REVIEWER-GUIDE.md` | Plain-language guide for **reviewers** (anyone who knows the network). |
+
+---
+
+## Manual procedure (for technical staff)
+
+Everything the guided program does, step by step, for running parts by hand, loading
+the spreadsheets into another database, or troubleshooting. Mac/Linux shell commands
+shown; on Windows use the guided program, or adapt the commands (the backup and
+test-copy scripts are bash scripts).
 
 **At a glance:** a Salesforce admin exports the data → run **prepare** → match any
 unmatched Salesforce accounts in **community-map.csv** and run prepare again → reviewers decide flagged
@@ -269,6 +362,10 @@ Salesforce id in `sf_id`, so it can be identified and removed.
 
 ## Running it again later
 
+**With the guided program:** just run it again with the new export (keep the
+`sf-transfer-work` folder so your community decisions are reused). Anything already in
+the app is skipped. By hand:
+
 1. New Salesforce export (Step 1) and a **fresh** app backup (Step 2).
 2. Run **prepare** into the **same** working folder (or copy the previous
    `community-map.csv` into the new one). Anything transferred last time is now in the
@@ -291,6 +388,13 @@ Creating new sensors and contacts (*New records*) and the account decisions in
 export covering matched/unmatched accounts, an organization, new/retired pods, and
 new/existing contacts. **Check the first
 real run's new records carefully** in a test copy before loading the live app.
+
+The guided program (`guided_transfer.py`) was tested in November 2026 against a real
+PostgreSQL database built from `schema/current-schema.sql`: full run, practice load
+(matches the real load, changes nothing), second run (adds nothing), undo (removes
+exactly that load, keeps new sensors used since), cancel prompts, and a deliberate
+mid-load failure (caught in the practice run; nothing changed). Windows-specific behavior
+(Excel/File Explorer opening, drag-and-drop) was written for but not tested on Windows.
 
 ## Limits worth knowing
 
