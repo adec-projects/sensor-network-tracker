@@ -20,8 +20,13 @@ you type `LOAD`. A load can be undone. Allow about an hour.
 
 1. **Install Python.**
    * **Windows:** go to <https://www.python.org/downloads/>, click the yellow
-     **Download Python** button, and run the downloaded file. On the first screen,
-     **tick "Add python.exe to PATH"** at the bottom, then click **Install Now**.
+     **Download** button, and run the downloaded file. Newer downloads are the
+     **Python install manager**: just click through; there's no PATH checkbox, and none
+     is needed. (Older installers show a checkbox **"Add python.exe to PATH"** on the
+     first screen: tick it, then **Install Now**.)
+     **Check it worked:** open a *new* Terminal (right-click Start → Terminal), type
+     `py --version` and press Enter. You should see `Python 3.x.x`. If it offers to
+     install a Python runtime, type `y` and press Enter, then check again.
    * **Mac:** same website and button; open the downloaded file and click through.
 2. **Get this repository onto your computer.**
    On <https://github.com/adec-projects/sensor-network-tracker>, click the green
@@ -79,7 +84,7 @@ remembers your community decisions.
 
 | You see | Do this |
 |---|---|
-| `'py' is not recognized…` / `command not found` | Python isn't installed or "Add to PATH" wasn't ticked. Re-run the Python installer, choose **Modify**/**Repair**, and tick it. |
+| `'py' is not recognized…` / `command not found` | Close the Terminal and open a **new** one (new installs only appear in new windows). Still not recognized: re-run the Python installer (older installers: choose **Modify** and tick **Add python.exe to PATH**), or install **Python 3.13** from the Microsoft Store. |
 | `can't open file … guided_transfer.py` | The terminal isn't in the right folder. Close it and repeat *Run it*, step 2, from the folder that contains `tools`. |
 | "Couldn't install the database connector" | Your network or computer blocked the install. Ask IT to run `py -m pip install psycopg[binary]`. |
 | "The password wasn't accepted" | Reset the database password in Supabase (Project Settings → Database) and use the new one. |
