@@ -7127,12 +7127,18 @@ async function renderAllowedUsers(currentEmail) {
         const deleteBtn = isAdmin && !isYou
             ? `<button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="permanentlyDeleteUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Delete</button>`
             : '';
-        const resetMfaBtn = isAdmin && !isYou
-            ? `<button class="btn btn-sm" style="font-size:11px" onclick="adminResetMfa('${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reset MFA</button>`
-            : '';
-        const resetPwBtn = isAdmin && !isYou
-            ? `<button class="btn btn-sm" style="font-size:11px" onclick="adminResetPassword('${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reset password</button>`
-            : '';
+        // Your own row: everyone gets these (password-checked, no temp password).
+        // Other people's rows: admins only (the database enforces this too).
+        const resetMfaBtn = isYou
+            ? `<button class="btn btn-sm" style="font-size:11px" onclick="openOwnMfaModal()">Reset MFA</button>`
+            : isAdmin
+                ? `<button class="btn btn-sm" style="font-size:11px" onclick="adminResetMfa('${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reset MFA</button>`
+                : '';
+        const resetPwBtn = isYou
+            ? `<button class="btn btn-sm" style="font-size:11px" onclick="openOwnPasswordModal()">Reset password</button>`
+            : isAdmin
+                ? `<button class="btn btn-sm" style="font-size:11px" onclick="adminResetPassword('${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reset password</button>`
+                : '';
         return `<div class="settings-user-row">
             <span>
                 <span class="settings-user-email">${escapeHtml(row.email)}</span>
@@ -7384,48 +7390,89 @@ function passwordProblem(pw) {
     return '';
 }
 
-// Settings -> Change Password. Identity is proven by the CURRENT password,
-// checked server-side by db.changeMyPassword(); no authenticator code needed.
-async function changePassword(event) {
+// ===== YOUR OWN PASSWORD / AUTHENTICATOR (User Management > your row) =====
+// Anyone can reset their own; only admins see these buttons on other people's
+// rows (adminResetPassword / adminResetMfa), and the database enforces that.
+
+function _formError(id, msg) {
+    const el = document.getElementById(id);
+    el.textContent = msg || '';
+    el.classList.toggle('visible', !!msg);
+}
+
+function openOwnPasswordModal() {
+    ['own-pw-current', 'own-pw-new', 'own-pw-confirm'].forEach(id => { document.getElementById(id).value = ''; });
+    _formError('own-pw-error', '');
+    openModal('modal-own-password');
+    setTimeout(() => document.getElementById('own-pw-current').focus(), 50);
+}
+
+// Identity is proven by the CURRENT password, checked server-side by
+// db.changeMyPassword(); no authenticator code or temporary password needed.
+async function submitOwnPassword(event) {
     event.preventDefault();
-    const errorEl = document.getElementById('pw-error');
-    const successEl = document.getElementById('pw-success');
-    const btn = document.getElementById('pw-submit-btn');
-    const showErr = (msg) => { errorEl.textContent = msg; errorEl.classList.add('visible'); };
-    errorEl.textContent = '';
-    errorEl.classList.remove('visible');
-    successEl.style.display = 'none';
-
-    const currentPw = document.getElementById('pw-current').value;
-    const newPw = document.getElementById('pw-new').value;
-    const confirmPw = document.getElementById('pw-confirm').value;
-
-    if (!currentPw) { showErr('Please enter your current password.'); return; }
-    if (newPw !== confirmPw) { showErr('New passwords do not match.'); return; }
+    const currentPw = document.getElementById('own-pw-current').value;
+    const newPw = document.getElementById('own-pw-new').value;
+    const confirmPw = document.getElementById('own-pw-confirm').value;
+    if (!currentPw) { _formError('own-pw-error', 'Please enter your current password.'); return; }
+    if (newPw !== confirmPw) { _formError('own-pw-error', 'New passwords do not match.'); return; }
     const problem = passwordProblem(newPw);
-    if (problem) { showErr(problem); return; }
-    if (newPw === currentPw) { showErr('New password must be different from your current password.'); return; }
+    if (problem) { _formError('own-pw-error', problem); return; }
+    if (newPw === currentPw) { _formError('own-pw-error', 'New password must be different from your current password.'); return; }
+    if (window.SANDBOX_MODE) { _formError('own-pw-error', 'Password changes affect your real account, so they are turned off in sandbox mode.'); return; }
 
-    btn.disabled = true;
-    btn.textContent = 'Updating...';
+    const btn = document.getElementById('own-pw-submit');
+    btn.disabled = true; btn.textContent = 'Updating...';
     try {
         await db.changeMyPassword(currentPw, newPw);
-        resetPasswordForm();
-        successEl.textContent = 'Password updated. You have been signed out on your other devices.';
-        successEl.style.display = 'block';
-        setTimeout(() => { successEl.style.display = 'none'; }, 6000);
+        closeModal('modal-own-password');
+        showAlert('Password Updated', 'Your password has been changed. You have been signed out on your other devices.');
     } catch (err) {
-        showErr(err.message || 'Failed to update password.');
+        _formError('own-pw-error', err.message || 'Failed to update password.');
     } finally {
-        btn.disabled = false;
-        btn.textContent = 'Update Password';
+        btn.disabled = false; btn.textContent = 'Update Password';
     }
 }
 
-function resetPasswordForm() {
-    document.getElementById('pw-current').value = '';
-    document.getElementById('pw-new').value = '';
-    document.getElementById('pw-confirm').value = '';
+async function openOwnMfaModal() {
+    // Nothing to reset if no authenticator is set up yet.
+    try {
+        const { data: factors } = await supa.auth.mfa.listFactors();
+        if (!factors?.totp?.some(f => f.status === 'verified')) {
+            showAlert('No Authenticator Set Up', "You don't have an authenticator set up yet. You'll be prompted to set one up the next time you sign in.");
+            return;
+        }
+    } catch (e) { /* fall through: the server check below still applies */ }
+    document.getElementById('own-mfa-password').value = '';
+    _formError('own-mfa-error', '');
+    openModal('modal-own-mfa');
+    setTimeout(() => document.getElementById('own-mfa-password').focus(), 50);
+}
+
+async function submitOwnMfaReset(event) {
+    event.preventDefault();
+    const pw = document.getElementById('own-mfa-password').value;
+    if (!pw) { _formError('own-mfa-error', 'Please enter your current password.'); return; }
+    if (window.SANDBOX_MODE) { _formError('own-mfa-error', 'Authenticator resets affect your real account, so they are turned off in sandbox mode.'); return; }
+
+    const btn = document.getElementById('own-mfa-submit');
+    btn.disabled = true; btn.textContent = 'Resetting...';
+    try {
+        await db.resetMyMfa(pw);
+    } catch (err) {
+        _formError('own-mfa-error', err.message || 'Failed to reset your authenticator.');
+        btn.disabled = false; btn.textContent = 'Reset & Sign Out';
+        return;
+    }
+    btn.disabled = false; btn.textContent = 'Reset & Sign Out';
+    closeModal('modal-own-mfa');
+    // Sign out everywhere right away, so the account spends as little time as
+    // possible without an authenticator. Next sign-in goes to the setup screen.
+    try { await supa.auth.signOut({ scope: 'global' }); } catch (e) { /* signed out locally below anyway */ }
+    try { await logoutUser(); } catch (e) { showLoginScreen(); }
+    showAlert('Authenticator Reset', 'Your authenticator has been removed and you have been signed out.<br><br>'
+        + 'Sign in again with your email and password. You will then be <strong>prompted to set up your authenticator</strong>: '
+        + 'scan the QR code with your phone and enter the 6-digit code.');
 }
 
 // ===== MFA =====
@@ -7448,7 +7495,7 @@ async function renderMfaSettings() {
     if (totp) {
         html += `<div style="background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;padding:12px 16px;margin-bottom:16px">
             <p style="font-size:13px;color:var(--slate-600)">Your authenticator is set up and active.</p>
-            <p style="font-size:11px;color:var(--slate-400);margin-top:6px">Lost access to your authenticator app? Contact an administrator to reset your MFA.</p>
+            <p style="font-size:11px;color:var(--slate-400);margin-top:6px">Switching to a new phone? Use <strong>Reset MFA</strong> next to your name under User Management. Lost your phone and can't sign in? Ask an administrator to reset it for you.</p>
         </div>`;
     } else {
         html += `<div style="background:#fff8e8;border:1px solid #fde68a;border-radius:8px;padding:12px 16px;margin-bottom:16px">

@@ -100,6 +100,13 @@ const db = {
         if (error) throw error;
     },
 
+    // Remove your OWN authenticator (e.g. new phone). The database checks the
+    // current password; you set up a new authenticator at next sign-in.
+    async resetMyMfa(currentPassword) {
+        const { error } = await supa.rpc('reset_my_mfa', { current_password: currentPassword });
+        if (error) throw error;
+    },
+
     // True if an admin set a temporary password that this user must replace.
     async passwordChangeRequired() {
         const { data, error } = await supa.rpc('password_change_required');

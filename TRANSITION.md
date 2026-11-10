@@ -107,7 +107,9 @@ no email-based reset, so nothing depends on an outside email service.
 | Problem | Fix |
 |---|---|
 | Forgot password | Admin clicks **Reset password**, then reads the one-time temporary password to the person by phone or Teams. They sign in with it and must choose a new password. |
-| New or lost phone (authenticator) | Admin clicks **Reset MFA**. The person sets up the authenticator again at next sign-in. |
+| Switching to a new phone (can still sign in) | The person clicks **Reset MFA** next to their **own** name in Settings → User Management, confirms with their password, and sets up the new phone at next sign-in. No admin needed. |
+| Lost phone (can't sign in) | Admin clicks **Reset MFA** on that person's row. The person sets up the authenticator again at next sign-in. |
+| Wants to change their password | The person clicks **Reset password** next to their **own** name (current + new password). No admin needed. |
 | Both | Use both buttons. |
 | Person leaves | **Archive** them. The database blocks their access immediately, even if they remember their password. |
 | All admins unavailable | Last resort, by a Supabase project owner in the dashboard: to fix a lost authenticator, delete the user's MFA factor (Authentication → Users). To restore admin access, make a trusted person an admin in the SQL Editor: `UPDATE allowed_emails SET role = 'admin' WHERE email = '…'; UPDATE profiles SET role = 'admin' WHERE email = '…';` That admin can then use **Reset password** in the app. |

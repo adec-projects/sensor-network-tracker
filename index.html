@@ -504,7 +504,7 @@
 
                 <div class="settings-section" id="settings-users-section">
                     <h3 class="settings-section-title">User Management</h3>
-                    <p class="settings-description">Approved email addresses and their roles. Only admins can manage users.</p>
+                    <p class="settings-description">Approved email addresses and their roles. Use <strong>Reset password</strong> or <strong>Reset MFA</strong> next to your own name to change your password or move your authenticator to a new phone. Only admins can manage other users.</p>
                     <div id="settings-active-users"></div>
                     <div id="settings-add-user-row" style="display:none;margin-top:12px">
                         <button class="btn btn-primary" onclick="openInviteUserModal()">+ Invite New User</button>
@@ -521,23 +521,6 @@
                     <h3 class="settings-section-title">Archived Users</h3>
                     <p class="settings-description">These users have been archived and can no longer sign in. Their history and edits are preserved.</p>
                     <div id="settings-archived-users"></div>
-                </div>
-
-                <div class="settings-section">
-                    <h3 class="settings-section-title">Change Password</h3>
-                    <div class="settings-card" id="settings-password">
-                        <form id="change-password-form" onsubmit="changePassword(event)" autocomplete="off">
-                            <div id="pw-step-passwords">
-                                <div class="form-group"><label>Current Password</label><input type="password" id="pw-current" required autocomplete="current-password"></div>
-                                <div class="form-group"><label>New Password</label><input type="password" id="pw-new" required autocomplete="new-password"></div>
-                                <div class="form-group"><label>Confirm New Password</label><input type="password" id="pw-confirm" required autocomplete="new-password"></div>
-                                <p class="settings-description" style="margin-top:0">Must be at least 8 characters with a letter, number, and symbol. Changing your password signs you out on your other devices.</p>
-                            </div>
-                            <div id="pw-error" class="login-error" role="alert"></div>
-                            <div id="pw-success" style="display:none;color:#16a34a;font-size:13px;font-weight:600;margin-bottom:8px"></div>
-                            <button type="submit" class="btn btn-primary" id="pw-submit-btn">Update Password</button>
-                        </form>
-                    </div>
                 </div>
 
                 <div class="settings-section">
@@ -1203,6 +1186,55 @@
     </div>
 
     <!-- Setup Mode Explainer Modal -->
+    <!-- Reset your own password (User Management > your row) -->
+    <div id="modal-own-password" class="modal" role="dialog" aria-modal="true" aria-labelledby="own-pw-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="own-pw-title">Reset Your Password</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-own-password')">&times;</button>
+            </div>
+            <form id="own-pw-form" onsubmit="submitOwnPassword(event)" autocomplete="off">
+                <div class="form-group"><label for="own-pw-current">Current password</label><input type="password" id="own-pw-current" autocomplete="current-password"></div>
+                <div class="form-group"><label for="own-pw-new">New password</label><input type="password" id="own-pw-new" autocomplete="new-password"></div>
+                <div class="form-group"><label for="own-pw-confirm">Confirm new password</label><input type="password" id="own-pw-confirm" autocomplete="new-password"></div>
+                <p class="settings-description" style="margin-top:0">At least 8 characters, with a letter, a number, and a symbol. Changing your password signs you out on your other devices.</p>
+                <div id="own-pw-error" class="login-error" role="alert"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('modal-own-password')">Cancel</button>
+                    <button type="submit" class="btn btn-primary" id="own-pw-submit">Update Password</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Reset your own authenticator (User Management > your row) -->
+    <div id="modal-own-mfa" class="modal" role="dialog" aria-modal="true" aria-labelledby="own-mfa-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="own-mfa-title">Reset Your Authenticator</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-own-mfa')">&times;</button>
+            </div>
+            <form id="own-mfa-form" onsubmit="submitOwnMfaReset(event)" autocomplete="off">
+                <div style="font-size:14px;line-height:1.6;color:var(--navy-800)">
+                    <p style="margin:0 0 10px">Use this if you're switching to a new phone or authenticator app.</p>
+                    <p style="margin:0 0 6px"><strong>What happens:</strong></p>
+                    <ol style="margin:0 0 12px 20px;padding:0">
+                        <li>Your current authenticator is removed, and its codes stop working.</li>
+                        <li>You're signed out right away.</li>
+                        <li>When you sign in again with your password, you'll be <strong>prompted to set up your authenticator</strong>: scan a new QR code with your phone and enter the 6-digit code.</li>
+                    </ol>
+                    <p style="margin:0 0 12px;font-size:13px;color:var(--slate-600)">Have your phone and authenticator app ready before you continue.</p>
+                </div>
+                <div class="form-group"><label for="own-mfa-password">Confirm with your current password</label><input type="password" id="own-mfa-password" autocomplete="current-password"></div>
+                <div id="own-mfa-error" class="login-error" role="alert"></div>
+                <div class="modal-footer">
+                    <button type="button" class="btn" onclick="closeModal('modal-own-mfa')">Cancel</button>
+                    <button type="submit" class="btn btn-confirm-danger" id="own-mfa-submit">Reset &amp; Sign Out</button>
+                </div>
+            </form>
+        </div>
+    </div>
+
     <div id="modal-setup-explainer" class="modal" role="dialog" aria-modal="true">
         <div class="modal-content modal-lg">
             <div class="modal-header">
