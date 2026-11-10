@@ -54,6 +54,8 @@ you type `LOAD`. A load can be undone. Allow about an hour.
      drag the folder into the Terminal window, and press Enter.
 3. Type this and press Enter:
    * **Windows:** `py tools\sf-transfer\guided_transfer.py`
+     (or type `py ` and drag `guided_transfer.py` from the `tools\sf-transfer` folder into
+     the window: this works even if the terminal is in a different folder)
    * **Mac:** `python3 tools/sf-transfer/guided_transfer.py`
 4. Follow the prompts. It will:
    1. install one small database connector the first time (needs internet);
@@ -85,7 +87,7 @@ remembers your community decisions.
 | You see | Do this |
 |---|---|
 | `'py' is not recognized…` / `command not found` | Close the Terminal and open a **new** one (new installs only appear in new windows). Still not recognized: re-run the Python installer (older installers: choose **Modify** and tick **Add python.exe to PATH**), or install **Python 3.13** from the Microsoft Store. |
-| `can't open file … guided_transfer.py` | The terminal isn't in the right folder. Close it and repeat *Run it*, step 2, from the folder that contains `tools`. |
+| `can't open file … guided_transfer.py` / `[Errno 2] No such file or directory` | The terminal isn't in the folder that contains `tools` (Windows "Extract All" often makes a folder inside a folder). Easiest fix: type `py ` (with a space), then **drag `guided_transfer.py`** (in `tools` → `sf-transfer`) from File Explorer into the Terminal, and press Enter. This works from any folder. For undo, add ` --undo` at the end. |
 | "Couldn't install the database connector" | Your network or computer blocked the install. Ask IT to run `py -m pip install psycopg[binary]`. |
 | "The password wasn't accepted" | Reset the database password in Supabase (Project Settings → Database) and use the new one. |
 | "The load stopped at statement…" | Nothing was loaded (all or nothing). Send the message shown to whoever maintains the app. |
