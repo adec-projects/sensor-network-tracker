@@ -1,0 +1,451 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Salesforce Transfer - Sensor Tracker</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/PapaParse/5.4.1/papaparse.min.js"></script>
+<script src="sf-transfer-core.js"></script>
+<style>
+  :root{ --navy:#1a2332; --navy-light:#243044; --navy-mid:#2d3d56; --gold:#d4a84b; --gold-light:#e8c97a;
+    --text:#e8ecf1; --text-dim:#8899aa; --green:#4caf50; --red:#e74c3c; --orange:#f39c12; --blue:#5b8def; }
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif;background:var(--navy);color:var(--text);min-height:100vh;padding:22px;}
+  .wrap{max-width:1100px;margin:0 auto;}
+  h1{color:var(--gold);font-size:1.45rem;}
+  .subtitle{color:var(--text-dim);font-size:.9rem;margin:4px 0 18px;}
+  input,select,textarea{font-family:inherit;}
+  .field input,.field select,.field textarea{width:100%;padding:7px 9px;border-radius:6px;border:1px solid var(--navy-mid);background:var(--navy);color:var(--text);font-size:.85rem;}
+  textarea{resize:vertical;min-height:46px;}
+  .btn{padding:8px 18px;border:none;border-radius:8px;font-family:inherit;font-weight:600;font-size:.88rem;cursor:pointer;}
+  .btn:disabled{opacity:.5;cursor:default;}
+  .btn-gold{background:var(--gold);color:var(--navy);} .btn-green{background:var(--green);color:#fff;}
+  .btn-skip{background:var(--navy-mid);color:var(--text);} .btn-ghost{background:transparent;color:var(--text-dim);border:1px solid var(--navy-mid);}
+  .btn-sm{padding:5px 12px;font-size:.8rem;}
+  .panel{background:var(--navy-light);border-radius:12px;padding:24px;max-width:460px;margin:30px auto;}
+  .panel h2{color:var(--gold);margin-bottom:12px;font-size:1.1rem;}
+  .panel p{color:var(--text-dim);font-size:.86rem;margin-bottom:12px;line-height:1.45;}
+  .panel input{width:100%;padding:9px 11px;border-radius:7px;border:1px solid var(--navy-mid);background:var(--navy);color:var(--text);margin-bottom:10px;font-size:.95rem;}
+  .err{color:var(--red);font-size:.85rem;margin-top:6px;}
+  .drop{border:2px dashed var(--navy-mid);border-radius:10px;padding:26px;text-align:center;color:var(--text-dim);cursor:pointer;}
+  .drop.over{border-color:var(--gold);color:var(--gold);}
+  .toolbar{display:flex;gap:14px;align-items:center;flex-wrap:wrap;background:var(--navy-light);border-radius:10px;padding:12px 16px;margin-bottom:16px;font-size:.84rem;}
+  .toolbar input[type=date]{padding:4px 6px;border-radius:6px;border:1px solid var(--navy-mid);background:var(--navy);color:var(--text);}
+  .counts{display:flex;gap:14px;margin-left:auto;} .counts b{font-family:ui-monospace,Menlo,monospace;}
+  .layout{display:grid;grid-template-columns:240px 1fr;gap:16px;}
+  .side{background:var(--navy-light);border-radius:10px;padding:8px;max-height:80vh;overflow:auto;}
+  .item{padding:8px 10px;border-radius:7px;cursor:pointer;font-size:.86rem;display:flex;justify-content:space-between;gap:8px;}
+  .item:hover{background:var(--navy-mid);} .item.active{background:var(--gold);color:var(--navy);font-weight:600;}
+  .item .n{font-family:ui-monospace,Menlo,monospace;font-size:.78rem;opacity:.85;} .item.done .n{color:var(--green);}
+  .item.special{border-bottom:1px solid var(--navy-mid);margin-bottom:4px;}
+  .records{max-height:80vh;overflow:auto;}
+  .head{font-size:.95rem;margin:4px 2px 10px;display:flex;align-items:center;gap:10px;}
+  .card{background:var(--navy-light);border:1px solid var(--navy-mid);border-radius:10px;padding:14px;margin-bottom:12px;}
+  .card.done{opacity:.55;}
+  .top{display:flex;gap:8px;align-items:center;margin-bottom:8px;flex-wrap:wrap;font-size:.78rem;}
+  .tag{font-size:.7rem;font-weight:700;padding:2px 8px;border-radius:5px;border:1px solid;}
+  .tag.note{color:var(--gold-light);border-color:var(--gold);background:rgba(212,168,75,.14);}
+  .tag.comm{color:var(--blue);border-color:var(--blue);background:rgba(91,141,239,.15);}
+  .tag.audit{color:#f5a3a3;border-color:#e57373;background:rgba(229,115,115,.14);}
+  .tag.copies{color:var(--orange);border-color:var(--orange);background:rgba(243,156,18,.12);}
+  .author{margin-left:auto;color:var(--text-dim);}
+  .grid{display:grid;grid-template-columns:repeat(4,1fr);gap:9px;margin-bottom:9px;}
+  .field label{display:block;font-size:.68rem;text-transform:uppercase;letter-spacing:.04em;color:var(--text-dim);margin-bottom:3px;}
+  .full{grid-column:1/-1;} .half{grid-column:span 2;}
+  .chips{display:flex;flex-wrap:wrap;gap:5px;align-items:center;}
+  .chip{background:var(--navy-mid);border-radius:999px;padding:2px 4px 2px 10px;font-size:.78rem;display:inline-flex;gap:3px;align-items:center;}
+  .chip button{background:none;border:0;color:var(--text-dim);cursor:pointer;font-size:.95rem;padding:0 5px;}
+  .chips select,.chips input{width:auto!important;min-width:150px;padding:4px 6px!important;font-size:.8rem!important;}
+  .note-box{font-size:.78rem;color:var(--orange);background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.35);border-radius:7px;padding:7px 9px;margin-bottom:8px;}
+  .actions{display:flex;gap:8px;align-items:center;flex-wrap:wrap;}
+  .msg{font-size:.8rem;}
+  .hidden{display:none!important;}
+  .empty{color:var(--text-dim);padding:30px;text-align:center;}
+  a{color:var(--gold-light);}
+  @media (max-width:800px){ .layout{grid-template-columns:1fr;} .grid{grid-template-columns:1fr 1fr;} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>Salesforce Transfer</h1>
+  <p class="subtitle">Bring new Salesforce records into the Sensor Network Tracker. Nothing is saved until you click Approve, and only records created since the last transfer are shown.</p>
+
+  <!-- 1. Sign in -->
+  <div id="step-login" class="panel">
+    <h2>1. Sign in</h2>
+    <p>Use your normal Sensor Network Tracker login. (You need to be an admin.)</p>
+    <input type="email" id="email" placeholder="Email" autocomplete="username">
+    <input type="password" id="password" placeholder="Password" autocomplete="current-password" onkeydown="if(event.key==='Enter')signIn()">
+    <button class="btn btn-gold" style="width:100%" onclick="signIn()">Sign In</button>
+    <div id="mfa-box" class="hidden" style="margin-top:14px">
+      <p>Enter the 6-digit code from your authenticator app:</p>
+      <input id="mfa-code" inputmode="numeric" maxlength="6" placeholder="000000" onkeydown="if(event.key==='Enter')verifyCode()">
+      <button class="btn btn-gold" style="width:100%" onclick="verifyCode()">Verify</button>
+    </div>
+    <div id="login-err" class="err"></div>
+  </div>
+
+  <!-- 2. Pick the export -->
+  <div id="step-file" class="panel hidden">
+    <h2>2. Choose the Salesforce export</h2>
+    <p>Pick the Salesforce Data Export <b>.zip</b> file (its name starts with <code>WE_</code>). It's read here in your browser; nothing is uploaded.</p>
+    <div id="drop" class="drop" onclick="document.getElementById('zip').click()">Click to choose the ZIP file, or drag it here</div>
+    <input type="file" id="zip" accept=".zip" class="hidden" onchange="readZip(this.files[0])">
+    <div id="file-status" style="margin-top:12px;font-size:.86rem;color:var(--text-dim)"></div>
+    <div id="file-err" class="err"></div>
+  </div>
+
+  <!-- 3. Review -->
+  <div id="step-review" class="hidden">
+    <div class="toolbar">
+      <span>Showing Salesforce records created after
+        <input type="date" id="cutoff" onchange="rebuild()"> <span id="cutoff-note" style="color:var(--text-dim)"></span></span>
+      <label style="color:var(--text-dim)"><input type="checkbox" id="show-skipped" onchange="renderAll()"> show skipped</label>
+      <div class="counts">
+        <span style="color:var(--text-dim)">To review <b id="n-pending">0</b></span>
+        <span style="color:var(--green)">Imported <b id="n-ok">0</b></span>
+        <span style="color:var(--orange)">Skipped <b id="n-skip">0</b></span>
+      </div>
+    </div>
+    <div id="summary" style="font-size:.8rem;color:var(--text-dim);margin:-6px 4px 12px"></div>
+    <div class="layout">
+      <div class="side" id="side"></div>
+      <div class="records" id="records"></div>
+    </div>
+  </div>
+</div>
+<datalist id="dl-sensors"></datalist>
+
+<script>
+// Same public settings as the app (supabase-client.js). The anon key is public by design;
+// the database's sign-in rules protect the data.
+const SUPABASE_URL='https://uejryzioxogquflijgyf.supabase.co';
+const SUPABASE_ANON_KEY='eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InVlanJ5emlveG9ncXVmbGlqZ3lmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzM2OTkyODMsImV4cCI6MjA4OTI3NTI4M30.YD349-X2PeoeCTVp34FbzdGwachr9YCpzIPSXuSURfM';
+const supa=supabase.createClient(SUPABASE_URL,SUPABASE_ANON_KEY);
+const SRC='salesforce_import';
+const NOTE_TYPES=['General','Sensor Issue','Installation','Sensor Move','Service','Collocation'];
+const COMM_TYPES=['Phone','Email','Site Visit'];
+const SKIP_KEY='sf_transfer_skipped';
+// The "since the last transfer" date is saved in the app's settings, so it stays put
+// while you approve records (and is the same on any computer).
+const CUTOFF_SETTING='sf_transfer_cutoff';
+let savedCutoff=null;
+
+let app=null, exp=null, result=null, current=null;
+let state={};                      // card/new-record key -> {status:'ok'|'skip', table, rowId, msg}
+let skipped=new Set(JSON.parse(localStorage.getItem(SKIP_KEY)||'[]'));
+const $=id=>document.getElementById(id);
+const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const saveSkips=()=>{ try{ localStorage.setItem(SKIP_KEY, JSON.stringify([...skipped])); }catch(e){} };
+
+// ---------------------------------------------------------------- 1. sign in
+(async function resume(){                     // already signed in to the app in this browser?
+  const {data:{session}}=await supa.auth.getSession();
+  if(!session) return;
+  const {data:aal}=await supa.auth.mfa.getAuthenticatorAssuranceLevel();
+  if(aal && aal.currentLevel===aal.nextLevel) afterLogin();
+})();
+async function signIn(){
+  $('login-err').textContent='';
+  const {error}=await supa.auth.signInWithPassword({email:$('email').value.trim(), password:$('password').value});
+  if(error){ $('login-err').textContent=error.message; return; }
+  const {data:f}=await supa.auth.mfa.listFactors();
+  if(f?.totp?.some(x=>x.status==='verified')){ $('mfa-box').classList.remove('hidden'); $('mfa-code').focus(); return; }
+  afterLogin();
+}
+async function verifyCode(){
+  $('login-err').textContent='';
+  const {data:f}=await supa.auth.mfa.listFactors();
+  const totp=f?.totp?.find(x=>x.status==='verified');
+  const {data:ch,error:e1}=await supa.auth.mfa.challenge({factorId:totp.id});
+  if(e1){ $('login-err').textContent=e1.message; return; }
+  const {error}=await supa.auth.mfa.verify({factorId:totp.id, challengeId:ch.id, code:$('mfa-code').value.trim()});
+  if(error){ $('login-err').textContent='That code didn\'t work. Try the current one.'; return; }
+  afterLogin();
+}
+async function all(table, cols){
+  let out=[], from=0;
+  for(;;){
+    const {data,error}=await supa.from(table).select(cols).range(from, from+999);
+    if(error) throw new Error(table+': '+error.message);
+    out=out.concat(data); if(data.length<1000) return out; from+=1000;
+  }
+}
+async function afterLogin(){
+  $('step-login').classList.add('hidden'); $('step-file').classList.remove('hidden');
+  $('file-status').textContent='Loading what\'s already in the app...';
+  try{
+    const [communities,sensors,contacts,notes,comms,audits]=await Promise.all([
+      all('communities','id,name,parent_id'), all('sensors','id,type,community_id'),
+      all('contacts','id,name,email,community_id'), all('notes','sf_id,merged_sf_ids'),
+      all('comms','sf_id,merged_sf_ids'), all('audits','sf_id,merged_sf_ids')]);
+    if(!communities.length) throw new Error('No communities were returned. Are you signed in as an admin with your authenticator code?');
+    const inAppIds=new Set();
+    for(const r of [...notes,...comms,...audits]){ if(r.sf_id) inAppIds.add(r.sf_id); (r.merged_sf_ids||[]).forEach(x=>inAppIds.add(x)); }
+    communities.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
+    const st=await supa.from('app_settings').select('value').eq('key',CUTOFF_SETTING).maybeSingle();
+    savedCutoff=(st && st.data && st.data.value) || null;
+    app={communities,sensors,contacts,inAppIds};
+    $('file-status').textContent=`Signed in. The app has ${sensors.length} sensors, ${contacts.length} contacts, and ${inAppIds.size} records from earlier Salesforce transfers.`;
+  }catch(e){ $('file-err').textContent='Couldn\'t load app data: '+e.message; }
+}
+
+// ---------------------------------------------------------------- 2. the export
+const drop=$('drop');
+['dragover','dragenter'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.add('over');}));
+['dragleave','drop'].forEach(ev=>drop.addEventListener(ev,e=>{e.preventDefault();drop.classList.remove('over');}));
+drop.addEventListener('drop',e=>{ if(e.dataTransfer.files[0]) readZip(e.dataTransfer.files[0]); });
+async function readZip(file){
+  if(!file) return;
+  $('file-err').textContent='';
+  if(!app){ $('file-err').textContent='Still loading the app\'s data; try again in a moment.'; return; }
+  $('file-status').textContent=`Reading ${file.name} (${(file.size/1048576).toFixed(1)} MB)... this can take a minute for a big export.`;
+  try{
+    exp=await SFCore.readExport(await file.arrayBuffer(), JSZip, Papa);
+  }catch(e){ $('file-err').textContent='That file couldn\'t be read as a ZIP ('+e.message+'). Make sure it finished downloading.'; return; }
+  if(exp.missing.length){ $('file-err').textContent='This ZIP doesn\'t contain '+exp.missing.join(', ')+' data. If Salesforce gave you several ZIP files, choose the one with the CSV files (usually the first).'; return; }
+  $('step-file').classList.add('hidden'); $('step-review').classList.remove('hidden');
+  await rebuild(true);
+}
+
+// ---------------------------------------------------------------- 3. review
+async function saveCutoff(v){
+  savedCutoff=v;
+  await supa.from('app_settings').upsert({key:CUTOFF_SETTING, value:v, updated_at:new Date().toISOString()});
+}
+async function rebuild(first){
+  const opts=first ? (savedCutoff!=null ? {cutoff:savedCutoff} : {}) : {cutoff:$('cutoff').value||''};
+  result=SFCore.analyze(exp, app, opts);
+  if(first){
+    $('cutoff').value=result.cutoff||'';
+    if(savedCutoff!=null) $('cutoff-note').textContent='(saved from the first time this transfer was opened; change it here if needed)';
+    else{
+      $('cutoff-note').textContent=result.lastInApp?`(the newest Salesforce record from the last transfer was created ${result.lastInApp.slice(0,10)})`:'(no earlier transfer found)';
+      await saveCutoff(result.cutoff||'');
+    }
+  } else {
+    await saveCutoff($('cutoff').value||'');
+    $('cutoff-note').textContent='(saved)';
+  }
+  // Fill in full text of rich-text notes
+  const need=result.cards.flatMap(c=>c.needsBody||[]);
+  if(need.length){
+    const bodies=await SFCore.loadBodies(exp, need);
+    for(const c of result.cards) if((c.needsBody||[]).length){
+      const t=c.needsBody.map(v=>bodies[v]).filter(Boolean).join('\n\n'); if(t) c.info=t;
+    }
+  }
+  const cnt=result.counts;
+  $('summary').textContent=`In this export: ${cnt.alreadyInApp} records already transferred and ${cnt.olderThanCutoff} older records are hidden; ${cnt.blasts} mass emails skipped. `+
+    `${result.cards.length} items to review (Salesforce's per-sensor copies are combined).`;
+  if(!current || (!groups().has(current) && !current.startsWith('__new'))) current=null;
+  $('dl-sensors').innerHTML=result.knownSensors.map(s=>`<option value="${esc(s)}">`).join('');
+  renderAll();
+}
+function groupKey(c){ return c.communities[0] || (c.unmatchedAccounts.length?'__acct:'+c.unmatchedAccounts[0].id : '__none'); }
+function groups(){
+  const g=new Map();
+  for(const c of result.cards){ const k=groupKey(c); (g.get(k)||g.set(k,[]).get(k)).push(c); }
+  return g;
+}
+const visible=c=>$('show-skipped').checked || !c.sfIds.some(s=>skipped.has(s));
+const pending=c=>!state[c.id] && !c.sfIds.some(s=>skipped.has(s));
+function groupName(k){
+  if(k==='__none') return '— No community —';
+  if(k.startsWith('__acct:')){ const c=result.cards.find(x=>groupKey(x)===k); return '? '+(c?c.unmatchedAccounts[0].name:'Unmatched account'); }
+  return result.commName[k]||k;
+}
+function renderAll(){ renderSide(); renderRecords(); renderCounts(); }
+function renderCounts(){
+  $('n-pending').textContent=result.cards.filter(pending).length;
+  $('n-ok').textContent=Object.values(state).filter(s=>s.status==='ok').length;
+  $('n-skip').textContent=result.cards.filter(c=>c.sfIds.some(s=>skipped.has(s))).length;
+}
+function renderSide(){
+  const el=$('side'); el.innerHTML='';
+  const ns=result.newSensors.filter(s=>!state['S:'+s.id]).length, nc=result.newContacts.filter(c=>!state['C:'+c.key]).length;
+  const add=(k,label,n,cls)=>{ const d=document.createElement('div'); d.className='item '+(cls||'')+(k===current?' active':'')+(n===0?' done':'');
+    d.innerHTML=`<span>${esc(label)}</span><span class="n">${n?n+' left':'✓'}</span>`; d.onclick=()=>{current=k;renderAll();}; el.appendChild(d); };
+  if(result.newSensors.length) add('__newSensors','New sensors',ns,'special');
+  if(result.newContacts.length) add('__newContacts','New contacts',nc,'special');
+  const g=groups();
+  const keys=[...g.keys()].sort((a,b)=>{ const pa=g.get(a).filter(pending).length?0:1, pb=g.get(b).filter(pending).length?0:1;
+    if(a.startsWith('__')!==b.startsWith('__')) return a.startsWith('__')?-1:1; return pa-pb || groupName(a).localeCompare(groupName(b)); });
+  for(const k of keys) add(k, groupName(k), g.get(k).filter(pending).length);
+  if(!keys.length) el.innerHTML+='<div class="empty" style="font-size:.82rem">Nothing new since the cutoff date.</div>';
+}
+
+function commOptions(sel){ return '<option value="">— pick —</option>'+app.communities.map(c=>`<option value="${esc(c.id)}" ${c.id===sel?'selected':''}>${esc(c.name)}</option>`).join(''); }
+function contactLabel(id){ if(String(id).startsWith('new:')){ const n=result.newContacts.find(c=>c.key===id); return (n?n.name:id)+' (new)'; }
+  const c=app.contacts.find(x=>x.id===id); return c?c.name:id; }
+function renderRecords(){
+  const root=$('records');
+  if(!current){ root.innerHTML='<div class="empty">Pick a community (or New sensors / New contacts) on the left.</div>'; return; }
+  if(current==='__newSensors') return renderNewSensors(root);
+  if(current==='__newContacts') return renderNewContacts(root);
+  const list=(groups().get(current)||[]).filter(visible);
+  const todo=list.filter(pending);
+  let html=`<div class="head"><b>${esc(groupName(current))}</b>${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all ${todo.length} here</button>`:''}</div>`;
+  if(current.startsWith('__acct:')){
+    const acct=list[0]?.unmatchedAccounts[0];
+    html+=`<div class="note-box">Salesforce account <b>${esc(acct?.name)}</b> didn't match a community in the app. Pick the community for all of its records:
+      <select onchange="setAccountCommunity('${esc(acct?.id)}',this.value)" style="margin-left:6px">${commOptions('')}</select>
+      (or open each card below). If it's an organization with no community, records can still be approved with just a sensor, or skipped.</div>`;
+  }
+  html+= list.length ? list.map(cardHtml).join('') : '<div class="empty">All done here. ✓</div>';
+  root.innerHTML=html;
+}
+function cardHtml(c){
+  const st=state[c.id], isSkip=c.sfIds.some(s=>skipped.has(s)), done=st||isSkip;
+  const types=(c.kind==='comm'?COMM_TYPES:NOTE_TYPES); const typeOpts=types.concat(types.includes(c.type)?[]:[c.type]).map(t=>`<option ${t===c.type?'selected':''}>${esc(t)}</option>`).join('');
+  const chips=(arr,kind,label)=>arr.map(v=>`<span class="chip">${esc(label(v))}<button title="Remove" onclick="removeTag('${esc(c.id)}','${kind}','${esc(v)}')">×</button></span>`).join('');
+  const sensorAdd=`<input list="dl-sensors" placeholder="+ sensor (e.g. MOD-00471)" onchange="addTag('${esc(c.id)}','sensors',this.value.trim())">`;
+  const commAdd=`<select onchange="addTag('${esc(c.id)}','communities',this.value)">${commOptions('').replace('— pick —','+ community')}</select>`;
+  const contactAdd=`<select onchange="addTag('${esc(c.id)}','contacts',this.value)"><option value="">+ contact</option>${app.contacts.slice().sort((a,b)=>(a.name||'').localeCompare(b.name||'')).map(x=>`<option value="${esc(x.id)}">${esc(x.name)}</option>`).join('')}</select>`;
+  const a=c.audit||{};
+  const auditFields = c.kind!=='audit' ? '' : `
+      <div class="field"><label>Audit community</label><select onchange="setAudit('${esc(c.id)}','community_id',this.value)">${commOptions(a.community_id)}</select></div>
+      <div class="field"><label>Audit pod</label><input list="dl-sensors" value="${esc(a.audit_pod_id)}" onchange="setAudit('${esc(c.id)}','audit_pod_id',this.value.trim())"></div>
+      <div class="field"><label>Community pod</label><input list="dl-sensors" value="${esc(a.community_pod_id)}" onchange="setAudit('${esc(c.id)}','community_pod_id',this.value.trim())"></div>
+      <div class="field"><label>Audit dates</label><div style="display:flex;gap:4px"><input type="date" value="${esc(a.start_date)}" onchange="setAudit('${esc(c.id)}','start_date',this.value)"><input type="date" value="${esc(a.end_date)}" onchange="setAudit('${esc(c.id)}','end_date',this.value)"></div></div>`;
+  const status = st?.status==='ok' ? `<span style="color:var(--green);font-weight:600">✓ Imported</span> <button class="btn btn-ghost btn-sm" onclick="undo('${esc(c.id)}')">Undo</button>`
+      : isSkip ? `<span style="color:var(--orange)">Skipped</span> <button class="btn btn-ghost btn-sm" onclick="unskip('${esc(c.id)}')">Un-skip</button>` : '';
+  return `<div class="card ${done?'done':''}" id="card-${esc(c.id)}">
+    <div class="top"><span class="tag ${c.kind}">${{note:'NOTE',comm:'COMM',audit:'AUDIT'}[c.kind]}</span>
+      ${c.copies>1?`<span class="tag copies">${c.copies} Salesforce copies combined</span>`:''}
+      <span class="author">Created by ${esc(c.loggedBy||'Unknown')}, SF import</span></div>
+    ${c.textsDiffer?'<div class="note-box">The Salesforce copies had different text; all of it is in Details below. Tidy it if you like.</div>':''}
+    <div class="grid">
+      ${c.kind==='audit'?'':`<div class="field"><label>Type</label><select onchange="setField('${esc(c.id)}','type',this.value)">${typeOpts}</select></div>`}
+      <div class="field"><label>Date</label><input type="date" value="${esc(c.date)}" onchange="setField('${esc(c.id)}','date',this.value)"></div>
+      <div class="field half"><label>${c.kind==='comm'?'Subject':'Note'}</label><input value="${esc(c.text)}" onchange="setField('${esc(c.id)}','text',this.value)"></div>
+      <div class="field full"><label>Details</label><textarea onchange="setField('${esc(c.id)}','info',this.value)">${esc(c.info)}</textarea></div>
+      ${auditFields}
+      <div class="field full"><label>Communities</label><div class="chips">${chips(c.communities,'communities',v=>result.commName[v]||v)}${commAdd}</div></div>
+      ${c.kind==='comm'?'':`<div class="field full"><label>Sensors</label><div class="chips">${chips(c.sensors,'sensors',v=>v+(app.sensors.some(s=>s.id===v)?'':' (new)'))}${sensorAdd}</div></div>`}
+      <div class="field full"><label>Contacts</label><div class="chips">${chips(c.contacts,'contacts',contactLabel)}${contactAdd}</div></div>
+    </div>
+    <div class="actions">
+      ${done?'':`<button class="btn btn-green btn-sm" onclick="approve('${esc(c.id)}')">Approve</button>
+      <button class="btn btn-skip btn-sm" onclick="skip('${esc(c.id)}')">Skip</button>
+      ${c.kind==='audit'?'':`<button class="btn btn-ghost btn-sm" onclick="flip('${esc(c.id)}')">${c.kind==='comm'?'→ Make it a note':'→ Make it a communication'}</button>`}`}
+      <span class="msg" id="msg-${esc(c.id)}">${status}${st?.msg?' '+esc(st.msg):''}</span>
+    </div></div>`;
+}
+const card=id=>result.cards.find(c=>c.id===id);
+function setField(id,k,v){ card(id)[k]=v; }
+function setAudit(id,k,v){ card(id).audit[k]=v; }
+function addTag(id,kind,v){ if(!v) return; const c=card(id); if(kind==='sensors' && !result.knownSensors.includes(v)){ alert(v+' isn\'t a sensor in the app or the export.'); renderRecords(); return; }
+  if(!c[kind].includes(v)) c[kind].push(v); renderRecords(); }
+function removeTag(id,kind,v){ const c=card(id); c[kind]=c[kind].filter(x=>x!==v); renderRecords(); }
+function flip(id){ const c=card(id); if(c.kind==='comm'){ c.kind='note'; c.type='General'; } else { c.kind='comm'; c.type='Email'; } renderRecords(); }
+function setAccountCommunity(acctId,commId){ if(!commId) return;
+  for(const c of result.cards) if(c.unmatchedAccounts.some(a=>a.id===acctId) && !c.communities.includes(commId)){ c.communities.unshift(commId); if(c.audit && !c.audit.community_id) c.audit.community_id=commId; }
+  current=commId; renderAll(); }
+function skip(id){ card(id).sfIds.forEach(s=>skipped.add(s)); saveSkips(); renderAll(); }
+function unskip(id){ card(id).sfIds.forEach(s=>skipped.delete(s)); saveSkips(); renderAll(); }
+function setMsg(id,t,color){ const m=$('msg-'+id); if(m){ m.textContent=t; m.style.color=color||''; } }
+
+// ---------------------------------------------------------------- saving
+async function ensureSensor(sid){
+  if(app.sensors.some(s=>s.id===sid)) return true;
+  const n=result.newSensors.find(s=>s.id===sid); if(!n) return false;
+  const {error}=await supa.from('sensors').insert({id:n.id, soa_tag_id:n.soa_tag_id, type:n.type, community_id:n.community_id||null,
+    date_purchased:n.date_purchased, date_installed:n.date_installed, active:n.active, details:n.details});
+  if(error && error.code!=='23505') throw new Error('creating sensor '+sid+': '+error.message);
+  app.sensors.push({id:sid,type:n.type}); state['S:'+sid]={status:'ok'}; return true;
+}
+async function ensureContact(key){
+  if(!String(key).startsWith('new:')) return key;
+  if(state['C:'+key]?.rowId) return state['C:'+key].rowId;
+  const n=result.newContacts.find(c=>c.key===key); if(!n) return null;
+  const {data,error}=await supa.from('contacts').insert({name:n.name, role:n.role, org:n.org, email:n.email, phone:n.phone,
+    community_id:n.community_id||null, communities:n.communities}).select('id');
+  if(error) throw new Error('creating contact '+n.name+': '+error.message);
+  const id=data[0].id; app.contacts.push({id,name:n.name,email:n.email}); state['C:'+key]={status:'ok',rowId:id}; return id;
+}
+async function approve(id, quiet){
+  const c=card(id); if(!c || state[id]) return;
+  if(c.kind==='comm' && !c.communities.length){ setMsg(id,'Pick a community first.','var(--orange)'); return false; }
+  if(c.kind==='note' && !c.communities.length && !c.sensors.length){ setMsg(id,'Add a community or a sensor first.','var(--orange)'); return false; }
+  if(c.kind==='audit' && !c.audit.community_id){ setMsg(id,'Pick the audit community first.','var(--orange)'); return false; }
+  setMsg(id,'Saving...');
+  const base={source:SRC, sf_id:c.sfIds[0], merged_sf_ids:c.sfIds.slice(1), logged_by:c.loggedBy||''};
+  try{
+    const sensors=[]; for(const s of c.sensors){ if(await ensureSensor(s)) sensors.push(s); }
+    if(c.kind==='audit'){ for(const s of [c.audit.audit_pod_id,c.audit.community_pod_id]) if(s) await ensureSensor(s); }
+    const contacts=[]; for(const k of c.contacts){ const cid=await ensureContact(k); if(cid) contacts.push(cid); }
+    let table, row, tags=[];
+    if(c.kind==='note'){
+      table='notes'; row=Object.assign({date:c.date||null, type:c.type, text:c.text||c.info.slice(0,400), additional_info:c.info||''}, base);
+    } else if(c.kind==='comm'){
+      table='comms'; row=Object.assign({date:c.date||null, comm_type:c.type, subject:c.text||'', text:(c.text||c.info).slice(0,400), full_body:c.info||'', community_id:c.communities[0]}, base);
+    } else {
+      table='audits'; delete base.logged_by;
+      row=Object.assign({community_id:c.audit.community_id, audit_pod_id:c.audit.audit_pod_id||'', community_pod_id:c.audit.community_pod_id||'',
+        status:'Complete', start_date:c.audit.start_date||c.date, end_date:c.audit.end_date||c.date, conducted_by:c.loggedBy||'',
+        notes:JSON.stringify([{at:(c.date||'')+'T00:00', by:c.loggedBy||'', text:((c.text||'')+(c.info?'\n'+c.info:'')).trim()}])}, base);
+    }
+    const ins=await supa.from(table).insert(row).select('id');
+    if(ins.error){
+      if(ins.error.code==='23505'){ state[id]={status:'ok',msg:'(was already in the app)'}; if(!quiet) renderAll(); return true; }
+      throw new Error(ins.error.message);
+    }
+    const rowId=ins.data[0].id;
+    if(table==='notes') tags=c.communities.map(t=>({note_id:rowId,tag_type:'community',tag_id:t})).concat(sensors.map(t=>({note_id:rowId,tag_type:'sensor',tag_id:t})), contacts.map(t=>({note_id:rowId,tag_type:'contact',tag_id:t})));
+    if(table==='comms') tags=c.communities.map(t=>({comm_id:rowId,tag_type:'community',tag_id:t})).concat(contacts.map(t=>({comm_id:rowId,tag_type:'contact',tag_id:t})));
+    if(tags.length){
+      const t=await supa.from(table==='notes'?'note_tags':'comm_tags').insert(tags);
+      if(t.error){ await supa.from(table).delete().eq('id',rowId); throw new Error('tags: '+t.error.message); }
+    }
+    state[id]={status:'ok', table, rowId};
+    if(!quiet) renderAll();
+    return true;
+  }catch(e){ setMsg(id,'Error: '+e.message,'var(--red)'); return false; }
+}
+async function approveAll(){
+  const list=(groups().get(current)||[]).filter(pending);
+  for(const c of list){ await approve(c.id,true); renderCounts(); }
+  renderAll();
+}
+async function undo(id){
+  const s=state[id]; if(!s) return;
+  if(s.rowId){ const {error}=await supa.from(s.table).delete().eq('id',s.rowId);
+    if(error){ setMsg(id,'Undo failed: '+error.message,'var(--red)'); return; } }
+  delete state[id]; renderAll();
+}
+
+// ---------------------------------------------------------------- new sensors / contacts
+function renderNewSensors(root){
+  const list=result.newSensors;
+  const todo=list.filter(s=>!state['S:'+s.id]);
+  root.innerHTML=`<div class="head"><b>New sensors</b>${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="createAllSensors()">Create all ${todo.length}</button>`:''}</div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Pods in Salesforce that aren't in the app. The app status is left blank for staff to set. (Any sensor a record needs is also created automatically when you approve that record.)</div>`+
+    list.map(s=>{ const st=state['S:'+s.id]; return `<div class="card ${st?'done':''}"><div class="top"><span class="tag note">SENSOR</span><b style="font-size:.9rem">${esc(s.id)}</b>
+      <span class="author">Salesforce: ${esc(s.sf_name)} · status "${esc(s.sf_status||'none')}"</span></div>
+      <div class="grid"><div class="field"><label>Type</label><input value="${esc(s.type)}" onchange="newSensorField('${esc(s.id)}','type',this.value)"></div>
+      <div class="field"><label>Community</label><select onchange="newSensorField('${esc(s.id)}','community_id',this.value)">${commOptions(s.community_id)}</select></div>
+      <div class="field"><label>SOA tag</label><input value="${esc(s.soa_tag_id)}" onchange="newSensorField('${esc(s.id)}','soa_tag_id',this.value)"></div>
+      <div class="field"><label>Added as</label><input value="${s.active?'active':'archived (retired/donated)'}" readonly></div></div>
+      <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>':`<button class="btn btn-green btn-sm" onclick="createSensor('${esc(s.id)}')">Create</button>`}<span class="msg" id="msg-S-${esc(s.id)}"></span></div></div>`; }).join('');
+}
+function newSensorField(id,k,v){ const s=result.newSensors.find(x=>x.id===id); if(s) s[k]=v; }
+async function createSensor(id){ try{ await ensureSensor(id); renderAll(); }catch(e){ setMsg('S-'+id,'Error: '+e.message,'var(--red)'); } }
+async function createAllSensors(){ for(const s of result.newSensors) if(!state['S:'+s.id]) await createSensor(s.id); }
+function renderNewContacts(root){
+  const list=result.newContacts, todo=list.filter(c=>!state['C:'+c.key]);
+  root.innerHTML=`<div class="head"><b>New contacts</b>${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="createAllContacts()">Create all ${todo.length}</button>`:''}</div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Salesforce contacts not found in the app (matched by email, then name). Only create the ones you want; a contact a record needs is also created when you approve that record.</div>`+
+    list.map(c=>{ const st=state['C:'+c.key]; return `<div class="card ${st?'done':''}"><div class="top"><span class="tag comm">CONTACT</span><b style="font-size:.9rem">${esc(c.name)}</b>
+      <span class="author">${esc([c.role,c.org].filter(Boolean).join(' · '))}</span></div>
+      <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:8px">${esc([c.email,c.phone].filter(Boolean).join(' · '))} · Community: ${esc(result.commName[c.community_id]||'none')}</div>
+      <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>':`<button class="btn btn-green btn-sm" onclick="createContact('${esc(c.key)}')">Create</button>`}<span class="msg" id="msg-C-${esc(c.key)}"></span></div></div>`; }).join('');
+}
+async function createContact(key){ try{ await ensureContact(key); renderAll(); }catch(e){ setMsg('C-'+key,'Error: '+e.message,'var(--red)'); } }
+async function createAllContacts(){ for(const c of result.newContacts) if(!state['C:'+c.key]) await createContact(c.key); }
+
+</script>
+</body>
+</html>

@@ -77,38 +77,24 @@ only in the Supabase dashboard and must be handed over carefully.
 
 ## 3a. Bringing the remaining Salesforce records over
 
-Salesforce and the app will be used side by side for a while. The tool in
-[`tools/sf-transfer/`](tools/sf-transfer/README.md) moves Salesforce notes,
-communications, audits, contacts, and sensors into the app **without duplicates**, and is
-meant to be run again just before Salesforce access ends. It needs: a Salesforce Data
-Export (a Salesforce admin requests it in Setup), a fresh app backup
-(`scripts/backup-database.sh`), and someone who knows the network to review the flagged
-items in `review.html`. Test it first on a copy made with `scripts/make-test-copy.sh`.
+Salesforce and the app are used side by side for a while. The **Salesforce Transfer page**
+brings new Salesforce notes, communications, audits, sensors, and contacts into the app,
+**without duplicates**, and shows only records created since the last transfer. It's a
+single web page; nothing to install:
 
-**Status (Nov 10, 2026):** built and tested end to end on the spring 2026 export in a
-test copy of the app; new-community/sensor/contact creation tested on sample data.
-**Ayla is running it on a current Salesforce export the week of Nov 10**, so the app
-holds everything from Salesforce before she leaves. The result will be recorded below.
-The tool stays in the repo, documented, so it can be re-run later with a new export if
-needed.
+* **Open it:** <https://adec-projects.github.io/sensor-network-tracker/tools/sf-transfer/>
+  (or double-click `tools/sf-transfer/index.html` in a downloaded copy of the repo).
+* **Needs:** a Salesforce Data Export ZIP (a Salesforce admin requests it in Setup) and an
+  **admin** login to the app. Instructions: [`tools/sf-transfer/README.md`](tools/sf-transfer/README.md).
+* **How it works:** sign in, choose the ZIP, then review community by community and click
+  **Approve** (saved immediately) or **Skip**, like the spring 2026 importer.
 
-**To run it** (Windows or Mac, no technical experience needed): follow *Quick start* at
-the top of `tools/sf-transfer/README.md`. One guided program does every step, including
-a practice load that changes nothing and an undo.
+**Status (Nov 10, 2026):** Ayla is running it on a current Salesforce export the week of
+Nov 10. It can be run again later with a newer export: set the date at the top of the page
+to the date of the previous transfer.
 
 **After that transfer, enter new information in the app.** Anything entered only in
-Salesforce after the export date won't be in the app unless the tool is run again.
-Testing used a temporary Supabase test project, deleted afterward because it held a copy
-of contact data. To test again, create a new empty Supabase project and run
-`scripts/make-test-copy.sh`.
-
-**Who does what:**
-
-| Who | Does | Guide |
-|---|---|---|
-| A Salesforce admin | Requests the Data Export (a few clicks) | `tools/sf-transfer/README.md`, Step 1 |
-| OIT | Backs up the app, runs *prepare*, *finalize*, and the load. **Also coordinates the review:** picks reviewers with DEC, sends them the package and reviewer guide, walks them through the review page, answers questions, and collects their decisions. | `tools/sf-transfer/README.md` (Step 4) |
-| Reviewer(s) who know the network | Review flagged items in the browser (~1-2 hours) | `tools/sf-transfer/REVIEWER-GUIDE.md` |
+Salesforce after the export date won't be in the app unless the page is run again.
 
 ## 3b. Day-to-day account help (no IT ticket needed)
 
@@ -256,8 +242,8 @@ Bring these as your agenda. Each one is a decision only DEC can make:
 - [ ] When ready to migrate: make a fresh backup (`scripts/backup-database.sh`), load it
       into the target system following the runbook, and run the after-load row-count
       check to confirm nothing dropped.
-- [ ] Run the Salesforce transfer (`tools/sf-transfer/`) with reviewers who know the network, and
-      run it once more just before Salesforce access ends.
+- [ ] If Salesforce is still being used after Ayla's transfer: run the Salesforce Transfer page
+      (`tools/sf-transfer/`) once more just before Salesforce access ends.
 - [ ] Keep Supabase read-only for 30 to 60 days as a fallback, then decommission.
 - [ ] After Ayla leaves: remove her from the GitHub organization and the Supabase project,
       and reset the Supabase database password (she knows the current one).
@@ -292,5 +278,4 @@ everything we need."
 | `scripts/backup-database.sh` | One-command data export |
 | `scripts/make-test-copy.sh` | Copies the live app into an empty test project |
 | `supabase/rollback/` | Emergency undo for the sign-in security rules |
-| `tools/sf-transfer/README.md` | Moving remaining Salesforce records into the app (OIT) |
-| `tools/sf-transfer/REVIEWER-GUIDE.md` | Plain-language guide for transfer reviewers |
+| `tools/sf-transfer/` | Salesforce Transfer page and its instructions |

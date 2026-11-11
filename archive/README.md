@@ -20,3 +20,6 @@ by URL (`…/archive/<file>`) only when running a migration/backfill.
 If the repo ever needs to stop bundling these in a GitHub Pages deploy,
 they can be safely deleted - the Salesforce source data they consumed is
 no longer authoritative.
+
+`sf-transfer-python/` is a retired Python version of the Salesforce transfer tool (Nov 2026),
+replaced by the browser page in `tools/sf-transfer/`.

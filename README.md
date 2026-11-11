@@ -81,11 +81,10 @@ scripts/
   backup-database.sh    One-command export of the full database for handoff
   make-test-copy.sh     Copies the live database into an empty test project
 
-tools/sf-transfer/      Salesforce -> app transfer tool (re-runnable, no duplicates)
-  README.md             How to run it (for OIT)
-  REVIEWER-GUIDE.md     Plain-language guide for the people who review flagged items
-  sf_transfer.py        The tool (Python 3, nothing to install)
-  review.html           Review page (runs in the browser; nothing is uploaded)
+tools/sf-transfer/      Salesforce Transfer page (open index.html in a browser; nothing to install)
+  index.html            The page: sign in, choose the Salesforce ZIP, review, approve
+  sf-transfer-core.js   Reads the export and builds the review cards
+  README.md             How to use it
 
 archive/                Retired one-off import tools and setup SQL (historical only)
 
@@ -107,8 +106,7 @@ archive/                Retired one-off import tools and setup SQL (historical o
 | [`docs/data-dictionary.md`](docs/data-dictionary.md) | What every table and column means |
 | [`docs/mssql-migration-guide.md`](docs/mssql-migration-guide.md) | PostgreSQL to SQL Server mapping |
 | [`docs/mssql-migration-runbook.md`](docs/mssql-migration-runbook.md) | Step-by-step data transfer |
-| [`tools/sf-transfer/README.md`](tools/sf-transfer/README.md) | Moving Salesforce records into the app: *Quick start* runs a guided program (Windows or Mac) |
-| [`tools/sf-transfer/REVIEWER-GUIDE.md`](tools/sf-transfer/REVIEWER-GUIDE.md) | Plain-language guide for people reviewing that transfer |
+| [`tools/sf-transfer/README.md`](tools/sf-transfer/README.md) | Salesforce Transfer page: bring new Salesforce records into the app (in the browser) |
 | [`docs/importers.md`](docs/importers.md) | The one-off import tools in `archive/` |
 | [`docs/developer-notes.md`](docs/developer-notes.md) | File map and conventions for the code |
 | [`user-guide.html`](user-guide.html) | End-user guide for DEC staff |
