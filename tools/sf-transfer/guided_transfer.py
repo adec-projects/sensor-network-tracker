@@ -24,7 +24,6 @@ import os
 import subprocess
 import sys
 import textwrap
-import urllib.parse
 import webbrowser
 import re
 import zipfile
@@ -132,6 +131,21 @@ def ensure_psycopg():
              "to run:  %s -m pip install psycopg[binary]" % (r.returncode, "py" if IS_WINDOWS else "python3"))
 
 
+def parse_connection_string(raw):
+    """Supabase's string contains '[YOUR-PASSWORD]'. Python's URL parser rejects the
+    square brackets, so read the parts ourselves. -> dict or None."""
+    raw = (raw or "").strip().strip('"').strip("'").strip()
+    m = re.match(r"^postgres(?:ql)?://(.+)$", raw, re.I)
+    if not m or "@" not in m.group(1):
+        return None
+    creds, rest = m.group(1).rsplit("@", 1)            # the host is after the LAST @
+    user = creds.split(":", 1)[0]
+    hm = re.match(r"^([^:/?\s]+)(?::(\d+))?(?:/([^?\s]*))?", rest)
+    if not hm or not user.lower().startswith("postgres."):
+        return None
+    return {"user": user, "host": hm.group(1), "port": int(hm.group(2) or 5432), "dbname": hm.group(3) or "postgres"}
+
+
 def connect():
     """Ask for the Supabase connection string + password; return (connection, project ref)."""
     import psycopg
@@ -147,18 +161,18 @@ def connect():
          [YOUR-PASSWORD]  (that's fine; you'll type the password separately).""")
     for attempt in range(3):
         raw = ask("\nPaste the connection string here and press Enter:")
-        u = urllib.parse.urlsplit(raw.strip().strip('"'))
-        if u.scheme not in ("postgres", "postgresql") or not u.hostname or not (u.username or "").startswith("postgres."):
+        u = parse_connection_string(raw)
+        if not u:
             say("That doesn't look like the Session pooler connection string (it should start with "
                 "postgresql://postgres.). Please copy it again.")
             continue
-        ref = u.username.split(".", 1)[1]
+        ref = u["user"].split(".", 1)[1]
         say("\nType the DATABASE password (Supabase > Project Settings > Database). Nothing will show as you "
             "type or paste; that's normal. Then press Enter.")
         pw = getpass.getpass("Database password: ")
         try:
-            conn = psycopg.connect(host=u.hostname, port=u.port or 5432, dbname=(u.path or "/postgres").lstrip("/") or "postgres",
-                                   user=u.username, password=pw, sslmode="require", connect_timeout=20)
+            conn = psycopg.connect(host=u["host"], port=u["port"], dbname=u["dbname"],
+                                   user=u["user"], password=pw, sslmode="require", connect_timeout=20)
             return conn, ref
         except Exception as e:
             msg = str(e).strip().splitlines()[0] if str(e).strip() else repr(e)
