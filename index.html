@@ -504,7 +504,7 @@
 
                 <div class="settings-section" id="settings-users-section">
                     <h3 class="settings-section-title">User Management</h3>
-                    <p class="settings-description">Approved email addresses and their roles. Use <strong>Reset password</strong> or <strong>Reset MFA</strong> next to your own name to change your password or move your authenticator to a new phone. Only admins can manage other users.</p>
+                    <p class="settings-description">Approved email addresses and their roles. Use <strong>Reset password</strong> or <strong>Reset MFA</strong> on your own row (marked "(you)") to change your password or move your authenticator to a new phone. Only admins can manage other users. When someone leaves, an admin clicks <strong>Archive</strong>: they lose access, but everything they entered stays in the app.</p>
                     <div id="settings-active-users"></div>
                     <div id="settings-add-user-row" style="display:none;margin-top:12px">
                         <button class="btn btn-primary" onclick="openInviteUserModal()">+ Invite New User</button>
@@ -519,7 +519,7 @@
 
                 <div class="settings-section" id="settings-archived-section" style="display:none">
                     <h3 class="settings-section-title">Archived Users</h3>
-                    <p class="settings-description">These users have been archived and can no longer sign in. Their history and edits are preserved.</p>
+                    <p class="settings-description">These people can no longer sign in. Everything they entered is still in the app under their name. Click <strong>Reactivate</strong> to give someone access again.</p>
                     <div id="settings-archived-users"></div>
                 </div>
 
@@ -1011,7 +1011,16 @@
                         </label>
                     </div>
                 </div>
-                <div id="email-recipients-list" class="email-recipients-list"></div>
+                <div class="email-search-row">
+                    <label for="email-person-search" class="email-toolbar-label">Add a person:</label>
+                    <div class="email-search-wrap">
+                        <input type="text" id="email-person-search" placeholder="Type a name to add them as a recipient..." autocomplete="off" aria-label="Search contacts to add as recipients"
+                               oninput="emailPersonSearch()" onkeydown="emailPersonSearchKey(event)" onblur="setTimeout(()=>document.getElementById('email-person-dropdown').classList.remove('visible'),200)">
+                        <div class="mention-dropdown" id="email-person-dropdown"></div>
+                    </div>
+                    <span id="email-selected-count" class="email-selected-count"></span>
+                </div>
+                <div id="email-recipients-list" class="email-recipients-list" onchange="emailRecipientChanged(event)"></div>
                 <div class="form-group">
                     <label>Subject</label>
                     <input type="text" id="email-subject" required>

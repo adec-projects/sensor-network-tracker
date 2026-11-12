@@ -18,6 +18,13 @@
                    "User", "ContentVersion", "ContentDocumentLink"];
 
   // ------------------------------------------------------------------ reading the ZIP
+  // Salesforce exports are UTF-8 if you choose it, otherwise ISO-8859-1 (Western).
+  // Try UTF-8 strictly; if the bytes aren't valid UTF-8, read them as Windows-1252.
+  function decodeCsv(bytes) {
+    try { return new TextDecoder("utf-8", { fatal: true }).decode(bytes); }
+    catch (e) { return new TextDecoder("windows-1252").decode(bytes); }
+  }
+
   async function readExport(buf, JSZip, Papa) {
     const zip = await JSZip.loadAsync(buf);
     const tables = {}; OBJECTS.forEach(o => tables[o] = []);
@@ -31,7 +38,7 @@
       const ext = dot > 0 ? base.slice(dot + 1).toLowerCase() : "";
       const obj = OBJECTS.find(o => o.toLowerCase() === stem.toLowerCase());
       if (ext === "csv" && obj) {
-        jobs.push(entry.async("string").then(text => {
+        jobs.push(entry.async("uint8array").then(decodeCsv).then(text => {
           const res = Papa.parse(text.replace(/^﻿/, ""), { header: true, skipEmptyLines: true });
           tables[obj] = tables[obj].concat(res.data.filter(r => r.Id));
         }));
@@ -285,7 +292,8 @@
 
     // --- what's new since the last transfer?
     // Default cutoff = the newest Salesforce record that's already in the app.
-    let lastInApp = "";
+    let lastInApp = "", newestInExport = "";
+    for (const r of recs) if (r.created > newestInExport) newestInExport = r.created;
     for (const r of recs) if ((inApp.has(r.sfId) || inApp.has(r.sfId.slice(0, 15))) && r.created > lastInApp) lastInApp = r.created;
     const cutoff = opts.cutoff != null ? opts.cutoff : (lastInApp ? lastInApp.slice(0, 10) : "");
     const isIn = id => inApp.has(id) || inApp.has(String(id).slice(0, 15));
@@ -344,7 +352,7 @@
       cards.push(card);
     }
     cards.sort((a, b) => (a.date || "").localeCompare(b.date || ""));
-    return { cards, cutoff, lastInApp, counts, newSensors: Object.values(newSensors),
+    return { cards, cutoff, lastInApp, newestInExport, counts, newSensors: Object.values(newSensors),
              newContacts: Object.values(newContacts), commName, knownSensors: [...knownSensors].sort() };
   }
 

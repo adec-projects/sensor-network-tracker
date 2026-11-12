@@ -64,13 +64,115 @@
   .hidden{display:none!important;}
   .empty{color:var(--text-dim);padding:30px;text-align:center;}
   a{color:var(--gold-light);}
+  .titlebar{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;}
+  .titlebar .btn{margin-left:auto;}
+  .guide{background:var(--navy-light);border-radius:12px;padding:22px 26px;margin:0 auto 22px;max-width:860px;line-height:1.55;font-size:.9rem;}
+  .guide h2{color:var(--gold);font-size:1.15rem;margin-bottom:6px;}
+  .guide h3{color:var(--gold-light);font-size:.98rem;margin:20px 0 6px;display:flex;gap:10px;align-items:center;}
+  .guide h3 .num{background:var(--gold);color:var(--navy);border-radius:50%;width:24px;height:24px;display:inline-flex;align-items:center;justify-content:center;font-size:.8rem;flex:none;}
+  .guide p,.guide li{color:var(--text);} .guide .dim{color:var(--text-dim);}
+  .guide ol,.guide ul{margin:6px 0 6px 22px;} .guide li{margin:3px 0;}
+  .guide b{color:#fff;}
+  .guide .tip{background:rgba(91,141,239,.1);border:1px solid rgba(91,141,239,.35);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:.85rem;}
+  .guide .warn{background:rgba(243,156,18,.08);border:1px solid rgba(243,156,18,.35);border-radius:8px;padding:8px 12px;margin:8px 0;font-size:.85rem;}
+  .guide table{border-collapse:collapse;margin:6px 0;font-size:.85rem;width:100%;}
+  .guide td{border-top:1px solid var(--navy-mid);padding:6px 8px;vertical-align:top;} .guide td:first-child{white-space:nowrap;color:var(--gold-light);}
   @media (max-width:800px){ .layout{grid-template-columns:1fr;} .grid{grid-template-columns:1fr 1fr;} }
 </style>
 </head>
 <body>
 <div class="wrap">
-  <h1>Salesforce Transfer</h1>
-  <p class="subtitle">Bring new Salesforce records into the Sensor Network Tracker. Nothing is saved until you click Approve, and only records created since the last transfer are shown.</p>
+  <div class="titlebar">
+    <div>
+      <h1>Salesforce Transfer</h1>
+      <p class="subtitle">Bring new Salesforce records into the Sensor Network Tracker. Nothing is saved until you click Approve, and only records created since the last transfer are shown.</p>
+    </div>
+    <button class="btn btn-ghost btn-sm" id="guide-btn" onclick="toggleGuide()">Hide guide</button>
+  </div>
+
+  <!-- The how-to. Open on the first screen; the button above shows/hides it later. -->
+  <div id="guide" class="guide">
+    <h2>How to do a Salesforce transfer, start to finish</h2>
+    <p class="dim">For anyone doing this for the first time. It starts in Salesforce (getting the data out) and ends here (reviewing it into the app). No software to install; everything happens in a web browser (Chrome or Edge).</p>
+
+    <h3>Before you start</h3>
+    <ul>
+      <li><b>You need:</b> an <b>admin</b> account in the Sensor Network Tracker (with your authenticator app for the 6-digit code), and someone with <b>Salesforce admin</b> access for steps 1 and 2 (that can be you).</li>
+      <li><b>Time:</b> Salesforce takes anywhere from a few minutes to a day to prepare the export. Reviewing takes roughly an hour or two per few hundred records. You can stop and come back anytime.</li>
+      <li><b>Safety:</b> nothing is added to the app until you click <b>Approve</b> on a record, and the page never changes or moves existing sensors, communities, or notes.</li>
+    </ul>
+
+    <h3><span class="num">1</span> Ask Salesforce for an export</h3>
+    <ol>
+      <li>Sign in to Salesforce. Click the <b>gear icon</b> (top right) → <b>Setup</b>.</li>
+      <li>In the <b>Quick Find</b> box (top left), type <b>Data Export</b> and click <b>Data Export</b>.</li>
+      <li>Click <b>Export Now</b>.</li>
+      <li>Set these options:
+        <ul>
+          <li><b>Export File Encoding:</b> choose <b>Unicode (UTF-8)</b> so names with special characters come through correctly.</li>
+          <li>Tick <b>Include Salesforce Files and Salesforce CRM Content document versions</b>. This brings the full text of longer notes.</li>
+          <li>Leave <b>Include images, documents, and attachments</b> <i>unticked</i>. Attachments aren't transferred, and they make the download huge.</li>
+          <li>Leave <b>Replace carriage returns with spaces</b> <i>unticked</i> (keeps line breaks in notes).</li>
+          <li>Under <b>Exported Data</b>, tick <b>Include all data</b>.</li>
+        </ul></li>
+      <li>Click <b>Start Export</b>.</li>
+    </ol>
+    <div class="tip"><b>"Export Now" missing or greyed out?</b> Salesforce only allows one export every 7 days (29 days on some plans). The Data Export page shows when the next one is allowed. If a recent export is listed there, you can use it if it's new enough.</div>
+
+    <h3><span class="num">2</span> Download the ZIP file</h3>
+    <ol>
+      <li>Salesforce emails you when the export is ready. Go back to <b>Setup → Data Export</b>.</li>
+      <li>Click <b>download</b> next to the file. Its name starts with <b>WE_</b> and ends in <b>.ZIP</b>.</li>
+      <li>Save it somewhere easy to find, like Downloads. <b>Don't unzip it</b>; this page reads the ZIP as is.</li>
+    </ol>
+    <div class="warn"><b>Download it promptly:</b> Salesforce deletes export files after about 48 hours. If there are <b>several</b> ZIP files (big exports get split), use the <b>first</b> one (ending in <b>_1.ZIP</b>); that's the one with the data tables.</div>
+
+    <h3><span class="num">3</span> Sign in on this page</h3>
+    <p>Below this guide, sign in with your <b>normal Sensor Network Tracker</b> email and password, then the 6-digit code from your authenticator app. If you're already signed in to the app in this browser, this step is skipped.</p>
+
+    <h3><span class="num">4</span> Choose the ZIP</h3>
+    <p>Click the box (or drag the ZIP onto it) and choose the file from step 2. It's read inside your browser; nothing is uploaded anywhere. A big export can take a minute or two.</p>
+
+    <h3><span class="num">5</span> Check the date at the top</h3>
+    <p>The bar at the top says <b>"Showing Salesforce records created after [date]"</b>. The page fills it in for you: with a newer export, it starts where the previous transfer ended, and if you come back to the same export, it picks up where you left off. The note next to the date explains which. Only change it if you know the last transfer covered a different period.</p>
+    <p class="dim">Anything already in the app from an earlier transfer is always hidden, whatever the date says.</p>
+
+    <h3><span class="num">6</span> New sensors and new contacts (top of the left list)</h3>
+    <ul>
+      <li><b>New sensors:</b> pods in Salesforce that aren't in the app yet. Check the type and community, then click <b>Create</b> (or <b>Create all</b>). Retired pods are added as archived.</li>
+      <li><b>New contacts:</b> people in Salesforce who aren't in the app. Create the ones you want to keep.</li>
+    </ul>
+    <p class="dim">You can skip this step: if a record you approve needs a new sensor or contact, it's created then. New communities are never created; if one is missing, add it in the app first.</p>
+
+    <h3><span class="num">7</span> Review the records, one community at a time</h3>
+    <p>Click a community on the left. Each record is a card that's ready to go: copies of the same event are already combined into one card, and sensors mentioned in the text (like "mod 665 audited by mod 471") are already tagged. For each card:</p>
+    <table>
+      <tr><td>Approve</td><td>Saves it to the app right away.</td></tr>
+      <tr><td>Skip</td><td>You don't want it (junk, test, not useful). It's hidden.</td></tr>
+      <tr><td>⚠ Possibly already in the app</td><td>Someone may have typed this into the app by hand. The box shows the app's entry. Same thing? <b>Skip</b>. Different? <b>Approve anyway</b>.</td></tr>
+      <tr><td>Approve all N here</td><td>Approves every remaining card in that community <i>except</i> ⚠ ones.</td></tr>
+      <tr><td>Undo</td><td>Removes an approved record from the app again (only until you close this page; after that, delete it in the app).</td></tr>
+      <tr><td>Edit anything</td><td>Type, date, text, and tags can all be changed before approving. Use <b>→ Make it a note / communication</b> if it's the wrong kind.</td></tr>
+      <tr><td>? Account name</td><td>Records from a Salesforce account that didn't match a community. Pick the community at the top of that list.</td></tr>
+    </table>
+    <div class="tip"><b>First time?</b> Approve <b>one</b> card, then open the app in another tab and find it (the sensor's or community's page). Imported records show <b>"Created by [Salesforce author], SF import"</b>; audits appear under the sensor's <b>Audits</b> section. Once it looks right, carry on.</div>
+
+    <h3><span class="num">8</span> Finish up</h3>
+    <ul>
+      <li>You're done when every community on the left shows <b>✓</b>. You can stop partway: open this page again later, choose the <b>same</b> ZIP, and only what's left appears.</li>
+      <li><b>Delete the ZIP file</b> from your computer (and empty the Recycle Bin) when you're finished. It contains everyone's contact details.</li>
+    </ul>
+
+    <h3>If something goes wrong</h3>
+    <table>
+      <tr><td>Sign-in fails</td><td>Use the same email/password as the app. The code changes every 30 seconds, so use the current one. Not an admin? Ask an admin to change your role in the app's Settings.</td></tr>
+      <tr><td>"doesn't contain ... data"</td><td>Wrong ZIP. Choose the <b>WE_..._1.ZIP</b> file from Salesforce, not an unzipped folder or a different file.</td></tr>
+      <tr><td>"couldn't be read as a ZIP"</td><td>The download didn't finish. Download it again from Setup → Data Export.</td></tr>
+      <tr><td>Error when approving</td><td>The red message says why (often: pick a community first). Nothing half-saved is left behind.</td></tr>
+      <tr><td>Page is stuck</td><td>Refresh the browser (Ctrl+F5) and choose the ZIP again. Everything you approved is safe in the app.</td></tr>
+    </table>
+    <p class="dim" style="margin-top:14px">Technical notes for whoever maintains this page are in <code>tools/sf-transfer/README.md</code> in the GitHub repository.</p>
+  </div>
 
   <!-- 1. Sign in -->
   <div id="step-login" class="panel">
@@ -137,6 +239,12 @@ let app=null, exp=null, result=null, current=null, dupes={};
 let state={};                      // card/new-record key -> {status:'ok'|'skip', table, rowId, msg}
 let skipped=new Set(JSON.parse(localStorage.getItem(SKIP_KEY)||'[]'));
 const $=id=>document.getElementById(id);
+function toggleGuide(force){
+  const g=$('guide'), show=force!=null?force:g.classList.contains('hidden');
+  g.classList.toggle('hidden',!show);
+  $('guide-btn').textContent=show?'Hide guide':'📖 Step-by-step guide';
+  if(show) g.scrollIntoView({behavior:'smooth',block:'start'});
+}
 const esc=s=>String(s==null?'':s).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const saveSkips=()=>{ try{ localStorage.setItem(SKIP_KEY, JSON.stringify([...skipped])); }catch(e){} };
 
@@ -198,7 +306,7 @@ async function afterLogin(){
         sensors:[],communities:[r.community_id].filter(Boolean),contacts:[],auditPod:r.audit_pod_id,communityPod:r.community_pod_id,by:r.conducted_by||''})));
     communities.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
     const st=await supa.from('app_settings').select('value').eq('key',CUTOFF_SETTING).maybeSingle();
-    savedCutoff=(st && st.data && st.data.value) || null;
+    savedCutoff=(st && st.data && st.data.value) || null;   // raw text; parsed in rebuild()
     app={communities,sensors,contacts,inAppIds,typed};
     $('file-status').textContent=`Signed in. The app has ${sensors.length} sensors, ${contacts.length} contacts, and ${inAppIds.size} records from earlier Salesforce transfers.`;
   }catch(e){ $('file-err').textContent='Couldn\'t load app data: '+e.message; }
@@ -219,26 +327,53 @@ async function readZip(file){
   }catch(e){ $('file-err').textContent='That file couldn\'t be read as a ZIP ('+e.message+'). Make sure it finished downloading.'; return; }
   if(exp.missing.length){ $('file-err').textContent='This ZIP doesn\'t contain '+exp.missing.join(', ')+' data. If Salesforce gave you several ZIP files, choose the one with the CSV files (usually the first).'; return; }
   $('step-file').classList.add('hidden'); $('step-review').classList.remove('hidden');
+  $('guide').classList.add('hidden'); $('guide-btn').textContent='📖 Step-by-step guide';
   await rebuild(true);
 }
 
 // ---------------------------------------------------------------- 3. review
-async function saveCutoff(v){
-  savedCutoff=v;
-  await supa.from('app_settings').upsert({key:CUTOFF_SETTING, value:v, updated_at:new Date().toISOString()});
+// Saved as JSON: {cutoff:'YYYY-MM-DD', exportNewest:'<newest CreatedDate in that export>'}.
+// exportNewest tells "same export, picking up where you left off" apart from
+// "a newer export, the next transfer", which should start where the last one ended.
+// (Older saves were a bare date string; those are treated as the current export.)
+function parseSaved(v){
+  if(v==null) return null;
+  try{ const o=typeof v==='object'?v:JSON.parse(v); if(o && typeof o==='object') return {cutoff:o.cutoff||'', exportNewest:o.exportNewest||'', previous:o.previous||null}; }catch(e){}
+  return {cutoff:String(v), exportNewest:'', previous:null};
 }
+async function saveCutoff(v, exportNewest, previous){
+  savedCutoff={cutoff:v, exportNewest:exportNewest||'', previous:previous||null};
+  await supa.from('app_settings').upsert({key:CUTOFF_SETTING, value:JSON.stringify(savedCutoff), updated_at:new Date().toISOString()});
+}
+const dayBefore=d=>{ const t=new Date(d.slice(0,10)+'T00:00:00Z'); t.setUTCDate(t.getUTCDate()-1); return t.toISOString().slice(0,10); };
 async function rebuild(first){
-  const opts=first ? (savedCutoff!=null ? {cutoff:savedCutoff} : {}) : {cutoff:$('cutoff').value||''};
-  result=SFCore.analyze(exp, app, opts);
   if(first){
-    $('cutoff').value=result.cutoff||'';
-    if(savedCutoff!=null) $('cutoff-note').textContent='(saved from the first time this transfer was opened; change it here if needed)';
-    else{
-      $('cutoff-note').textContent=result.lastInApp?`(the newest Salesforce record from the last transfer was created ${result.lastInApp.slice(0,10)})`:'(no earlier transfer found)';
-      await saveCutoff(result.cutoff||'');
+    const saved=parseSaved(savedCutoff);
+    const probe=SFCore.analyze(exp, app, {cutoff:''});          // just to learn how far this export goes
+    const newest=probe.newestInExport||'';
+    let cutoff, note;
+    if(!saved){
+      result=SFCore.analyze(exp, app, {});
+      cutoff=result.cutoff||'';
+      note=result.lastInApp?`(the newest Salesforce record from the last transfer was created ${result.lastInApp.slice(0,10)})`:'(no earlier transfer found)';
+    } else if(!saved.exportNewest || saved.exportNewest===newest){
+      cutoff=saved.cutoff; note='(same export as last time you opened this page: picking up where you left off)';
+    } else if(newest>saved.exportNewest){
+      // A newer export = the next transfer. Start the day before the last export ended
+      // (anything from that day already transferred is still recognized and hidden).
+      cutoff=dayBefore(saved.exportNewest);
+      note=`(new export: the last transfer's export went up to ${saved.exportNewest.slice(0,10)}, so this shows what's been added since)`;
+    } else {
+      cutoff=saved.cutoff;
+      note=`(⚠ this export is OLDER than the one used last time, which went up to ${saved.exportNewest.slice(0,10)}. Check you picked the newest ZIP.)`;
     }
+    if(saved && saved.exportNewest && newest<saved.exportNewest){ /* don't overwrite the newer export's record */ }
+    else await saveCutoff(cutoff, newest, saved && saved.exportNewest && saved.exportNewest!==newest ? {cutoff:saved.cutoff, exportNewest:saved.exportNewest} : (saved&&saved.previous)||null);
+    $('cutoff').value=cutoff; $('cutoff-note').textContent=note;
+    result=SFCore.analyze(exp, app, {cutoff});
   } else {
-    await saveCutoff($('cutoff').value||'');
+    result=SFCore.analyze(exp, app, {cutoff:$('cutoff').value||''});
+    await saveCutoff($('cutoff').value||'', result.newestInExport, parseSaved(savedCutoff)?.previous);
     $('cutoff-note').textContent='(saved)';
   }
   // Fill in full text of rich-text notes

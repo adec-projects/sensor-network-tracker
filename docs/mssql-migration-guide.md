@@ -143,7 +143,9 @@ These PostgreSQL/Supabase server-side pieces exist (definitions in
 - **`send_user_invite`, `delete_auth_user`, `admin_reset_mfa`** - admin-only user
   management. `delete_auth_user` and `admin_reset_mfa` reach into Supabase's
   `auth.users` / `auth.mfa_factors` schema, so they're tied to Supabase Auth and
-  must be re-expressed against the new identity provider.
+  must be re-expressed against the new identity provider. (Since Nov 2026 the app no
+  longer calls `delete_auth_user`: users are only archived/reactivated via
+  `allowed_emails.status`. It can be dropped rather than migrated.)
 - **Trigger `set_updated_by()`** - on UPDATE sets `updated_by = auth.uid()` (only
   when there is a logged-in user) and bumps `updated_at = now()` **only for
   `communities`, `contacts`, `notes`, `comms`** (not sensors/tickets/audits/

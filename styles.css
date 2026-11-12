@@ -4148,6 +4148,28 @@ table.dqi-overview-table td:last-child { text-align: center; }
     letter-spacing: 0.04em;
 }
 
+.email-search-row {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 28px;
+    border-bottom: 1px solid var(--slate-100);
+    flex-wrap: wrap;
+}
+.email-search-wrap { position: relative; flex: 1; min-width: 220px; }
+.email-search-wrap input {
+    width: 100%;
+    padding: 8px 12px;
+    border: 1px solid var(--slate-200);
+    border-radius: var(--radius-sm);
+    font-size: 14px;
+    font-family: var(--font-sans);
+}
+.email-search-wrap .mention-dropdown { left: 0; right: 0; width: auto; top: 100%; margin-top: 4px; }
+.email-selected-count { font-size: 12.5px; color: var(--slate-500); white-space: nowrap; }
+.email-recipient-row.just-added { background: rgba(212, 168, 75, 0.18); border-radius: 6px; transition: background 1.2s ease; }
+.mention-option.disabled { opacity: .55; cursor: default; }
+
 .email-recipients-list {
     padding: 14px 28px;
     max-height: 260px;

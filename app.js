@@ -4366,6 +4366,8 @@ function confirmDeleteContact(contactId) {
 
 // ===== EMAIL COMPOSER =====
 function openEmailModal() {
+    _emailPicked = new Set();
+    document.getElementById('email-person-search').value = '';
     populateCommunitySelect('email-community-filter');
     document.getElementById('btn-network-email-list').classList.remove('active');
     renderEmailRecipients();
@@ -4374,6 +4376,7 @@ function openEmailModal() {
     document.getElementById('email-body').value = '';
     document.getElementById('email-bcc-toggle').checked = true;
     openModal('modal-email');
+    _emailAfterRender();
 }
 
 function renderEmailRecipients(filter) {
@@ -4411,14 +4414,140 @@ function renderEmailRecipients(filter) {
             }).join('')}
         `;
     }).join('');
+    _emailAfterRender();
 }
 
 function emailSelectAll() {
     document.querySelectorAll('#email-recipients-list input[type="checkbox"]').forEach(cb => cb.checked = true);
+    _emailUpdateCount();
 }
 
 function emailDeselectAll() {
+    _emailPicked = new Set();
     document.querySelectorAll('#email-recipients-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+    _emailAfterRender();
+}
+
+// ----- "Add a person" search: type a name, pick them, they're checked as a recipient.
+// People picked this way stay picked when the community filter / Mass Email List
+// button re-draws the list (they're shown in an "Added by name" group if needed).
+let _emailPicked = new Set();
+
+function _emailRowHtml(c, checked) {
+    const badge = c.emailList ? '<span class="email-list-badge">Mass Email List</span>' : '';
+    return `<div class="email-recipient-row">
+        <input type="checkbox" id="email-cb-${c.id}" data-contact-id="${c.id}" data-community="${c.community}" ${checked ? 'checked' : ''}>
+        <label for="email-cb-${c.id}">${escapeHtml(c.name)}${badge}</label>
+        <span class="recipient-community">${c.email ? escapeHtml(c.email) : 'no email'}</span>
+    </div>`;
+}
+
+function _emailAfterRender() {
+    const list = document.getElementById('email-recipients-list');
+    if (!list) return;
+    list.querySelector('.email-picked-group')?.remove();
+    const missing = [];
+    _emailPicked.forEach(id => {
+        const cb = document.getElementById('email-cb-' + id);
+        if (cb && list.contains(cb)) cb.checked = true;
+        else { const c = contacts.find(x => x.id === id); if (c) missing.push(c); }
+    });
+    if (missing.length) {
+        const empty = list.querySelector(':scope > .empty-state');
+        if (empty) empty.remove();
+        const g = document.createElement('div');
+        g.className = 'email-picked-group';
+        g.innerHTML = `<div class="email-community-header">Added by name</div>` + missing.map(c => _emailRowHtml(c, true)).join('');
+        list.prepend(g);
+    }
+    _emailUpdateCount();
+}
+
+function _emailUpdateCount() {
+    const el = document.getElementById('email-selected-count');
+    if (!el) return;
+    const ids = new Set([...document.querySelectorAll('#email-recipients-list input[type="checkbox"]:checked')].map(cb => cb.dataset.contactId));
+    el.textContent = ids.size ? `${ids.size} selected` : 'No one selected';
+}
+
+function emailRecipientChanged(e) {
+    const cb = e.target;
+    if (cb && cb.type === 'checkbox' && !cb.checked) _emailPicked.delete(cb.dataset.contactId);
+    _emailUpdateCount();
+}
+
+function emailPersonSearch() {
+    const input = document.getElementById('email-person-search');
+    const dd = document.getElementById('email-person-dropdown');
+    const q = input.value.toLowerCase().trim();
+    if (!q) { dd.classList.remove('visible'); return; }
+    const matches = contacts
+        .filter(c => c.active !== false)
+        .filter(c => (c.name || '').toLowerCase().includes(q) || (c.email || '').toLowerCase().includes(q))
+        .sort((a, b) => {
+            // people with an email first, then names starting with what you typed, then A-Z
+            const ae = a.email ? 0 : 1, be = b.email ? 0 : 1;
+            const as = (a.name || '').toLowerCase().startsWith(q) ? 0 : 1, bs = (b.name || '').toLowerCase().startsWith(q) ? 0 : 1;
+            return ae - be || as - bs || (a.name || '').localeCompare(b.name || '');
+        })
+        .slice(0, 10);
+    if (!matches.length) {
+        dd.innerHTML = '<div class="mention-option disabled"><span>No contacts match</span></div>';
+        dd.classList.add('visible');
+        return;
+    }
+    const firstPickable = matches.findIndex(c => c.email);
+    dd.innerHTML = matches.map((c, i) => {
+        const already = !!document.querySelector(`#email-recipients-list input[data-contact-id="${c.id}"]:checked`);
+        const noEmail = !c.email;
+        const right = noEmail ? 'no email on file' : already ? 'already added ✓' : escapeHtml(getCommunityName(c.community) || '');
+        return `<div class="mention-option${i === firstPickable ? ' selected' : ''}${noEmail ? ' disabled' : ''}" data-id="${c.id}">
+            <span>${escapeHtml(c.name)} <span class="mention-community">${escapeHtml(c.email || '')}</span></span>
+            <span class="mention-community">${right}</span>
+        </div>`;
+    }).join('');
+    dd.classList.add('visible');
+    dd.querySelectorAll('.mention-option:not(.disabled)').forEach(opt => {
+        opt.addEventListener('mousedown', ev => { ev.preventDefault(); emailPickPerson(opt.dataset.id); });
+    });
+}
+
+function emailPersonSearchKey(e) {
+    const dd = document.getElementById('email-person-dropdown');
+    if (!dd.classList.contains('visible')) return;
+    const opts = [...dd.querySelectorAll('.mention-option:not(.disabled)')];
+    let idx = opts.findIndex(o => o.classList.contains('selected'));
+    if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        if (!opts.length) return;
+        opts[idx]?.classList.remove('selected');
+        idx = e.key === 'ArrowDown' ? Math.min(opts.length - 1, idx + 1) : Math.max(0, idx - 1);
+        opts[idx].classList.add('selected');
+        opts[idx].scrollIntoView({ block: 'nearest' });
+    } else if (e.key === 'Enter') {
+        e.preventDefault();
+        if (idx >= 0) emailPickPerson(opts[idx].dataset.id);
+    } else if (e.key === 'Escape') {
+        e.stopPropagation();
+        dd.classList.remove('visible');
+    }
+}
+
+function emailPickPerson(id) {
+    const c = contacts.find(x => x.id === id);
+    if (!c || !c.email) return;
+    _emailPicked.add(id);
+    _emailAfterRender();
+    const input = document.getElementById('email-person-search');
+    input.value = '';
+    document.getElementById('email-person-dropdown').classList.remove('visible');
+    const row = document.getElementById('email-cb-' + id)?.closest('.email-recipient-row');
+    if (row) {
+        row.scrollIntoView({ block: 'nearest' });
+        row.classList.add('just-added');
+        setTimeout(() => row.classList.remove('just-added'), 1400);
+    }
+    input.focus();
 }
 
 function emailSelectNetworkList() {
@@ -4434,6 +4563,7 @@ function emailSelectNetworkList() {
         document.getElementById('email-recipients-list').innerHTML =
             '<div class="empty-state">No contacts on the Mass Email List yet. Use the checkboxes on the Contacts tab to add them.</div>';
     }
+    _emailAfterRender();
 }
 
 function emailFilterByCommunity() {
@@ -4442,9 +4572,10 @@ function emailFilterByCommunity() {
     document.getElementById('btn-network-email-list').classList.remove('active');
 
     if (!commId) {
-        // Show all contacts, none checked
+        // Show all contacts, none checked (except people added by name)
         renderEmailRecipients();
-        emailDeselectAll();
+        document.querySelectorAll('#email-recipients-list input[type="checkbox"]').forEach(cb => cb.checked = false);
+        _emailAfterRender();
         return;
     }
 
@@ -4469,6 +4600,7 @@ function emailFilterByCommunity() {
     if (filtered.length === 0) {
         list.innerHTML = '<div class="empty-state">No contacts in this community.</div>';
     }
+    _emailAfterRender();
 }
 
 function sendEmail() {
@@ -4553,6 +4685,8 @@ function openQuickEmail(contactId) {
     if (!c || !c.email) return;
 
     // Open the email modal with just this contact selected
+    _emailPicked = new Set();
+    document.getElementById('email-person-search').value = '';
     populateCommunitySelect('email-community-filter');
     document.getElementById('btn-network-email-list').classList.remove('active');
 
@@ -4572,6 +4706,7 @@ function openQuickEmail(contactId) {
     document.getElementById('email-body').value = '';
     document.getElementById('email-community-filter').value = c.community;
     openModal('modal-email');
+    _emailUpdateCount();
 }
 
 // ===== NOTES =====
@@ -7121,11 +7256,10 @@ async function renderAllowedUsers(currentEmail) {
                 Guide Editor
                </label>`
             : '';
+        // Admins can archive other people (never themselves). There is no hard
+        // delete: archiving blocks sign-in but keeps every record they made.
         const archiveBtn = isAdmin && !isYou
-            ? `<button class="btn btn-sm btn-danger" onclick="archiveUser('${row.id}')">Archive</button>`
-            : '';
-        const deleteBtn = isAdmin && !isYou
-            ? `<button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="permanentlyDeleteUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Delete</button>`
+            ? `<button class="btn btn-sm btn-danger" onclick="archiveUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Archive</button>`
             : '';
         // Your own row: everyone gets these (password-checked, no temp password).
         // Other people's rows: admins only (the database enforces this too).
@@ -7146,7 +7280,7 @@ async function renderAllowedUsers(currentEmail) {
                 ${guideBadge}
                 ${isYou ? '<span class="settings-user-you">(you)</span>' : ''}
             </span>
-            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${guideToggle}${roleToggle}${resetPwBtn}${resetMfaBtn}${archiveBtn}${deleteBtn}</span>
+            <span style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">${guideToggle}${roleToggle}${resetPwBtn}${resetMfaBtn}${archiveBtn}</span>
         </div>`;
     }).join('') || '<p style="color:var(--slate-400);font-size:13px">No active users.</p>';
 
@@ -7161,7 +7295,7 @@ async function renderAllowedUsers(currentEmail) {
                     <span style="background:#fff8e8;color:#8a6d20;padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px">Pending</span>
                 </span>
                 <span style="display:flex;gap:6px;align-items:center">
-                    <button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="permanentlyDeleteUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Revoke</button>
+                    <button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="cancelInvite('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Cancel invite</button>
                 </span>
             </div>`;
         }).join('');
@@ -7174,10 +7308,12 @@ async function renderAllowedUsers(currentEmail) {
         archivedSection.style.display = '';
         document.getElementById('settings-archived-users').innerHTML = archived.map(row => {
             return `<div class="settings-user-row">
-                <span class="settings-user-email" style="color:var(--slate-400)">${escapeHtml(row.email)}</span>
+                <span>
+                    <span class="settings-user-email" style="color:var(--slate-400)">${escapeHtml(row.email)}</span>
+                    <span style="background:var(--slate-100);color:var(--slate-500);padding:1px 8px;border-radius:8px;font-size:10px;font-weight:600;margin-left:6px">Archived</span>
+                </span>
                 <span style="display:flex;gap:6px;align-items:center">
-                    <button class="btn btn-sm" onclick="reactivateUser('${row.id}')">Reactivate</button>
-                    <button class="btn btn-sm" style="color:#e11d48;border-color:#fecdd3;font-size:11px;font-weight:600" onclick="permanentlyDeleteUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Delete</button>
+                    <button class="btn btn-sm" onclick="reactivateUser('${row.id}', '${escapeHtml(row.email).replace(/'/g, "\\&#39;")}')">Reactivate</button>
                 </span>
             </div>`;
         }).join('');
@@ -7277,56 +7413,70 @@ async function sendUserInvite(event) {
     btn.textContent = 'Send Invite';
 }
 
-async function archiveUser(id) {
+async function archiveUser(id, email) {
     if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can archive users.'); return; }
-    showConfirm('Archive User', 'Archive this user? They will no longer be able to sign in, but their history and edits will be preserved. You can reactivate them later.', async () => {
-        if (!window.SANDBOX_MODE) {
-            const { error } = await supa.from('allowed_emails').update({ status: 'archived' }).eq('id', id);
-            if (error) { showAlert('Error', error.message); return; }
-        }
-        const session = await db.getSession();
-        await renderAllowedUsers(session?.user?.email || '');
-    });
-}
-
-async function reactivateUser(id) {
-    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can reactivate users.'); return; }
-    if (!window.SANDBOX_MODE) {
-        const { error } = await supa.from('allowed_emails').update({ status: 'active' }).eq('id', id);
-        if (error) { showAlert('Error', error.message); return; }
-    }
-    const session = await db.getSession();
-    await renderAllowedUsers(session?.user?.email || '');
-}
-
-async function permanentlyDeleteUser(id, email) {
-    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can delete users.'); return; }
-
-    // First warning — recommend archiving instead
-    showConfirm('Delete User', 'Are you sure you want to permanently delete this user?<br><br>If this user has simply become inactive, you should <strong>archive</strong> them instead. Archiving preserves their account so it can be reactivated later.', () => {
-        // Second warning — final confirmation
-        showConfirm('Final Warning', 'This action cannot be undone!<br><br>Permanently deleting <strong>"' + email + '"</strong> will:<br>&bull; Remove their account entirely<br>&bull; Change all their past edits and notes to show "[Deleted User]"<br><br>Are you absolutely sure you want to delete this user?', async () => {
-            try {
-                // Anonymize in-memory data
-                const { data: profileRow } = await supa.from('profiles').select('id').eq('email', email).maybeSingle();
-                if (profileRow) {
-                    notes.forEach(n => { if (n.createdById === profileRow.id) n.createdBy = '[Deleted User]'; });
-                    comms.forEach(c => { if (c.createdById === profileRow.id) c.createdBy = '[Deleted User]'; });
-                }
-
-                // Delete auth user, profile, and allowed_emails entry via RPC
-                if (!window.SANDBOX_MODE) {
-                    await supa.rpc('delete_auth_user', { user_email: email });
-                    await supa.from('allowed_emails').delete().eq('id', id);
-                }
-
-                const session = await db.getSession();
-                await renderAllowedUsers(session?.user?.email || '');
-            } catch (err) {
-                showAlert('Error', 'Failed to delete user: ' + err.message);
+    const who = email ? `<strong>${escapeHtml(email)}</strong>` : 'this user';
+    showConfirm('Archive User',
+        `<p>Archive ${who}?</p>
+         <p style="margin-top:10px"><strong>They will lose access right away</strong>: they can no longer sign in or see any data.</p>
+         <p style="margin-top:10px"><strong>Their records are kept.</strong> Every note, communication, audit, and edit they made stays in the app with their name on it.</p>
+         <p style="margin-top:10px;color:var(--slate-500);font-size:13px">They'll move to <strong>Archived Users</strong> (below), where an admin can reactivate them at any time.</p>`,
+        async () => {
+            if (!window.SANDBOX_MODE) {
+                const { error } = await supa.from('allowed_emails').update({ status: 'archived' }).eq('id', id);
+                if (error) { showAlert('Error', error.message); return; }
             }
-        }, { danger: true, confirmText: 'Delete Permanently' });
-    }, { danger: true, confirmText: 'Continue' });
+            showSuccessToast(`${email || 'User'} archived`);
+            const session = await db.getSession();
+            await renderAllowedUsers(session?.user?.email || '');
+        }, { danger: true, confirmText: 'Archive' });
+}
+
+async function reactivateUser(id, email) {
+    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can reactivate users.'); return; }
+    const who = email ? `<strong>${escapeHtml(email)}</strong>` : 'this user';
+    showConfirm('Reactivate User',
+        `<p>Give ${who} access again?</p>
+         <p style="margin-top:10px">They'll sign in with their <strong>same email and password</strong> as before, and all their past records are still there.</p>
+         <label style="display:flex;gap:8px;align-items:flex-start;margin-top:12px;padding:10px 12px;background:var(--slate-50);border:1px solid var(--slate-200);border-radius:8px;font-size:13px;cursor:pointer">
+            <input type="checkbox" id="reactivate-reset-mfa" checked style="margin-top:3px">
+            <span><strong>Also reset their authenticator (MFA).</strong> Recommended if they may have a new phone or deleted the app. They'll be asked to set it up again the next time they sign in.</span>
+         </label>
+         <p style="margin-top:10px;color:var(--slate-500);font-size:13px">If they've forgotten their password, click <strong>Reset password</strong> next to their name after reactivating.</p>`,
+        async () => {
+            const resetMfa = !!document.getElementById('reactivate-reset-mfa')?.checked;  // read before the dialog closes
+            if (!window.SANDBOX_MODE) {
+                const { error } = await supa.from('allowed_emails').update({ status: 'active' }).eq('id', id);
+                if (error) { showAlert('Error', error.message); return; }
+            }
+            let mfaNote = '';
+            if (resetMfa && email && !window.SANDBOX_MODE) {
+                const { error } = await supa.rpc('admin_reset_mfa', { target_email: email });
+                // "No user with that email" = they never finished signing up; nothing to reset.
+                if (error && !/no user/i.test(error.message)) mfaNote = ` (Their authenticator could NOT be reset: ${error.message}. Use Reset MFA next to their name.)`;
+                else if (!error) mfaNote = ' They will set up their authenticator again at their next sign-in.';
+            }
+            const session = await db.getSession();
+            await renderAllowedUsers(session?.user?.email || '');
+            showAlert('User Reactivated', `${escapeHtml(email || 'The user')} can sign in again.${escapeHtml(mfaNote)}`);
+        }, { confirmText: 'Reactivate' });
+}
+
+// Pending invites only: the person never created an account, so there are no
+// records to keep. This just takes their email off the approved list.
+async function cancelInvite(id, email) {
+    if (currentUserRole !== 'admin') { showAlert('Access Denied', 'Only admins can cancel invites.'); return; }
+    showConfirm('Cancel Invite',
+        `<p>Cancel the invite for <strong>${escapeHtml(email)}</strong>?</p>
+         <p style="margin-top:10px">They haven't created an account yet, so nothing else is affected. They won't be able to sign up unless you invite them again.</p>`,
+        async () => {
+            if (!window.SANDBOX_MODE) {
+                const { error } = await supa.from('allowed_emails').delete().eq('id', id);
+                if (error) { showAlert('Error', error.message); return; }
+            }
+            const session = await db.getSession();
+            await renderAllowedUsers(session?.user?.email || '');
+        }, { danger: true, confirmText: 'Cancel invite', cancelText: 'Keep invite' });
 }
 
 async function changeUserRole(id, newRole) {

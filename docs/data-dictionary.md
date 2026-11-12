@@ -172,7 +172,9 @@ The signup allow-list. Only emails listed here can create an account, enforced b
 database trigger, not just the browser.
 - `email`: the allowed address (unique).
 - `role`: the role they'll get (`user` / `admin`).
-- `status`: `active` or revoked.
+- `status`: `active` or `archived` (older rows may say `revoked`, treated the same as
+  archived). Archived users can't sign in or read data; their records are kept. Pending
+  invites are `active` rows with no matching `profiles` row yet.
 - `can_edit_user_guide`: lets a non-admin edit the in-app user guide.
 
 ---
