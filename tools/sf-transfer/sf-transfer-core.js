@@ -357,7 +357,64 @@
     return out;
   }
 
-  const api = { readExport, analyze, loadBodies, classify, htmlToText };
+  // ------------------------------------------------------------------ possible duplicates
+  // Records people typed straight into the app have no Salesforce id, so the id check
+  // can't see them. This compares each card with app entries from around the same date
+  // that share a sensor/community/contact, and flags likely matches for a person to judge.
+  //   entries: [{kind:'note'|'comm'|'audit', id, date:'YYYY-MM-DD', type, text, sensors[],
+  //              communities[], contacts[], by, auditPod, communityPod}]
+  const STOP = new Set(("the and for with was were has have had from that this are not but all out "
+    + "sensor sensors pod pods mod note notes per will been they them their about into its our can").split(" "));
+  const wordSet = s => new Set(String(s || "").toLowerCase().replace(/[^a-z0-9 ]+/g, " ").split(" ")
+    .filter(w => w.length >= 3 && !STOP.has(w)));
+  function similarity(a, b) {
+    const A = wordSet(a), B = wordSet(b);
+    if (!A.size || !B.size) return 0;
+    let n = 0; A.forEach(w => { if (B.has(w)) n++; });
+    return n / Math.min(A.size, B.size);              // share of the shorter text's words
+  }
+  const dayNum = d => { const t = Date.parse(String(d || "").slice(0, 10) + "T00:00:00Z"); return isNaN(t) ? null : t / 86400000; };
+  function findDuplicates(cards, entries, opts) {
+    const win = (opts && opts.days) || 3;
+    const byDay = new Map();                            // index entries by day for speed
+    for (const e of entries) { const d = dayNum(e.date); if (d == null) continue; (byDay.get(d) || byDay.set(d, []).get(d)).push(e); }
+    const out = {};
+    for (const c of cards) {
+      const cd = dayNum(c.kind === "audit" && c.audit ? c.audit.start_date || c.date : c.date);
+      if (cd == null) continue;
+      const cText = (c.text || "") + " " + (c.info || "");
+      const matches = [];
+      for (let d = cd - win; d <= cd + win; d++) for (const e of byDay.get(d) || []) {
+        const gap = Math.abs(d - cd);
+        let score = 0, why = [];
+        if (c.kind === "audit" || e.kind === "audit") {
+          if (c.kind !== "audit" || e.kind !== "audit") continue;
+          const pods = [c.audit.audit_pod_id, c.audit.community_pod_id].filter(Boolean);
+          const shared = pods.filter(p => p === e.auditPod || p === e.communityPod);
+          if (!shared.length && !(c.audit.community_id && c.audit.community_id === e.communities[0])) continue;
+          score = 0.6 + 0.2 * shared.length; why.push(shared.length ? "same pod" : "same community");
+        } else {
+          const sSh = c.sensors.filter(x => (e.sensors || []).includes(x));
+          const cSh = c.communities.filter(x => (e.communities || []).includes(x));
+          const pSh = c.contacts.filter(x => (e.contacts || []).includes(x));
+          if (!sSh.length && !cSh.length && !pSh.length) continue;
+          const sim = similarity(cText, (e.text || "") + " " + (e.extra || ""));
+          const sameType = e.type && c.type && e.type === c.type;
+          // Flag when the wording overlaps, or when it's the same kind of entry for the
+          // same sensor/contact within a day (people word things differently).
+          if (sim >= 0.35) { score = sim; why.push("similar wording"); }
+          else if (sameType && gap <= 1 && (sSh.length || pSh.length)) { score = 0.3; why.push("same type, same " + (sSh.length ? "sensor" : "contact")); }
+          else continue;
+        }
+        score -= gap * 0.05;
+        matches.push({ entry: e, score, gap, why: why.join(", ") });
+      }
+      if (matches.length) out[c.id] = matches.sort((a, b) => b.score - a.score).slice(0, 3);
+    }
+    return out;
+  }
+
+  const api = { readExport, analyze, loadBodies, classify, htmlToText, findDuplicates, similarity };
   if (typeof module !== "undefined" && module.exports) module.exports = api;
   else root.SFCore = api;
 })(typeof window !== "undefined" ? window : globalThis);

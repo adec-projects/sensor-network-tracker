@@ -65,6 +65,20 @@ already tagged. For each card:
   skipped ones again and **Un-skip**.
 * **Undo** (on an approved card) removes it from the app again.
 
+**⚠ Possibly already in the app.** People may have typed the same thing straight into
+the app while Salesforce was still in use. The page compares each record with entries
+typed into the app within 3 days of it that share a sensor, community, or contact, and
+have similar wording or the same type. Matches get a ⚠ box showing the app entry (date,
+type, who entered it, text):
+
+* Same thing? Click **Skip**.
+* Different? Click **Approve anyway**.
+* **Approve all** never includes ⚠ records; they're left for you to check one by one.
+  The left list shows how many ⚠ records each community has.
+
+It's a helper, not a guarantee: it can miss a duplicate that was worded very differently
+or tagged differently, and it can flag something that isn't one.
+
 Audits get extra fields (community, audit pod, community pod, dates) and are saved as
 audit records, so they show in each sensor's **Audits** section. The Excel results can be
 attached on the audit's page in the app afterward.

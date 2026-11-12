@@ -133,7 +133,7 @@ const SKIP_KEY='sf_transfer_skipped';
 const CUTOFF_SETTING='sf_transfer_cutoff';
 let savedCutoff=null;
 
-let app=null, exp=null, result=null, current=null;
+let app=null, exp=null, result=null, current=null, dupes={};
 let state={};                      // card/new-record key -> {status:'ok'|'skip', table, rowId, msg}
 let skipped=new Set(JSON.parse(localStorage.getItem(SKIP_KEY)||'[]'));
 const $=id=>document.getElementById(id);
@@ -179,15 +179,27 @@ async function afterLogin(){
   try{
     const [communities,sensors,contacts,notes,comms,audits]=await Promise.all([
       all('communities','id,name,parent_id'), all('sensors','id,type,community_id'),
-      all('contacts','id,name,email,community_id'), all('notes','sf_id,merged_sf_ids'),
-      all('comms','sf_id,merged_sf_ids'), all('audits','sf_id,merged_sf_ids')]);
+      all('contacts','id,name,email,community_id'),
+      all('notes','id,sf_id,merged_sf_ids,source,deleted_at,date,type,text,additional_info,logged_by,note_tags(tag_type,tag_id),profiles:created_by(name)'),
+      all('comms','id,sf_id,merged_sf_ids,source,deleted_at,date,comm_type,subject,text,full_body,community_id,comm_tags(tag_type,tag_id),profiles:created_by(name)'),
+      all('audits','id,sf_id,merged_sf_ids,source,deleted_at,start_date,community_id,audit_pod_id,community_pod_id,conducted_by,notes')]);
     if(!communities.length) throw new Error('No communities were returned. Are you signed in as an admin with your authenticator code?');
     const inAppIds=new Set();
     for(const r of [...notes,...comms,...audits]){ if(r.sf_id) inAppIds.add(r.sf_id); (r.merged_sf_ids||[]).forEach(x=>inAppIds.add(x)); }
+    // Records people typed into the app (not from Salesforce): used to flag possible duplicates.
+    const tagsOf=(tags,t)=>(tags||[]).filter(x=>x.tag_type===t).map(x=>x.tag_id);
+    const live=r=>!r.deleted_at && r.source!==SRC;
+    const typed=[]
+      .concat(notes.filter(live).map(r=>({kind:'note',id:r.id,date:r.date,type:r.type,text:r.text,extra:r.additional_info,
+        sensors:tagsOf(r.note_tags,'sensor'),communities:tagsOf(r.note_tags,'community'),contacts:tagsOf(r.note_tags,'contact'),by:r.profiles?.name||''})))
+      .concat(comms.filter(live).map(r=>({kind:'comm',id:r.id,date:r.date,type:r.comm_type,text:[r.subject,r.text].filter(Boolean).join(' '),extra:r.full_body,
+        sensors:[],communities:[r.community_id,...tagsOf(r.comm_tags,'community')].filter(Boolean),contacts:tagsOf(r.comm_tags,'contact'),by:r.profiles?.name||''})))
+      .concat(audits.filter(live).map(r=>({kind:'audit',id:r.id,date:r.start_date,type:'Audit',text:'Audit '+(r.audit_pod_id||'')+' / '+(r.community_pod_id||''),
+        sensors:[],communities:[r.community_id].filter(Boolean),contacts:[],auditPod:r.audit_pod_id,communityPod:r.community_pod_id,by:r.conducted_by||''})));
     communities.sort((a,b)=>(a.name||'').localeCompare(b.name||''));
     const st=await supa.from('app_settings').select('value').eq('key',CUTOFF_SETTING).maybeSingle();
     savedCutoff=(st && st.data && st.data.value) || null;
-    app={communities,sensors,contacts,inAppIds};
+    app={communities,sensors,contacts,inAppIds,typed};
     $('file-status').textContent=`Signed in. The app has ${sensors.length} sensors, ${contacts.length} contacts, and ${inAppIds.size} records from earlier Salesforce transfers.`;
   }catch(e){ $('file-err').textContent='Couldn\'t load app data: '+e.message; }
 }
@@ -237,9 +249,11 @@ async function rebuild(first){
       const t=c.needsBody.map(v=>bodies[v]).filter(Boolean).join('\n\n'); if(t) c.info=t;
     }
   }
+  dupes=SFCore.findDuplicates(result.cards, app.typed);
   const cnt=result.counts;
   $('summary').textContent=`In this export: ${cnt.alreadyInApp} records already transferred and ${cnt.olderThanCutoff} older records are hidden; ${cnt.blasts} mass emails skipped. `+
-    `${result.cards.length} items to review (Salesforce's per-sensor copies are combined).`;
+    `${result.cards.length} items to review (Salesforce's per-sensor copies are combined). `+
+    `${Object.keys(dupes).length} look like they may already have been typed into the app; those are marked ⚠ and left for you to decide.`;
   if(!current || (!groups().has(current) && !current.startsWith('__new'))) current=null;
   $('dl-sensors').innerHTML=result.knownSensors.map(s=>`<option value="${esc(s)}">`).join('');
   renderAll();
@@ -267,7 +281,8 @@ function renderSide(){
   const el=$('side'); el.innerHTML='';
   const ns=result.newSensors.filter(s=>!state['S:'+s.id]).length, nc=result.newContacts.filter(c=>!state['C:'+c.key]).length;
   const add=(k,label,n,cls)=>{ const d=document.createElement('div'); d.className='item '+(cls||'')+(k===current?' active':'')+(n===0?' done':'');
-    d.innerHTML=`<span>${esc(label)}</span><span class="n">${n?n+' left':'✓'}</span>`; d.onclick=()=>{current=k;renderAll();}; el.appendChild(d); };
+    const w=k.startsWith('__new')?0:(groups().get(k)||[]).filter(c=>pending(c)&&dupes[c.id]).length;
+    d.innerHTML=`<span>${esc(label)}</span><span class="n">${w?'⚠'+w+' · ':''}${n?n+' left':'✓'}</span>`; d.onclick=()=>{current=k;renderAll();}; el.appendChild(d); };
   if(result.newSensors.length) add('__newSensors','New sensors',ns,'special');
   if(result.newContacts.length) add('__newContacts','New contacts',nc,'special');
   const g=groups();
@@ -287,7 +302,9 @@ function renderRecords(){
   if(current==='__newContacts') return renderNewContacts(root);
   const list=(groups().get(current)||[]).filter(visible);
   const todo=list.filter(pending);
-  let html=`<div class="head"><b>${esc(groupName(current))}</b>${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all ${todo.length} here</button>`:''}</div>`;
+  const clean=todo.filter(c=>!dupes[c.id]), flagged=todo.length-clean.length;
+  let html=`<div class="head"><b>${esc(groupName(current))}</b>${clean.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all ${clean.length} here</button>`:''}</div>`;
+  if(flagged) html+=`<div class="note-box">⚠ ${flagged} record${flagged>1?'s':''} here may already be in the app (someone may have typed ${flagged>1?'them':'it'} in by hand). ${clean.length?'"Approve all" leaves these out; ':''}check each ⚠ card and choose Skip or Approve anyway.</div>`;
   if(current.startsWith('__acct:')){
     const acct=list[0]?.unmatchedAccounts[0];
     html+=`<div class="note-box">Salesforce account <b>${esc(acct?.name)}</b> didn't match a community in the app. Pick the community for all of its records:
@@ -316,6 +333,7 @@ function cardHtml(c){
     <div class="top"><span class="tag ${c.kind}">${{note:'NOTE',comm:'COMM',audit:'AUDIT'}[c.kind]}</span>
       ${c.copies>1?`<span class="tag copies">${c.copies} Salesforce copies combined</span>`:''}
       <span class="author">Created by ${esc(c.loggedBy||'Unknown')}, SF import</span></div>
+    ${dupes[c.id]&&!done?dupeBox(c):''}
     ${c.textsDiffer?'<div class="note-box">The Salesforce copies had different text; all of it is in Details below. Tidy it if you like.</div>':''}
     <div class="grid">
       ${c.kind==='audit'?'':`<div class="field"><label>Type</label><select onchange="setField('${esc(c.id)}','type',this.value)">${typeOpts}</select></div>`}
@@ -328,11 +346,18 @@ function cardHtml(c){
       <div class="field full"><label>Contacts</label><div class="chips">${chips(c.contacts,'contacts',contactLabel)}${contactAdd}</div></div>
     </div>
     <div class="actions">
-      ${done?'':`<button class="btn btn-green btn-sm" onclick="approve('${esc(c.id)}')">Approve</button>
+      ${done?'':`<button class="btn btn-green btn-sm" onclick="approve('${esc(c.id)}')">${dupes[c.id]?'Approve anyway':'Approve'}</button>
       <button class="btn btn-skip btn-sm" onclick="skip('${esc(c.id)}')">Skip</button>
       ${c.kind==='audit'?'':`<button class="btn btn-ghost btn-sm" onclick="flip('${esc(c.id)}')">${c.kind==='comm'?'→ Make it a note':'→ Make it a communication'}</button>`}`}
       <span class="msg" id="msg-${esc(c.id)}">${status}${st?.msg?' '+esc(st.msg):''}</span>
     </div></div>`;
+}
+function dupeBox(c){
+  const label={note:'NOTE',comm:'COMM',audit:'AUDIT'};
+  const rows=dupes[c.id].map(m=>{ const e=m.entry, snip=String(e.text||'').replace(/\s+/g,' ').slice(0,160);
+    return `<div style="margin-top:5px;color:var(--text)">• <b>${label[e.kind]}</b> ${esc(String(e.date||'').slice(0,10))}${e.type&&e.kind!=='audit'?' · '+esc(e.type):''}${e.by?' · by '+esc(e.by):''}: "${esc(snip)}${(e.text||'').length>160?'…':''}" <span style="color:var(--text-dim)">(${esc(m.why)})</span></div>`; }).join('');
+  return `<div class="note-box"><b>⚠ Possibly already in the app.</b> Someone may have typed this in by hand:${rows}
+    <div style="margin-top:7px">If it's the same thing, click <b>Skip</b>. If it's different, click <b>Approve anyway</b>.</div></div>`;
 }
 const card=id=>result.cards.find(c=>c.id===id);
 function setField(id,k,v){ card(id)[k]=v; }
@@ -406,7 +431,7 @@ async function approve(id, quiet){
   }catch(e){ setMsg(id,'Error: '+e.message,'var(--red)'); return false; }
 }
 async function approveAll(){
-  const list=(groups().get(current)||[]).filter(pending);
+  const list=(groups().get(current)||[]).filter(c=>pending(c)&&!dupes[c.id]);
   for(const c of list){ await approve(c.id,true); renderCounts(); }
   renderAll();
 }
