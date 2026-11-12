@@ -310,18 +310,25 @@ const db = {
     },
 
     async archiveSensor(id) {
+        // Retiring sets the "Retired" status too (the app's status list treats
+        // Retired as the Retire Sensor action).
         const { error } = await supa.from('sensors').update({
             active: false,
             archived_at: new Date().toISOString(),
+            status: ['Retired'],
         }).eq('id', id);
         if (error) throw error;
     },
 
     async restoreSensor(id) {
+        // Drop "Retired"; if nothing else is left, the pod comes back as Offline.
+        const { data: row } = await supa.from('sensors').select('status').eq('id', id).maybeSingle();
+        const left = ((row && row.status) || []).filter(st => st !== 'Retired');
         const { error } = await supa.from('sensors').update({
             active: true,
             archived_at: null,
             archived_by: null,
+            status: left.length ? left : ['Offline'],
         }).eq('id', id);
         if (error) throw error;
     },

@@ -316,10 +316,20 @@
 </ul>
 
 <h3>Retiring and restoring a sensor</h3>
-<p>On a sensor's page, click <strong>Retire Sensor</strong>. You can add an optional reason (type @ to tag a contact); it's logged in the sensor's history. The pod moves to the Retired Quants tab and its current install in the community is closed. It isn't deleted. To bring it back, open it from the Retired Quants tab and click <strong>Restore from archive</strong>.</p>
+<p>On a sensor's page, click <strong>Retire Sensor</strong>. You can add an optional reason (type @ to tag a contact); it's logged in the sensor's history along with what its status was. The pod's status becomes <strong>Retired</strong>, it moves to the Retired Quants tab, and its current install in the community is closed. It isn't deleted.</p>
+<p>Choosing <strong>Retired</strong> in a status list (for example in a + New Log row) does exactly the same thing: it opens the same Retire popup. To bring a sensor back, open it from the Retired Quants tab and click <strong>Restore from archive</strong>. Its status goes back to Offline; update it with + New Log.</p>
 
 <h3>Sensor statuses</h3>
 <p>A sensor can carry several statuses at once (for example "Online" plus "SD Card Issue"). Change a sensor's status with <strong>+ New Log</strong>: add the sensor, then use its <strong>Status</strong> row (see <a href="#notes">Section 6</a>). Service tickets, audits, and collocations also update statuses automatically. Admins can edit statuses directly in Setup Mode.</p>
+
+<h4>Changing the status list (admins)</h4>
+<p>Admins can add and remove statuses. Click <strong>✎ Edit status list</strong> wherever a status list appears (in New Log rows choose "✎ Edit status list…"), on the All Sensors page, or in Settings under <strong>Sensor Statuses</strong>.</p>
+<ul>
+  <li><strong>Add:</strong> type the name and click Add. Tick "It's a problem" if sensors with it should appear under Sensors needing attention.</li>
+  <li><strong>Remove:</strong> click Remove. The app tells you how many sensors have that status, then takes it off them (leaving that status blank) and notes it in each sensor's history. A second box then lets you choose a new status for each of those sensors, or retire them. You can also leave them as they are.</li>
+  <li>Statuses marked 🔒 can't be removed because the app sets them itself: Online, Offline, Lab Storage, Needs Repair, Retired, and the ones the workflows manage.</li>
+</ul>
+<p>Non-admins see the same list; ask an admin if a status needs adding or removing.</p>
 
 <h4>Statuses you set</h4>
 <ul>
@@ -332,6 +342,8 @@
   <li><strong>Gaseous Sensor Issue:</strong> one or more gas sensors (CO, NO, NO<sub>2</sub>, O<sub>3</sub>) is malfunctioning.</li>
   <li><strong>SD Card Issue:</strong> the pod's microSD card is faulting.</li>
   <li><strong>Possible Auto Shutoff Firmware Issue:</strong> the pod may be shutting itself off because of a firmware bug.</li>
+  <li><strong>Retired:</strong> the pod is out of service (see Retiring above).</li>
+  <li>Plus any statuses your admins have added.</li>
 </ul>
 
 <h4>Statuses the workflows set</h4>
@@ -394,10 +406,10 @@
 </ul>
 
 <h3>Adding a follow-up to a note</h3>
-<p>Each note has an <strong>Add Note</strong> button that adds a follow-up underneath it, stamped with your name and the date. To tag a contact in a follow-up, save it first, then click ✎ on the follow-up and type @.</p>
+<p>Each note has an <strong>Add Note</strong> button that adds a follow-up underneath it, stamped with your name and the date. Type <strong>@</strong> to tag a contact; the note then shows on their contact page too.</p>
 
 <h3>Deleting a log</h3>
-<p>Click the trash icon. For a single-pod status change or a single-pod move, the confirm box has <strong>"Also revert sensor changes"</strong>, which sets the pod back to how it was. Other logs are deleted without changing the sensors, so to undo a mistaken log that changed several pods, edit it within the hour and set things back instead. Deleted logs go to the Trash Bin for 30 days (see <a href="#trash">Section 15</a>).</p>
+<p>Click the trash icon. If the log changed any sensors, the confirm box lists them under <strong>"Also undo this log's sensor changes"</strong> (ticked), so deleting the log also puts each pod's status, community, type, and location back the way they were, for any number of pods. A pod that's been changed again since that log is listed separately and left alone, so later changes aren't lost. Deleted logs go to the Trash Bin for 30 days (see <a href="#trash">Section 15</a>).</p>
 
 <h3>History filters</h3>
 <p>On a sensor page, the Log History dropdown shows All History, Issues, Sensor Movement, Status Changes, Communications, or General Notes. Community pages filter by All / Communications only / Notes &amp; activity only, and contact pages by All / Communications / Info Updates. Every history has a keyword search box.</p>
@@ -631,6 +643,7 @@
 <h3>Other settings</h3>
 <ul>
   <li><strong>Multi-Factor Authentication</strong>: whether everyone must use an authenticator code. Leave it on.</li>
+  <li><strong>Sensor Statuses</strong>: add or remove sensor statuses (see <a href="#sensors">Section 4</a>).</li>
   <li><strong>Trash Bin</strong>: see <a href="#trash">Section 15</a>.</li>
 </ul>
 
@@ -669,7 +682,7 @@
 
 <h2 id="trash">15. Trash Bin, Archived &amp; Deleted Items</h2>
 
-<p><strong>Deleted notes, communications, service tickets, audits, and collocations</strong> go to the Trash Bin (Settings → <strong>Trash Bin</strong>, admins only). Tickets, audits, and collocations are deleted with the <strong>Delete</strong> button at the bottom of their popup.</p>
+<p><strong>Deleted notes, communications, service tickets, audits, and collocations</strong> go to the Trash Bin (Settings → <strong>Trash Bin</strong>, admins only). Tickets, audits, and collocations are deleted with the <strong>Delete</strong> button at the bottom of their popup; that record's automatic history notes go to the Trash Bin with it (only its own, not those of other tickets, audits, or collocations on the same pods).</p>
 <ul>
   <li><strong>Restore</strong> puts the item back where it came from. Refresh the page afterward to see it in place.</li>
   <li><strong>Purge</strong> deletes it for good.</li>

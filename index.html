@@ -223,6 +223,7 @@
                         <option value="Service at Quant">Service at Quant</option>
                         <option value="Collocation">Collocation</option>
                     </select>
+                    <button type="button" class="btn btn-sm" id="sensor-status-edit-btn" style="display:none" onclick="openStatusListEditor()" title="Add or remove sensor statuses (admins)">✎ Edit status list</button>
                 </div>
                 <div class="table-container">
                     <table id="sensors-table">
@@ -267,10 +268,9 @@
                         <option value="">All Statuses</option>
                         <option value="Scheduled">Scheduled</option>
                         <option value="In Progress">In Progress</option>
+                        <option value="Finished, Analysis Pending">Finished, Analysis Pending</option>
                         <option value="Complete">Complete</option>
                         <option value="Complete, Excel Analysis">Complete, Excel Analysis</option>
-                        <option value="Analysis Pending">Analysis Pending</option>
-                        <option value="Audit Complete">Audit Complete</option>
                     </select>
                 </div>
                 <div id="audit-pipeline" class="audit-pipeline"></div>
@@ -521,6 +521,12 @@
                     <h3 class="settings-section-title">Archived Users</h3>
                     <p class="settings-description">These people can no longer sign in. Everything they entered is still in the app under their name. Click <strong>Reactivate</strong> to give someone access again.</p>
                     <div id="settings-archived-users"></div>
+                </div>
+
+                <div class="settings-section" id="settings-status-list-section" style="display:none">
+                    <h3 class="settings-section-title">Sensor Statuses</h3>
+                    <p class="settings-description">Add or remove the statuses people can choose for a sensor. You can also do this from any status list in the app (look for <strong>✎ Edit status list</strong>).</p>
+                    <button class="btn" onclick="openStatusListEditor()">✎ Edit status list</button>
                 </div>
 
                 <div class="settings-section">
@@ -1549,6 +1555,58 @@
                     <button type="button" class="btn" id="invite-open-email-btn" style="display:none">Open Email</button>
                     <button type="button" class="btn btn-primary" onclick="resetInviteModal()">Invite Another</button>
                 </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Sensor status list editor (admins) -->
+    <div id="modal-status-list" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-status-list-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-status-list-title">Sensor Status List</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-status-list')">&times;</button>
+            </div>
+            <div class="modal-body-pad">
+                <p class="settings-description" style="margin-top:0">The statuses people can choose for a sensor. Changes apply everywhere in the app, for everyone. Statuses marked 🔒 are used by the app itself and can't be removed.</p>
+                <div id="status-list-body"></div>
+                <div class="status-list-add">
+                    <div class="status-list-group">Add a status</div>
+                    <div style="display:flex;gap:8px;flex-wrap:wrap;align-items:center">
+                        <input type="text" id="status-list-new" maxlength="40" placeholder="New status name, e.g. Battery Issue" onkeydown="if(event.key==='Enter'){event.preventDefault();addStatusToList();}">
+                        <button type="button" class="btn btn-primary btn-sm" onclick="addStatusToList()">Add</button>
+                    </div>
+                    <label class="status-list-issue-label"><input type="checkbox" id="status-list-new-issue"> It's a problem: show sensors with this status under <strong>Sensors needing attention</strong></label>
+                    <div id="status-list-error" class="status-list-error" role="alert"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn btn-primary" onclick="closeModal('modal-status-list'); refreshCurrentView();">Done</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- After removing a status: pick a new one for the affected sensors -->
+    <div id="modal-status-reassign" class="modal" role="dialog" aria-modal="true" aria-labelledby="modal-status-reassign-title">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 id="modal-status-reassign-title">Choose New Statuses</h2>
+                <button class="modal-close" aria-label="Close dialog" onclick="closeModal('modal-status-reassign')">&times;</button>
+            </div>
+            <div class="modal-body-pad">
+                <p id="status-reassign-intro" class="settings-description" style="margin-top:0"></p>
+                <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin:10px 0">
+                    <label style="font-size:13px;color:var(--slate-600)">Set all to:</label>
+                    <select id="status-reassign-all"></select>
+                    <button type="button" class="btn btn-sm" onclick="statusReassignApplyAll()">Apply to all</button>
+                </div>
+                <table class="status-reassign-table">
+                    <thead><tr><th>Sensor</th><th>Status now</th><th>New status</th></tr></thead>
+                    <tbody id="status-reassign-rows"></tbody>
+                </table>
+            </div>
+            <div class="modal-footer">
+                <button type="button" class="btn" onclick="closeModal('modal-status-reassign')">Leave them as they are</button>
+                <button type="button" class="btn btn-primary" onclick="saveStatusReassign()">Save</button>
             </div>
         </div>
     </div>

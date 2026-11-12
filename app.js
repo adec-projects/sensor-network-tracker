@@ -200,6 +200,7 @@ function formatLastUpdated(row, fallbackDate) {
 
 // Load all data from Supabase into memory
 async function loadAllData() {
+    await loadStatusList();
     const results = await Promise.allSettled([
         db.getCommunities(),
         db.getCommunityTags(),
@@ -779,6 +780,15 @@ function generateId(prefix) {
 }
 
 function createNote(type, text, tags, additionalInfo) {
+    // tags.autoFor = {kind, id}: which ticket/audit/collocation an automatic note
+    // belongs to, so deleting that record removes only ITS notes (deleteAutoNotes).
+    // Stored inside additionalInfo's JSON; the timeline ignores unknown keys.
+    if (tags?.autoFor && tags.autoFor.id) {
+        let obj = null;
+        if (!additionalInfo) obj = {};
+        else { try { const o = JSON.parse(additionalInfo); if (o && typeof o === 'object' && !Array.isArray(o)) obj = o; } catch (_) {} }
+        if (obj) additionalInfo = JSON.stringify(Object.assign(obj, { autoFor: tags.autoFor }));
+    }
     const note = {
         id: generateId('n'),
         date: nowDatetime(),
@@ -801,12 +811,23 @@ function createNote(type, text, tags, additionalInfo) {
     return note;
 }
 
-async function deleteAutoNotes(noteType, sensorIds) {
-    // Remove auto-generated notes of the given type tagged to any of the given sensors
-    const toRemove = notes.filter(n =>
-        n.type === noteType &&
-        sensorIds.some(sid => (n.taggedSensors || []).includes(sid))
-    );
+function _noteAutoFor(n) {
+    try { const o = JSON.parse(n.additionalInfo || ''); return o && o.autoFor ? o.autoFor : null; } catch (_) { return null; }
+}
+// Remove the automatic notes that belong to ONE deleted ticket/audit/collocation.
+//   kind: 'ticket' | 'audit' | 'collocation'; recordId: its id; others: the other
+//   records of that kind (any status) — used for notes made before autoFor existed.
+async function deleteAutoNotes(noteType, sensorIds, kind, recordId, others) {
+    const sharesPod = n => sensorIds.some(sid => (n.taggedSensors || []).includes(sid));
+    // Older notes carry no link. Only remove those when no OTHER record of this kind
+    // ever involved these pods; otherwise we can't tell whose they are, so keep them.
+    const othersOnPods = (others || []).some(o => o.id !== recordId && (o.sensorIds || []).some(sid => sensorIds.includes(sid)));
+    const toRemove = notes.filter(n => {
+        if (n.type !== noteType || !sharesPod(n)) return false;
+        const af = _noteAutoFor(n);
+        if (af) return af.kind === kind && String(af.id) === String(recordId);
+        return !othersOnPods;
+    });
     toRemove.forEach(n => {
         const idx = notes.indexOf(n);
         if (idx >= 0) notes.splice(idx, 1);
@@ -2083,9 +2104,11 @@ function getStatusBadgeClass(status) {
         'Possible Auto Shutoff Firmware Issue': 'badge-issue-yellow',
         'Lost Connection': 'badge-issue-red',
         'Quant Ticket in Progress': 'badge-service-quant',
+        'Retired': 'badge-retired',
     };
     if (map[status]) return map[status];
     if (status?.startsWith('Audit: ')) return 'badge-auditing';
+    if (customIssueStatuses.has(status)) return 'badge-issue-orange';
     return 'badge-offline';
 }
 
@@ -2106,9 +2129,11 @@ function getStatusDotColor(status) {
         'SD Card Issue': '#eab308',
         'Possible Auto Shutoff Firmware Issue': '#eab308',
         'Lost Connection': '#ef4444',
+        'Retired': '#64748b',
     };
     if (map[status]) return map[status];
     if (status?.startsWith('Audit: ')) return '#8b5cf6';
+    if (customIssueStatuses.has(status)) return '#f97316';
     return '#94a3b8';
 }
 
@@ -2407,7 +2432,19 @@ function inlineSaveSensor(el) {
         }
         s.soaTagId = newVal;
     } else if (field === 'status') {
-        s.status = Array.from(el.selectedOptions).map(o => o.value).filter(v => v !== '');
+        const picked = Array.from(el.selectedOptions).map(o => o.value).filter(v => v !== '');
+        if (s.active === false && !picked.includes(RETIRED_STATUS)) {
+            [...el.options].forEach(o => { o.selected = getStatusArray(s).includes(o.value); });
+            showAlert('Retired sensor', `${escapeHtml(s.id)} is retired. Use <strong>Restore from archive</strong> on its page to bring it back.`);
+            return;
+        }
+        if (picked.includes(RETIRED_STATUS) && !getStatusArray(s).includes(RETIRED_STATUS)) {
+            // Choosing Retired = the Retire Sensor action (not just a label).
+            [...el.options].forEach(o => { o.selected = getStatusArray(s).includes(o.value); });
+            archiveSensor(sensorId);
+            return;
+        }
+        s.status = picked;
         buildSensorSidebar();
     } else {
         s[field] = el.value.trim();
@@ -2929,11 +2966,15 @@ function showSensorView(sensorId) {
                     ${ALL_STATUSES.map(st => {
                         const isActive = currentStatuses.includes(st);
                         const badgeClass = getStatusBadgeClass(st);
-                        return `<span class="status-toggle-option ${isActive ? 'active' : ''}" data-status="${st}" onclick="toggleStatusOption(this); saveSetupSensorStatus('${s.id}')">
-                            <span class="badge ${badgeClass}" style="pointer-events:none">${st}</span>
+                        const click = st === RETIRED_STATUS
+                            ? (isActive ? '' : `archiveSensor('${s.id}')`)
+                            : `toggleStatusOption(this); saveSetupSensorStatus('${s.id}')`;
+                        return `<span class="status-toggle-option ${isActive ? 'active' : ''}" data-status="${escapeHtml(st)}" onclick="${click}">
+                            <span class="badge ${badgeClass}" style="pointer-events:none">${escapeHtml(st)}</span>
                         </span>`;
                     }).join('')}
                 </div>
+                ${statusListEditLink()}
             </div>
             <div class="info-item"><label>Community</label>
                 <select class="inline-edit-select" data-sensor="${s.id}" data-field="community" onchange="inlineSaveSensor(this); showSensorView('${s.id}')">
@@ -4857,7 +4898,9 @@ function logRowCardHTML(r) {
     const chips = sel.size
         ? [...sel].map(x => `<span class="logrow-schip">${escapeHtml(x)}<span class="rm" title="remove" onclick="logRemoveStatus('${r.uid}','${x.replace(/'/g, "\\'")}')">&times;</span></span>`).join('')
         : '<span class="logrow-schip none">no status</span>';
-    const addOpts = '<option value="">+ add status</option>' + ALL_STATUSES.filter(x => !sel.has(x)).map(x => `<option>${escapeHtml(x)}</option>`).join('');
+    const addOpts = '<option value="">+ add status</option>' + ALL_STATUSES.filter(x => !sel.has(x) && x !== RETIRED_STATUS).map(x => `<option>${escapeHtml(x)}</option>`).join('')
+        + (r.editBefore ? '' : `<option value="__retire">${RETIRED_STATUS} (retire this sensor)…</option>`)
+        + (currentUserRole === 'admin' ? '<option value="__edit">✎ Edit status list…</option>' : '');
     const typeOpts = SENSOR_TYPES.map(t => `<option value="${escapeHtml(t)}" ${logRowType(r) === t ? 'selected' : ''}>${escapeHtml(t)}</option>`).join('');
     const fromName = base.community ? getCommunityName(base.community) : 'unassigned';
     const qas = [];
@@ -4899,7 +4942,15 @@ function logSetType(uid, val) { const r = logRow(uid); if (r) { r.type = val; lo
 function logSetLoc(uid, val) { const r = logRow(uid); if (r) { r.location = val; logRenderPreview(); const el = document.getElementById('logsum-' + uid); if (el) el.innerHTML = logSummary(r); } }
 function logRemoveStatus(uid, st) { const r = logRow(uid); if (!r) return; const set = new Set(logRowStatuses(r)); set.delete(st); r.statuses = set; logRenderRows(); logRenderPreview(); }
 function logAddStatus(uid, val) {
-    if (!val) return; const r = logRow(uid); if (!r) return;
+    if (!val) return;
+    if (val === '__edit') { openStatusListEditor(); return; }
+    const r = logRow(uid); if (!r) return;
+    if (val === '__retire') {
+        // Retiring isn't a status you stack with others: it's the Retire Sensor action.
+        // Same popup as the button; on success the pod leaves this log.
+        archiveSensor(r.sensorId, { onDone: () => { logRows = logRows.filter(x => x.uid !== r.uid); logRenderAll(); } });
+        return;
+    }
     const apply = () => { const set = new Set(logRowStatuses(r)); set.add(val); if (val === 'Offline') set.delete('Online'); if (val === 'Online') set.delete('Offline'); r.statuses = set; logRenderRows(); logRenderPreview(); };
     if (AUTO_STATUS_WARNINGS[val]) showConfirm('Auto-applied status', AUTO_STATUS_WARNINGS[val], apply, { confirmText: 'Apply manually', cancelText: 'Cancel' });
     else apply();
@@ -5009,9 +5060,16 @@ function logRenderRows() {
     const btn = document.getElementById('log-applyall-btn');
     if (btn) btn.style.display = logRows.filter(r => r.sensorId).length > 1 ? 'inline-block' : 'none';
 }
+function logFillApplyAllStatus() {
+    const aaS = document.getElementById('log-aa-status'); if (!aaS) return;
+    const cur = aaS.value;
+    aaS.innerHTML = '<option value="">(leave status)</option>' + MANUAL_STATUSES.map(s => `<option>${escapeHtml(s)}</option>`).join('')
+        + (currentUserRole === 'admin' ? '<option value="__edit">✎ Edit status list…</option>' : '');
+    if ([...aaS.options].some(o => o.value === cur)) aaS.value = cur;
+    aaS.onchange = () => { if (aaS.value === '__edit') { aaS.value = ''; openStatusListEditor(); } };
+}
 function logRenderSelects() {
-    const aaS = document.getElementById('log-aa-status');
-    if (aaS) aaS.innerHTML = '<option value="">(leave status)</option>' + MANUAL_STATUSES.map(s => `<option>${escapeHtml(s)}</option>`).join('');
+    logFillApplyAllStatus();
     const aaM = document.getElementById('log-aa-move');
     if (aaM) aaM.innerHTML = '<option value="">(leave community)</option>' + logCommunityOptionsFlat();
 }
@@ -5075,7 +5133,7 @@ function logComposeNote() {
             const base = logRowBase(r);
             logSensors.push({
                 sensorId: r.sensorId,
-                before: { status: base.status, type: base.type, community: base.community, location: base.location },
+                before: { status: base.status, type: base.type, community: base.community, location: base.location, dateInstalled: r.editBefore ? r.editBefore.dateInstalled : (s.dateInstalled || '') },
                 after: { status: [...logRowStatuses(r)], type: logRowType(r), community: (r.moveTo || base.community), location: logRowLoc(r) },
             });
         }
@@ -5595,8 +5653,9 @@ function renderTimeline(containerId, items) {
                 ${attribution}
                 ${tags ? `<div class="timeline-tags">${tags}</div>` : ''}
                 ${isNote && !isProgressNote ? `<div class="timeline-add-note">
-                    <div id="timeline-note-panel-${item.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100)">
-                        <textarea id="timeline-note-input-${item.id}" rows="2" placeholder="Add a follow-up note..." style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+                    <div id="timeline-note-panel-${item.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100);position:relative">
+                        <textarea id="timeline-note-input-${item.id}" rows="2" class="mention-textarea" placeholder="Add a follow-up note... (type @ to tag a contact)" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+                        <div class="mention-dropdown" id="timeline-note-mention-${item.id}" style="left:0;width:100%"></div>
                         <div style="display:flex;gap:8px;margin-top:6px">
                             <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveTimelineFollowUp('${item.id}')">Save Note</button>
                             <button class="btn btn-sm" onclick="event.stopPropagation(); document.getElementById('timeline-note-panel-${item.id}').style.display='none'">Cancel</button>
@@ -5783,6 +5842,8 @@ function toggleTimelineNotePanel(noteId) {
     panel.style.display = panel.style.display === 'none' ? '' : 'none';
     if (panel.style.display !== 'none') {
         const input = document.getElementById('timeline-note-input-' + noteId);
+        const dd = document.getElementById('timeline-note-mention-' + noteId);
+        if (input && dd && !input._mentionInit) { setupMentionAutocomplete(input, dd); input._mentionInit = true; }
         if (input) { input.value = ''; input.focus(); }
     }
 }
@@ -5811,6 +5872,17 @@ async function saveTimelineFollowUp(noteId) {
         await db.updateNote(noteId, { text: note.text });
     } catch (err) {
         handleSaveError(err);
+    }
+
+    // Tag any contacts @mentioned in the follow-up on the parent note, so it shows
+    // on their contact page too (same as editing a follow-up does).
+    const mentioned = parseMentionedContacts(text);
+    if (mentioned.length) {
+        try {
+            const added = await db.addNoteContactTags(noteId, mentioned);
+            if (!note.taggedContacts) note.taggedContacts = [];
+            (added || []).forEach(id => { if (!note.taggedContacts.includes(id)) note.taggedContacts.push(id); });
+        } catch (err) { handleSaveError(err); }
     }
 
     input.value = '';
@@ -5976,6 +6048,12 @@ async function deleteTimelineItem(id, isNote) {
         if (note.additionalInfo) parsed = JSON.parse(note.additionalInfo);
     } catch (_) { /* legacy plain-text or pipe-delimited format — not revertable */ }
 
+    // New-style logs (+ New Log) record every pod's before/after in logSensors, for
+    // any number of pods and any mix of status / move / type / location changes.
+    if (parsed && Array.isArray(parsed.logSensors) && parsed.logSensors.length) {
+        return deleteLogWithRevert(note, parsed.logSensors);
+    }
+
     const revertableTypes = ['Status Change', 'Movement', 'Collocation'];
     const canRevert = parsed && revertableTypes.includes(note.type);
 
@@ -6088,6 +6166,81 @@ async function deleteTimelineItem(id, isNote) {
         }
         refreshCurrentView();
     }, { danger: true, confirmText: 'Delete' });
+}
+
+// Delete a +New Log note and (optionally) put its pods back the way they were.
+// A pod is only reverted if it's still exactly as this log left it; if something
+// changed it since, reverting would wipe out that later change, so it's skipped.
+function deleteLogWithRevert(note, logSensors) {
+    const describe = ls => {
+        const b = ls.before || {}, a = ls.after || {}, parts = [];
+        if (!_statusSetEqual(b.status, a.status)) parts.push(`status back to <strong>${escapeHtml((b.status || []).join(', ') || '(none)')}</strong>`);
+        if ((b.community || '') !== (a.community || '')) parts.push(`back to <strong>${escapeHtml(getCommunityName(b.community) || '(no community)')}</strong>`);
+        if ((b.type || '') !== (a.type || '')) parts.push(`type back to <strong>${escapeHtml(b.type || '(none)')}</strong>`);
+        if ((b.location || '') !== (a.location || '')) parts.push(`location back to <strong>${escapeHtml(b.location || '(blank)')}</strong>`);
+        return parts.join(', ');
+    };
+    const stillAsLeft = ls => {
+        const s = findSensor(ls.sensorId), a = ls.after || {};
+        return s && _statusSetEqual(getStatusArray(s), a.status) && (s.type || '') === (a.type || '')
+            && (s.community || '') === (a.community || '') && (s.location || '') === (a.location || '');
+    };
+    const rows = logSensors.filter(ls => describe(ls));
+    const ok = rows.filter(stillAsLeft), changed = rows.filter(ls => !stillAsLeft(ls));
+    if (!rows.length) {
+        showConfirm('Delete Event', 'Are you sure? Only delete events that were created by accident.', () => _deleteNoteOnly(note.id), { danger: true });
+        return;
+    }
+    const list = ok.map(ls => `<li><strong>${escapeHtml(ls.sensorId)}</strong>: ${describe(ls)}</li>`).join('');
+    const skipped = changed.length
+        ? `<div style="margin-top:8px;font-size:0.85em;color:#8a6d20">Won't be reverted (changed again since this log): ${changed.map(ls => `<strong>${escapeHtml(ls.sensorId)}</strong>`).join(', ')}. Fix those with a new log if needed.</div>` : '';
+    const message = `
+        <p>Are you sure? Only delete events that were created by accident.</p>
+        <div style="margin-top:12px; padding:10px; background:var(--navy-50, #f0f2f5); border-radius:6px;">
+            ${ok.length ? `<label style="display:flex; align-items:center; gap:8px; cursor:pointer; font-size:0.95em;">
+                <input type="checkbox" id="revert-changes-checkbox" checked style="width:16px; height:16px;">
+                <span>Also undo this log's sensor changes</span>
+            </label>
+            <ul style="margin:6px 0 0 22px; font-size:0.85em; color:var(--navy-600, #4a5568);">${list}</ul>` : ''}
+            ${skipped}
+        </div>`;
+    showConfirm('Delete Event', message, async () => {
+        const doRevert = !!document.getElementById('revert-changes-checkbox')?.checked;
+        const deleted = await _deleteNoteOnly(note.id, true);
+        if (!deleted || !doRevert) { refreshCurrentView(); return; }
+        const writes = [];
+        for (const ls of ok) {
+            const s = findSensor(ls.sensorId); if (!s || !stillAsLeft(ls)) continue;
+            const b = ls.before || {}, a = ls.after || {};
+            const moved = (b.community || '') !== (a.community || '');
+            s.status = [...(b.status || [])];
+            s.type = b.type || '';
+            s.location = b.location || '';
+            s.community = b.community || '';
+            if (moved) {
+                revertInstallForMove(ls.sensorId, b.community || '', a.community || '', note.date);
+                if (b.dateInstalled !== undefined) s.dateInstalled = b.dateInstalled;
+                else {
+                    // Older logs didn't record the install date: use the stay we just reopened.
+                    const stay = installHistory.find(r => r.sensorId === s.id && r.communityId === b.community && !r.removedDate);
+                    if (stay) s.dateInstalled = stay.installedDate;
+                }
+            }
+            writes.push(persistSensor(s, { rethrow: true }));
+        }
+        try { await Promise.all(writes); showSuccessToast(`Log deleted · ${writes.length} sensor${writes.length === 1 ? '' : 's'} reverted`); }
+        catch (err) { handleSaveError(err); showAlert('Partly reverted', 'The log was deleted, but one or more sensors did not save. Open them to check.'); }
+        buildSensorSidebar();
+        refreshCurrentView();
+    }, { danger: true, confirmText: 'Delete' });
+}
+async function _deleteNoteOnly(id, quiet) {
+    const prevNotes = notes;
+    notes = notes.filter(n => n.id !== id);
+    try { await db.deleteNote(id); }
+    catch (err) { notes = prevNotes; handleSaveError(err); if (!quiet) refreshCurrentView(); return false; }
+    if (!quiet) refreshCurrentView();
+    return true;
 }
 
 function refreshCurrentView() {
@@ -6659,6 +6812,232 @@ const AUTO_STATUS_WARNINGS = {
 // Combined list preserved for legacy call sites (selects, filters, etc.)
 const ALL_STATUSES = [...MANUAL_STATUSES, ...AUTO_STATUSES];
 
+// ===== EDITABLE STATUS LIST =====
+// Admins can add and remove statuses from wherever a status list appears. The
+// change is stored in app_settings ('sensor_status_list') as
+//   { added: [{ name, issue }], removed: [built-in names] }
+// and applied on load by rebuilding MANUAL_STATUSES / ALL_STATUSES /
+// SENSOR_ISSUE_STATUSES IN PLACE (same arrays, so every caller sees the change).
+//
+// Locked statuses can't be removed: the app's own workflows set them by name
+// (Online/Offline toggling, Send to lab, Flag for repair, tickets, audits,
+// collocations, Retire Sensor).
+const RETIRED_STATUS = 'Retired';
+const STATUS_LIST_SETTING = 'sensor_status_list';
+const DEFAULT_MANUAL_STATUSES = [...MANUAL_STATUSES];
+const DEFAULT_ISSUE_STATUSES = ['PM Sensor Issue', 'Gaseous Sensor Issue', 'SD Card Issue', 'Needs Repair', 'Lost Connection', 'Possible Auto Shutoff Firmware Issue'];
+const LOCKED_STATUSES = new Set(['Online', 'Offline', 'Lab Storage', 'Needs Repair', RETIRED_STATUS, ...AUTO_STATUSES,
+    'Shipped to Quant', 'Shipped from Quant']);
+let statusListConfig = { added: [], removed: [] };
+let customIssueStatuses = new Set();
+
+function applyStatusListConfig(cfg) {
+    const added = (cfg && Array.isArray(cfg.added) ? cfg.added : []).filter(a => a && a.name);
+    const removed = new Set(cfg && Array.isArray(cfg.removed) ? cfg.removed : []);
+    statusListConfig = { added, removed: [...removed] };
+    customIssueStatuses = new Set(added.filter(a => a.issue).map(a => a.name));
+    const manual = DEFAULT_MANUAL_STATUSES.filter(x => !removed.has(x) || LOCKED_STATUSES.has(x))
+        .concat(added.map(a => a.name));
+    MANUAL_STATUSES.splice(0, MANUAL_STATUSES.length, ...manual);
+    ALL_STATUSES.splice(0, ALL_STATUSES.length, ...manual, ...AUTO_STATUSES, RETIRED_STATUS);
+    const issues = DEFAULT_ISSUE_STATUSES.filter(x => !removed.has(x) || LOCKED_STATUSES.has(x)).concat([...customIssueStatuses]);
+    SENSOR_ISSUE_STATUSES.splice(0, SENSOR_ISSUE_STATUSES.length, ...issues);
+}
+async function loadStatusList() {
+    try {
+        const raw = await db.getAppSetting(STATUS_LIST_SETTING);
+        applyStatusListConfig(raw ? JSON.parse(raw) : null);
+    } catch (err) {
+        console.warn('[status list] using the built-in list:', err);
+        applyStatusListConfig(null);
+    }
+    populateSensorStatusFilter();
+    const btn = document.getElementById('sensor-status-edit-btn');
+    if (btn) btn.style.display = currentUserRole === 'admin' ? '' : 'none';
+}
+async function saveStatusListConfig(cfg) {
+    if (!window.SANDBOX_MODE) await db.setAppSetting(STATUS_LIST_SETTING, JSON.stringify(cfg));
+    applyStatusListConfig(cfg);
+}
+// Little "✎ Edit status list" link shown next to status pickers (admins only).
+function statusListEditLink() {
+    return currentUserRole === 'admin'
+        ? `<button type="button" class="status-edit-link" onclick="event.stopPropagation(); openStatusListEditor()">✎ Edit status list</button>` : '';
+}
+
+function openStatusListEditor() {
+    if (currentUserRole !== 'admin') { showAlert('Admins only', 'Only an administrator can change the status list. Ask an admin if a status needs adding or removing.'); return; }
+    renderStatusListEditor();
+    openModal('modal-status-list');
+    setTimeout(() => document.getElementById('status-list-new')?.focus(), 50);
+}
+function renderStatusListEditor() {
+    const el = document.getElementById('status-list-body'); if (!el) return;
+    const count = st => sensors.filter(x => getStatusArray(x).includes(st)).length;
+    const row = (st, locked, why) => {
+        const n = count(st);
+        const issue = SENSOR_ISSUE_STATUSES.includes(st);
+        return `<div class="status-list-row">
+            <span class="badge ${getStatusBadgeClass(st)}">${escapeHtml(st)}</span>
+            ${issue ? '<span class="status-list-flag" title="Shows under Sensors needing attention">issue</span>' : ''}
+            <span class="status-list-count">${n} sensor${n === 1 ? '' : 's'}</span>
+            ${locked ? `<span class="status-list-lock" title="${escapeHtml(why)}">🔒 built in</span>`
+                     : `<button type="button" class="btn btn-sm status-list-remove" onclick="confirmRemoveStatus('${escapeHtml(st).replace(/'/g, "\\&#39;")}')">Remove</button>`}
+        </div>`;
+    };
+    const lockedWhy = 'The app sets this status itself (for example Send to lab, Flag for repair, or Online/Offline switching), so it can\'t be removed.';
+    el.innerHTML = `
+        <div class="status-list-group">Statuses you set</div>
+        ${MANUAL_STATUSES.map(st => row(st, LOCKED_STATUSES.has(st), lockedWhy)).join('')}
+        <div class="status-list-group">Set by workflows <span>(tickets, audits, collocations)</span></div>
+        ${AUTO_STATUSES.map(st => row(st, true, 'Set and cleared automatically by service tickets, audits, or collocations.')).join('')}
+        <div class="status-list-group">Retired</div>
+        ${row(RETIRED_STATUS, true, 'Set by Retire Sensor and cleared by Restore. Choosing it in a status list opens the Retire Sensor popup.')}
+        <p class="status-list-hint">Choosing <strong>Retired</strong> for a sensor works exactly like its <strong>Retire Sensor</strong> button: the sensor moves to the Retired Quants tab and its history is kept. <strong>Restore from archive</strong> brings it back.</p>`;
+    const err = document.getElementById('status-list-error'); if (err) err.textContent = '';
+}
+async function addStatusToList() {
+    const input = document.getElementById('status-list-new');
+    const issueBox = document.getElementById('status-list-new-issue');
+    const err = document.getElementById('status-list-error');
+    const name = (input.value || '').trim().replace(/\s+/g, ' ');
+    err.textContent = '';
+    if (!name) { err.textContent = 'Type a name for the new status.'; return; }
+    if (name.length > 40) { err.textContent = 'Keep status names to 40 characters or fewer.'; return; }
+    if (/^audit:/i.test(name)) { err.textContent = 'Names starting with "Audit:" are reserved for the audit workflow.'; return; }
+    const lower = name.toLowerCase();
+    const cfg = { added: statusListConfig.added.slice(), removed: statusListConfig.removed.slice() };
+    const builtinRemoved = cfg.removed.find(x => x.toLowerCase() === lower);
+    if (builtinRemoved) {
+        cfg.removed = cfg.removed.filter(x => x !== builtinRemoved);     // bring a removed built-in back
+    } else {
+        const all = [...ALL_STATUSES, ...LOCKED_STATUSES];
+        if (all.some(x => x.toLowerCase() === lower)) { err.textContent = `"${name}" is already on the list.`; return; }
+        cfg.added.push({ name, issue: !!issueBox.checked });
+    }
+    try { await saveStatusListConfig(cfg); }
+    catch (e) { err.textContent = 'Could not save: ' + e.message; return; }
+    input.value = ''; issueBox.checked = false;
+    renderStatusListEditor();
+    refreshOpenStatusPickers();
+    showSuccessToast(`"${builtinRemoved || name}" added to the status list`);
+}
+
+// Removing a status: explain first, then take it off the list and off every
+// sensor that has it (leaving that status blank), then offer to pick a new
+// status for each of those sensors.
+function confirmRemoveStatus(name) {
+    if (LOCKED_STATUSES.has(name)) return;
+    const affected = sensors.filter(x => getStatusArray(x).includes(name));
+    const n = affected.length;
+    const msg = n
+        ? `<p>Remove <strong>${escapeHtml(name)}</strong> from the status list?</p>
+           <p style="margin-top:10px"><strong>${n} sensor${n === 1 ? ' has' : 's have'} this status:</strong> ${affected.slice(0, 12).map(x => escapeHtml(x.id)).join(', ')}${n > 12 ? ', …' : ''}.
+           It will be taken off ${n === 1 ? 'that sensor' : 'those sensors'}, leaving that status blank. Their other statuses stay as they are, and the change is noted in each sensor's history.</p>
+           <p style="margin-top:10px">Next, you can choose a new status for each of them (or retire them).</p>`
+        : `<p>Remove <strong>${escapeHtml(name)}</strong> from the status list? No sensors have it right now.</p>`;
+    showConfirm('Remove Status', msg, async () => {
+        const cfg = { added: statusListConfig.added.filter(a => a.name !== name), removed: statusListConfig.removed.slice() };
+        if (DEFAULT_MANUAL_STATUSES.includes(name) && !cfg.removed.includes(name)) cfg.removed.push(name);
+        try { await saveStatusListConfig(cfg); }
+        catch (e) { showAlert('Error', 'Could not save the status list: ' + escapeHtml(e.message)); return; }
+        const writes = [];
+        const changed = [];
+        for (const x of affected) {
+            const before = getStatusArray(x);
+            x.status = before.filter(st => st !== name);
+            changed.push({ id: x.id, before });
+            writes.push(persistSensor(x, { rethrow: true }));
+            if (!setupMode) createNote('Status Change', `${x.id}: the status "${name}" was removed from the status list, so it was taken off this sensor. Status changed from "${before.join(', ') || '(none)'}" to "${x.status.join(', ') || '(none)'}".`,
+                { sensors: [x.id], communities: x.community ? [x.community] : [] });
+        }
+        try { await Promise.all(writes); } catch (e) { handleSaveError(e); }
+        buildSensorSidebar();
+        renderStatusListEditor();
+        refreshOpenStatusPickers();
+        refreshCurrentView();
+        showSuccessToast(`"${name}" removed`);
+        if (affected.length) setTimeout(() => openStatusReassign(name, affected.map(x => x.id)), 150);
+    }, { danger: true, confirmText: 'Remove status' });
+}
+
+function _reassignOptions(includeLeave) {
+    const opt = st => `<option value="${escapeHtml(st)}">${escapeHtml(st)}</option>`;
+    return (includeLeave ? '<option value="">Leave as is</option>' : '<option value="">(choose)</option>')
+        + `<optgroup label="Add a status">${MANUAL_STATUSES.map(opt).join('')}</optgroup>`
+        + `<optgroup label="Or"><option value="__retire">Retire this sensor</option></optgroup>`;
+}
+function openStatusReassign(removedName, sensorIds) {
+    const list = sensorIds.map(findSensor).filter(Boolean);
+    if (!list.length) return;
+    document.getElementById('status-reassign-intro').innerHTML =
+        `<strong>${escapeHtml(removedName)}</strong> was taken off ${list.length === 1 ? 'this sensor' : `these ${list.length} sensors`}. Choose a new status for any that need one, or leave them as they are. You can also change statuses later with <strong>+ New Log</strong>.`;
+    document.getElementById('status-reassign-all').innerHTML = _reassignOptions(false);
+    document.getElementById('status-reassign-rows').innerHTML = list.map(x => `
+        <tr data-sensor="${escapeHtml(x.id)}">
+            <td><strong>${escapeHtml(x.id)}</strong><div class="status-reassign-meta">${escapeHtml(getCommunityName(x.community) || 'no community')}</div></td>
+            <td>${getStatusArray(x).map(st => `<span class="badge ${getStatusBadgeClass(st)}">${escapeHtml(st)}</span>`).join(' ') || '<span class="status-reassign-meta">no status</span>'}</td>
+            <td><select class="status-reassign-pick">${_reassignOptions(true)}</select></td>
+        </tr>`).join('');
+    openModal('modal-status-reassign');
+}
+function statusReassignApplyAll() {
+    const v = document.getElementById('status-reassign-all').value;
+    document.querySelectorAll('#status-reassign-rows .status-reassign-pick').forEach(sel => { sel.value = v; });
+}
+async function saveStatusReassign() {
+    const rows = [...document.querySelectorAll('#status-reassign-rows tr')];
+    const toRetire = [];
+    const writes = [];
+    for (const tr of rows) {
+        const v = tr.querySelector('.status-reassign-pick').value;
+        const x = findSensor(tr.dataset.sensor);
+        if (!v || !x) continue;
+        if (v === '__retire') { toRetire.push(x.id); continue; }
+        const before = getStatusArray(x);
+        if (before.includes(v)) continue;
+        let next = [...before, v];
+        if (v === 'Online') next = next.filter(st => st !== 'Offline');
+        if (v === 'Offline') next = next.filter(st => st !== 'Online');
+        x.status = next;
+        writes.push(persistSensor(x, { rethrow: true }));
+        if (!setupMode) createNote('Status Change', `${x.id} status changed from "${before.join(', ') || '(none)'}" to "${next.join(', ')}".`,
+            { sensors: [x.id], communities: x.community ? [x.community] : [] }, JSON.stringify({ beforeStatus: before, afterStatus: next }));
+    }
+    try { await Promise.all(writes); } catch (e) { handleSaveError(e); }
+    for (const id of toRetire) {
+        try { await retireSensorNow(id, 'Retired while removing a status from the status list.', { quiet: true }); }
+        catch (e) { handleSaveError(e); }
+    }
+    closeModal('modal-status-reassign');
+    buildSensorSidebar();
+    refreshCurrentView();
+    const parts = [];
+    if (writes.length) parts.push(`${writes.length} updated`);
+    if (toRetire.length) parts.push(`${toRetire.length} retired`);
+    showSuccessToast(parts.length ? 'Statuses saved · ' + parts.join(' · ') : 'No changes');
+}
+
+// After the list changes, redraw any status picker that's open right now so it
+// shows the new list (keeping what was already selected).
+function refreshOpenStatusPickers() {
+    const isOpen = id => document.getElementById(id)?.classList.contains('open');
+    [['sensor-status-input', 'modal-add-sensor'], ['move-status-list', 'modal-move-sensor'], ['close-ticket-status', 'modal-close-ticket']].forEach(([cid, mid]) => {
+        if (isOpen(mid) && document.getElementById(cid)) renderStatusToggleList(cid, getSelectedStatuses(cid));
+    });
+    if (isOpen('modal-add-note') && typeof logRenderRows === 'function') { logRenderRows(); logFillApplyAllStatus(); }
+    populateSensorStatusFilter();
+}
+// The All Sensors status filter is built from the current list too.
+function populateSensorStatusFilter() {
+    const f = document.getElementById('sensor-status-filter'); if (!f) return;
+    const cur = f.value;
+    const opts = ['<option value="">All Statuses</option>', '<option value="_issues">All Issues</option>']
+        .concat([...MANUAL_STATUSES, ...AUTO_STATUSES].map(st => `<option value="${escapeHtml(st)}">${escapeHtml(st)}</option>`));
+    f.innerHTML = opts.join('');
+    if ([...f.options].some(o => o.value === cur)) f.value = cur;
+}
+
 function renderStatusToggleList(containerId, selectedStatuses) {
     const container = document.getElementById(containerId);
     const renderGroup = (list) => list.map(st => {
@@ -6678,6 +7057,7 @@ function renderStatusToggleList(containerId, selectedStatuses) {
             <span class="status-toggle-group-hint">managed by collocation, audit, and service ticket workflows</span>
         </div>
         <div class="status-toggle-list">${renderGroup(AUTO_STATUSES)}</div>
+        ${statusListEditLink()}
     `;
 }
 
@@ -7219,6 +7599,8 @@ async function renderAllowedUsers(currentEmail) {
 
     // Show/hide admin-only controls
     document.getElementById('settings-add-user-row').style.display = isAdmin ? '' : 'none';
+    const statusSec = document.getElementById('settings-status-list-section');
+    if (statusSec) statusSec.style.display = isAdmin ? '' : 'none';
 
     const active = (data || []).filter(r => r.status === 'active' && signedUpEmails.has(r.email.toLowerCase()));
     const pending = (data || []).filter(r => r.status === 'active' && !signedUpEmails.has(r.email.toLowerCase()));
@@ -8277,6 +8659,7 @@ async function saveGlobalCollocation(e) {
     createNote('Collocation', noteText, {
         sensors: taggedSensors,
         communities: [communityId],
+        autoFor: { kind: 'collocation', id: newColloc?.id },
     }, structuredInfo);
 
     // Add Collocation status to each tagged sensor
@@ -8346,7 +8729,40 @@ function updatePinButton(communityId) {
 // Archive (soft-retire) a sensor. Preserves all history; sensor drops off
 // the active list but can be restored. Distinct from delete (which admins
 // can still do, and which soft-deletes into the trash bin).
-async function archiveSensor(sensorId) {
+// Retire a sensor right away (used by the Retire popup and by the status-list
+// tools). Sets the "Retired" status, archives it, closes its install stays, and
+// logs it on the sensor's history (with what its status was before).
+async function retireSensorNow(sensorId, reason, opts) {
+    const s = findSensor(sensorId);
+    if (!s) return;
+    const before = getStatusArray(s).filter(st => st !== RETIRED_STATUS);
+    await db.archiveSensor(sensorId);
+    s.active = false;
+    s.archived_at = new Date().toISOString();
+    s.status = [RETIRED_STATUS];
+    // A retired pod is no longer installed anywhere: close its open stays
+    // so it doesn't linger as "currently installed" in a community.
+    closeOpenStays(sensorId);
+    // Move from active → archived pool.
+    const idx = sensors.indexOf(s);
+    if (idx >= 0) sensors.splice(idx, 1);
+    if (archivedSensors === null) archivedSensors = [];
+    if (!archivedSensors.includes(s)) archivedSensors.unshift(s);
+    // Log it as a Status Change note on the sensor's history.
+    const summary = `${s.id} retired (status was "${before.join(', ') || 'none'}").`;
+    createNote('Status Change', reason ? `${summary} ${reason}` : summary, {
+        sensors: [sensorId],
+        communities: s.community ? [s.community] : [],
+        contacts: parseMentionedContacts(reason || ''),
+    }, JSON.stringify({ beforeStatus: before, afterStatus: [RETIRED_STATUS] }));
+    buildSensorSidebar();
+    if (!(opts && opts.quiet)) {
+        if (typeof renderSensors === 'function') renderSensors();
+        showSuccessToast('Sensor retired');
+    }
+}
+
+async function archiveSensor(sensorId, opts) {
     const s = findSensor(sensorId);
     if (!s) return;
 
@@ -8361,7 +8777,7 @@ async function archiveSensor(sensorId) {
             Retire <strong>${escapeHtml(s.id)}</strong>?
         </p>
         <p style="margin:0 0 12px;font-size:13px;color:var(--slate-500)">
-            Removes it from the active list but preserves its full history. You can restore it later. Use this when a sensor is decommissioned or permanently retired.
+            Its status becomes <strong>Retired</strong> and it moves to the Retired Quants tab. Its full history is kept, and you can restore it later. Use this when a sensor is decommissioned or permanently retired.
         </p>
         <label style="font-size:11px;font-weight:600;color:var(--slate-400);text-transform:uppercase;letter-spacing:0.4px">Reason for retiring (optional)</label>
         <div style="position:relative;margin-top:4px">
@@ -8378,31 +8794,9 @@ async function archiveSensor(sensorId) {
     _confirmCallback = async () => {
         const reason = (document.getElementById('archive-sensor-reason')?.value || '').trim();
         try {
-            await db.archiveSensor(sensorId);
-            s.active = false;
-            s.archived_at = new Date().toISOString();
-            // A retired pod is no longer installed anywhere: close its open stays
-            // so it doesn't linger as "currently installed" in a community.
-            closeOpenStays(sensorId);
-            // Move from active → archived pool.
-            const idx = sensors.indexOf(s);
-            if (idx >= 0) sensors.splice(idx, 1);
-            if (archivedSensors === null) archivedSensors = [];
-            if (!archivedSensors.includes(s)) archivedSensors.unshift(s);
-            // Log the archive as a Status Change note tagged to the sensor
-            // so it shows up on the sensor's History timeline. Body = the
-            // reason if given, otherwise just the "archived" summary.
-            const summary = `${s.id} retired.`;
-            const noteText = reason ? `${summary} ${reason}` : summary;
-            createNote('Status Change', noteText, {
-                sensors: [sensorId],
-                communities: s.community ? [s.community] : [],
-                contacts: parseMentionedContacts(reason),
-            });
-            buildSensorSidebar();
-            if (typeof renderSensors === 'function') renderSensors();
-            showSensorView(sensorId);
-            showSuccessToast('Sensor retired');
+            await retireSensorNow(sensorId, reason);
+            if (opts && opts.onDone) opts.onDone();
+            else showSensorView(sensorId);
         } catch (err) { handleSaveError(err); }
     };
     _confirmDismissCallback = null;
@@ -8427,6 +8821,10 @@ async function restoreSensorFromArchive(sensorId) {
         s.active = true;
         s.archived_at = null;
         s.archived_by = null;
+        const left = getStatusArray(s).filter(st => st !== RETIRED_STATUS);
+        s.status = left.length ? left : ['Offline'];   // db.restoreSensor saved the same
+        createNote('Status Change', `${s.id} restored from retired. Status set to "${s.status.join(', ')}"; update it with + New Log if needed.`,
+            { sensors: [s.id], communities: s.community ? [s.community] : [] });
         // Move from archived → active pool.
         if (archivedSensors) {
             const idx = archivedSensors.indexOf(s);
@@ -9209,7 +9607,7 @@ function advanceTicketStatus(ticketId) {
     if (didUpdate) buildSensorSidebar();
 
     rebuildSensorTicketMap();
-    createNote('Service', `Service ticket advanced: "${oldStatus}" → "${newStatus}".`, { sensors: ticketIds });
+    createNote('Service', `Service ticket advanced: "${oldStatus}" → "${newStatus}".`, { sensors: ticketIds, autoFor: { kind: 'ticket', id: ticket.id } });
     openTicketDetail(ticketId);
     updateSidebarServiceCount();
     if (document.getElementById('view-service')?.classList.contains('active')) renderServiceView();
@@ -9244,7 +9642,7 @@ function revertTicketStatus(ticketId) {
     }
     if (didUpdate) buildSensorSidebar();
 
-    createNote('Service', `Service ticket reverted: "${oldStatus}" \u2192 "${newStatus}".`, { sensors: ticketIds });
+    createNote('Service', `Service ticket reverted: "${oldStatus}" \u2192 "${newStatus}".`, { sensors: ticketIds, autoFor: { kind: 'ticket', id: ticket.id } });
     rebuildSensorTicketMap();
     openTicketDetail(ticketId);
     updateSidebarServiceCount();
@@ -9258,14 +9656,14 @@ async function deleteServiceTicket(ticketId) {
     const ticketIds = ticketSensorIds(ticket);
     const sensorLabel = ticketIds.length === 0 ? '—' : ticketIds.join(', ');
 
-    showConfirm('Delete Service Ticket', `Delete this service ticket permanently?<br><br><strong>Sensor${ticketIds.length > 1 ? 's' : ''}:</strong> ${escapeHtml(sensorLabel)}<br><strong>Status:</strong> ${ticket.status}<br><strong>Type:</strong> ${formatTicketType(ticket.ticketType)}<br><br>This will delete all ticket data and history. This cannot be undone.`, async () => {
+    showConfirm('Delete Service Ticket', `Delete this service ticket?<br><br><strong>Sensor${ticketIds.length > 1 ? 's' : ''}:</strong> ${escapeHtml(sensorLabel)}<br><strong>Status:</strong> ${ticket.status}<br><strong>Type:</strong> ${formatTicketType(ticket.ticketType)}<br><br>It moves to the <strong>Trash Bin</strong>, where an admin can restore it for 30 days. Its automatic history notes go to the Trash Bin too.`, async () => {
         // Remove from in-memory array
         const idx = serviceTickets.indexOf(ticket);
         if (idx >= 0) serviceTickets.splice(idx, 1);
         rebuildSensorTicketMap();
 
         // Delete auto-generated service notes
-        await deleteAutoNotes('Service', ticketIds);
+        await deleteAutoNotes('Service', ticketIds, 'ticket', ticket.id, serviceTickets.map(t => ({ id: t.id, sensorIds: ticketSensorIds(t) })));
 
         // Soft delete — recoverable from the trash bin.
         try {
@@ -9341,9 +9739,11 @@ async function saveNewTicket(event) {
         progressNotes: [], workCompleted: '', createdBy: getCurrentUserName(), createdById: currentUserId,
         createdAt: new Date().toISOString(), closedAt: null,
     };
+    let savedTicket = null;
     try {
         const saved = await db.insertServiceTicket(ticket);
         serviceTickets.unshift(saved);
+        savedTicket = saved;
     } catch (err) {
         // Don't fabricate a phantom local ticket on failure: abort, surface the
         // error, and leave the modal open so the user can retry.
@@ -9366,7 +9766,7 @@ async function saveNewTicket(event) {
 
     rebuildSensorTicketMap();
     const desc = sensorIds.length > 1 ? `${description} (sensors: ${sensorIds.join(', ')})` : description;
-    createNote('Service', `Service ticket opened (${actions.join(' + ')}): ${desc}`, { sensors: sensorIds });
+    createNote('Service', `Service ticket opened (${actions.join(' + ')}): ${desc}`, { sensors: sensorIds, autoFor: { kind: 'ticket', id: savedTicket?.id } });
     closeModal('modal-new-service-ticket');
     updateSidebarServiceCount();
     if (document.getElementById('view-service')?.classList.contains('active')) renderServiceView();
@@ -9423,7 +9823,7 @@ function confirmCloseTicket() {
     }
     buildSensorSidebar();
 
-    createNote('Service', `Service ticket closed.${workCompleted ? ' Work completed: ' + workCompleted : ''}`, { sensors: ticketIds });
+    createNote('Service', `Service ticket closed.${workCompleted ? ' Work completed: ' + workCompleted : ''}`, { sensors: ticketIds, autoFor: { kind: 'ticket', id: ticket.id } });
     closeModal('modal-close-ticket');
     updateSidebarServiceCount();
     renderServiceView();
@@ -9556,7 +9956,8 @@ async function saveNewAudit(event) {
         const audit = { auditPodId, communityPodId, communityId, status: 'Scheduled', startDate, endDate,
             conductedBy, progressNotes: auditNotes ? [{ text: auditNotes, by: getCurrentUserName(), at: nowDatetime() }] : [], analysisResults: {},
             createdBy: getCurrentUserName(), createdById: currentUserId };
-        try { const saved = await db.insertAudit(audit); audits.unshift(saved); }
+        let savedAudit = null;
+        try { const saved = await db.insertAudit(audit); audits.unshift(saved); savedAudit = saved; }
         catch (err) {
             // Don't fabricate a phantom local audit on failure: abort and surface
             // the error so it isn't shown as "scheduled" when it never saved.
@@ -9566,7 +9967,7 @@ async function saveNewAudit(event) {
 
         const communityName = COMMUNITIES.find(c => c.id === communityId)?.name || communityId;
         createNote('Audit', `Audit scheduled: ${auditPodId} auditing ${communityPodId} at ${communityName} (${startDate} to ${endDate}).`, {
-            sensors: [auditPodId, communityPodId], communities: [communityId] });
+            sensors: [auditPodId, communityPodId], communities: [communityId], autoFor: { kind: 'audit', id: savedAudit?.id } });
         closeModal('modal-new-audit'); showSuccessToast('Audit scheduled');
         updateSidebarAuditCount();
         if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
@@ -10034,7 +10435,7 @@ function advanceAuditStatus(auditId) {
         // to find later and doesn't bloat the advance log.
         let noteText = `Audit advanced: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`;
         if (overrides.length > 0) noteText += ` Audit pod ${audit.auditPodId} set to "${overrides.join(', ')}".`;
-        createNote('Audit', noteText, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+        createNote('Audit', noteText, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId], autoFor: { kind: 'audit', id: audit.id } });
 
         if (podStatusNote) {
             const mentions = parseMentionedContacts(podStatusNote);
@@ -10195,7 +10596,7 @@ function revertAuditStatus(auditId) {
     buildSensorSidebar();
 
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
-    createNote('Audit', `Audit reverted: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+    createNote('Audit', `Audit reverted: "${oldStatus}" \u2192 "${newStatus}" for ${communityName}.`, { sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId], autoFor: { kind: 'audit', id: audit.id } });
     openAuditDetail(auditId);
     updateSidebarAuditCount();
     if (document.getElementById('view-audits')?.classList.contains('active')) renderAuditsView();
@@ -10543,13 +10944,13 @@ async function deleteAudit(auditId) {
     if (!audit) return;
     const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || audit.communityId;
 
-    showConfirm('Delete Audit', `Delete this audit permanently?<br><br><strong>Community:</strong> ${communityName}<br><strong>Pods:</strong> ${audit.auditPodId} &harr; ${audit.communityPodId}<br><strong>Dates:</strong> ${audit.startDate || '?'} to ${audit.endDate || '?'}<br><br>This will delete all audit data, analysis results, and associated notes. This cannot be undone.`, async () => {
+    showConfirm('Delete Audit', `Delete this audit?<br><br><strong>Community:</strong> ${escapeHtml(communityName)}<br><strong>Pods:</strong> ${audit.auditPodId} &harr; ${audit.communityPodId}<br><strong>Dates:</strong> ${audit.startDate || '?'} to ${audit.endDate || '?'}<br><br>It moves to the <strong>Trash Bin</strong>, where an admin can restore it for 30 days. Its automatic history notes go to the Trash Bin too.`, async () => {
         // Remove from in-memory array
         const idx = audits.indexOf(audit);
         if (idx >= 0) audits.splice(idx, 1);
 
         // Delete auto-generated audit notes
-        await deleteAutoNotes('Audit', [audit.auditPodId, audit.communityPodId]);
+        await deleteAutoNotes('Audit', [audit.auditPodId, audit.communityPodId], 'audit', audit.id, audits.map(a => ({ id: a.id, sensorIds: [a.auditPodId, a.communityPodId] })));
 
         // Soft delete — recoverable from the trash bin.
         try {
@@ -11063,10 +11464,10 @@ function _finalizeAnalysis(auditId, audit, parsed, analysisName, body, collected
 
         const communityName = COMMUNITIES.find(c => c.id === audit.communityId)?.name || '';
         const dqiNote = allPass
-            ? `Audit analysis complete: all parameters pass DQI. "${oldStatus}" \u2192 "Audit Complete" for ${communityName}.`
+            ? `Audit analysis complete: all parameters pass DQI. "${oldStatus}" \u2192 "Complete" for ${communityName}.`
             : `Audit analysis uploaded for ${communityName}: one or more parameters fail DQI. Review required.`;
         createNote('Audit', dqiNote, {
-            sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId] });
+            sensors: [audit.auditPodId, audit.communityPodId], communities: [audit.communityId], autoFor: { kind: 'audit', id: audit.id } });
         updateSidebarAuditCount();
     }
 
@@ -13173,6 +13574,7 @@ function advanceCollocationStatus(collocId) {
     createNote('Collocation', `Collocation at ${getCommunityName(colloc.locationId)} advanced: "${oldStatus}" → "${newStatus}".`, {
         sensors: colloc.sensorIds,
         communities: [colloc.locationId],
+        autoFor: { kind: 'collocation', id: colloc.id },
     });
 
     openCollocationDetail(collocId);
@@ -13208,6 +13610,7 @@ function revertCollocationStatus(collocId) {
     createNote('Collocation', `Collocation at ${getCommunityName(colloc.locationId)} reverted: "${oldStatus}" → "${newStatus}".`, {
         sensors: colloc.sensorIds,
         communities: [colloc.locationId],
+        autoFor: { kind: 'collocation', id: colloc.id },
     });
 
     openCollocationDetail(collocId);
@@ -13220,12 +13623,12 @@ async function deleteCollocation(collocId) {
     if (!colloc) return;
     const communityName = getCommunityName(colloc.locationId);
 
-    showConfirm('Delete Collocation', `Delete this collocation at ${communityName} permanently?<br><br>This will delete all collocation data, analysis results, and associated notes. This cannot be undone.`, async () => {
+    showConfirm('Delete Collocation', `Delete this collocation at ${escapeHtml(communityName)}?<br><br>It moves to the <strong>Trash Bin</strong>, where an admin can restore it for 30 days. Its automatic history notes go to the Trash Bin too.`, async () => {
         const idx = collocations.indexOf(colloc);
         if (idx >= 0) collocations.splice(idx, 1);
 
         // Delete auto-generated collocation notes
-        await deleteAutoNotes('Collocation', colloc.sensorIds);
+        await deleteAutoNotes('Collocation', colloc.sensorIds, 'collocation', colloc.id, collocations.map(c => ({ id: c.id, sensorIds: c.sensorIds || [] })));
 
         // Remove Collocation status from sensors
         colloc.sensorIds.forEach(sId => {
