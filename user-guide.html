@@ -317,13 +317,13 @@
 
 <h3>Retiring and restoring a sensor</h3>
 <p>On a sensor's page, click <strong>Retire Sensor</strong>. You can add an optional reason (type @ to tag a contact); it's logged in the sensor's history along with what its status was. The pod's status becomes <strong>Retired</strong>, it moves to the Retired Quants tab, and its current install in the community is closed. It isn't deleted.</p>
-<p>Choosing <strong>Retired</strong> in a status list (for example in a + New Log row) does exactly the same thing: it opens the same Retire popup. To bring a sensor back, open it from the Retired Quants tab and click <strong>Restore from archive</strong>. Its status goes back to Offline; update it with + New Log.</p>
+<p>Choosing <strong>Retired</strong> in a status list (in a + New Log row it's in the <strong>Other…</strong> menu) does exactly the same thing: it opens the same Retire popup. To bring a sensor back, open it from the Retired Quants tab and click <strong>Restore from archive</strong>. Its status goes back to Offline; update it with + New Log.</p>
 
 <h3>Sensor statuses</h3>
-<p>A sensor can carry several statuses at once (for example "Online" plus "SD Card Issue"). Change a sensor's status with <strong>+ New Log</strong>: add the sensor, then use its <strong>Status</strong> row (see <a href="#notes">Section 6</a>). Service tickets, audits, and collocations also update statuses automatically. Admins can edit statuses directly in Setup Mode.</p>
+<p>A sensor can carry several statuses at once (for example "Online" plus "SD Card Issue"). Change a sensor's status with <strong>+ New Log</strong>: add the sensor, then click its status buttons and say why in the note (see <a href="#notes">Section 6</a>). Service tickets, audits, and collocations also update statuses automatically. Admins can edit statuses directly in Setup Mode.</p>
 
 <h4>Changing the status list (admins)</h4>
-<p>Admins can add and remove statuses. Click <strong>✎ Edit status list</strong> wherever a status list appears (in New Log rows choose "✎ Edit status list…"), on the All Sensors page, or in Settings under <strong>Sensor Statuses</strong>.</p>
+<p>Admins can add and remove statuses. Click <strong>✎ Edit status list</strong> wherever a status list appears (in a New Log row it's in the <strong>Other…</strong> menu), on the All Sensors page, or in Settings under <strong>Sensor Statuses</strong>.</p>
 <ul>
   <li><strong>Add:</strong> type the name and click Add. Tick "It's a problem" if sensors with it should appear under Sensors needing attention.</li>
   <li><strong>Remove:</strong> click Remove. The app tells you how many sensors have that status, then takes it off them (leaving that status blank) and notes it in each sensor's history. A second box then lets you choose a new status for each of those sensors, or retire them. You can also leave them as they are.</li>
@@ -357,8 +357,8 @@
 </ul>
 
 <h3>Moving or swapping a sensor</h3>
-<p>To move a pod, open <strong>+ New Log</strong>, add the pod, and choose the new community in its <strong>Move to</strong> row. The note text and install date are filled in for you. Shortcut buttons on the row do common moves in one click: <strong>Bring online</strong>, <strong>Send to lab</strong>, <strong>Flag for repair</strong>.</p>
-<p>To <strong>swap</strong> pods at a site, click <strong>↔ Replacing this pod? Add the incoming replacement</strong> on the outgoing pod's row. The outgoing pod is set to Offline + Lab Storage and sent to the lab, and a "Replacement sensor" row appears for you to pick the incoming pod. One log records both moves, in the history of both pods and both communities.</p>
+<p>To move a pod, open <strong>+ New Log</strong>, add the pod, and choose the new community in its <strong>Move to</strong> row. The note text and install date are filled in for you. The <strong>Shortcuts</strong> at the top of the row do common changes in one click: <strong>Bring online</strong>, <strong>Send to lab</strong> (Offline + Lab Storage, moved to the lab), and <strong>Flag for repair</strong>.</p>
+<p>To <strong>swap</strong> pods at a site, open <strong>More changes</strong> on the outgoing pod's row and click <strong>↔ Replacing this pod? Add the incoming replacement</strong>. The outgoing pod is set to Offline + Lab Storage and sent to the lab, and a "Replacement sensor" row appears for you to pick the incoming pod. One log records both moves, in the history of both pods and both communities.</p>
 
 <h2 id="communities">5. Communities</h2>
 
@@ -387,15 +387,29 @@
 
 <h2 id="notes">6. Logging &amp; History</h2>
 
-<p>Everything that happens to a sensor or community is recorded with <strong>+ New Log</strong>, which is on the dashboard, the sensors list, and every sensor, community, and contact page. It has two steps and a live preview:</p>
+<p>Everything that happens to a sensor or community is recorded with <strong>+ New Log</strong>, which is on the dashboard, the sensors list, and every sensor, community, and contact page. It's the one place to change a sensor's status or community, so the change and the reason are always saved together.</p>
+
+<div class="callout tip">
+  <div class="callout-label">Quickest way to change a status</div>
+  Open the sensor's page and click <strong>+ New Log</strong>. The pod is already added and open. Click the status buttons to turn statuses on or off, write a short note saying why, and click <strong>Save Log</strong>.
+</div>
+
 <ol>
-  <li><strong>Which sensors are involved?</strong> Type a sensor ID, or a community name to add all its pods. Each pod becomes a row. Open a row to change its <strong>Status</strong>, <strong>Move to</strong> another community, or change its <strong>Type</strong> or <strong>Location</strong>, or use the shortcut buttons. With two or more pods, <strong>Apply to all</strong> sets one status or move on every pod at once. Leave this step empty for a note that isn't about a sensor.</li>
-  <li><strong>Add additional details.</strong> If it was a call, email, or site visit, pick <strong>Call</strong>, <strong>Email</strong>, or <strong>Site Visit</strong>. Set the date, write your note (type <strong>@</strong> to tag contacts), and tag any other communities.</li>
+  <li><strong>Which sensors are involved?</strong> Search a sensor ID, or a community name to add all its pods. Each pod becomes a row; click a row to open it (with just one pod, it opens by itself).
+    <ul>
+      <li><strong>Status:</strong> every status is a button. Click to turn it on or off; a pod can have more than one. Statuses being added show with a <strong>+</strong> and a gold outline, and ones being removed are crossed out. Online and Offline switch each other off. Less common statuses, Retired, and (for admins) editing the list are in <strong>Other…</strong>.</li>
+      <li><strong>Move to:</strong> pick the community the pod is going to.</li>
+      <li><strong>Shortcuts:</strong> Bring online, Send to lab, Flag for repair.</li>
+      <li><strong>More changes:</strong> the pod's type and mounting location, and swapping in a replacement pod.</li>
+      <li>With two or more pods, <strong>Same change for all pods</strong> adds one status or move to every pod at once.</li>
+    </ul>
+    Skip this step for a note that isn't about a sensor. Closed rows show what's changing, so you can check everything at a glance.</li>
+  <li><strong>What happened, and why?</strong> Write a short note (type <strong>@</strong> to tag a contact), check the date, and if it was a call, email, or site visit, pick <strong>Call</strong>, <strong>Email</strong>, or <strong>Site Visit</strong>. The sensors' communities are tagged automatically; tag others if needed.</li>
 </ol>
-<p>Check the <strong>Live preview</strong>, then click <strong>Save Log</strong>. It's saved as one note in the history of each sensor, community, and tagged contact. A call, email, or site visit with no sensors is saved as a communication.</p>
+<p>The <strong>This will be saved as</strong> box at the bottom shows exactly what will be recorded. Click <strong>Save Log</strong>. It's saved as one note in the history of each sensor, community, and tagged contact. A call, email, or site visit with no sensors is saved as a communication.</p>
 
 <h3>Logging a sensor issue</h3>
-<p>Open <strong>+ New Log</strong>, add the pod, and in its Status row add the issue status (PM Sensor Issue, Gaseous Sensor Issue, SD Card Issue, Lost Connection, Needs Repair, or the firmware issue), or click <strong>Flag for repair</strong>. Describe what's wrong in the note. The pod then appears under "Sensors needing attention" on the dashboard.</p>
+<p>Open <strong>+ New Log</strong>, add the pod, and click the issue status (PM Sensor Issue, Gaseous Sensor Issue, SD Card Issue, Lost Connection, Needs Repair, or the firmware issue), or the <strong>Flag for repair</strong> shortcut. Describe what's wrong in the note. The pod then appears under "Sensors needing attention" on the dashboard.</p>
 
 <h3>Editing a log</h3>
 <p>Click ✎ on any entry in a history.</p>

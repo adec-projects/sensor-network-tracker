@@ -825,10 +825,36 @@
       #modal-add-note .logrow-replace:hover{color:#8a6d1e}
       #modal-add-note .log-applyall{border:1px solid #e7ebf2;border-radius:11px;background:#fbfcfe;padding:12px 14px;margin-bottom:10px}
       #modal-add-note .log-applyall .aa-grid{display:grid;grid-template-columns:1fr 1fr auto;gap:10px;align-items:end}
-      #modal-add-note .log-preview{border:1px solid #e7ebf2;border-radius:12px;margin:8px 0 4px;overflow:hidden;box-shadow:0 6px 20px rgba(20,32,60,.05)}
-      #modal-add-note .log-preview .ph{display:flex;align-items:center;gap:9px;padding:13px 16px;border-bottom:1px solid #e7ebf2;background:#1B2A4A;color:#fff}
+      #modal-add-note .log-preview{border:1px solid #e7ebf2;border-radius:12px;margin:20px 28px 4px;overflow:hidden;background:#fbfcfe}
+      #modal-add-note .log-preview .ph{display:flex;align-items:center;gap:9px;padding:10px 16px 0;background:none}
       #modal-add-note .log-preview .ph .pill{background:#C9A84C;color:#1B2A4A;font-size:10px;font-weight:700;letter-spacing:.6px;padding:3px 10px;border-radius:20px}
-      #modal-add-note .log-preview .ph .lbl{font-size:14px;font-weight:700;color:#fff}
+      #modal-add-note .log-preview .ph .lbl{font-size:11px;font-weight:700;color:#5c6b82;text-transform:uppercase;letter-spacing:.5px}
+      /* alignment: step 1 and step headers line up with the step 2 fields (28px) */
+      #modal-add-note #log-step-sensors{padding:0 28px}
+      #modal-add-note #log-step-details .log-step{padding:0 28px;margin-top:22px}
+      #modal-add-note .log-step{align-items:flex-start}
+      #modal-add-note .log-step-n{margin-top:1px}
+      #modal-add-note .logrow-ctrl.st-ctrl{align-items:start}
+      #modal-add-note .logrow-ctrl.st-ctrl .logrow-k{padding-top:6px}
+      #modal-add-note .log-modal-sub{margin:0;padding:12px 28px 4px;font-size:13px;color:#5c6b82}
+      #modal-add-note .log-field-hint{font-size:11.5px;color:#9aa6ba;margin-top:5px}
+      /* one-click status buttons */
+      #modal-add-note .logrow-toggles{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+      #modal-add-note .logrow-st{border:1px solid #d5dcea;background:#fff;color:#33415c;font-size:12px;padding:4px 11px;border-radius:20px;cursor:pointer;font-family:inherit;transition:.12s;line-height:1.4}
+      #modal-add-note .logrow-st:hover{border-color:#1B2A4A}
+      #modal-add-note .logrow-st.on{background:#1B2A4A;border-color:#1B2A4A;color:#fff}
+      #modal-add-note .logrow-st.on.added{box-shadow:0 0 0 2px #C9A84C}
+      #modal-add-note .logrow-st.on.added::before{content:'+ '}
+      #modal-add-note .logrow-st.removed{background:#fbeeec;border-color:#f3c9c3;color:#b03a2e;text-decoration:line-through}
+      #modal-add-note .logrow-hint{font-size:11.5px;color:#9aa6ba;margin-top:7px}
+      #modal-add-note .logrow-quick{align-items:center}
+      #modal-add-note .logrow-quick-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.5px;color:#9aa6ba;margin-right:2px}
+      #modal-add-note .logrow-more-btn{border:none;background:none;padding:0;margin-top:14px;font-size:12.5px;font-weight:600;color:#1B2A4A;cursor:pointer;font-family:inherit}
+      #modal-add-note .logrow-more-btn span{font-weight:400;color:#9aa6ba}
+      #modal-add-note .logrow-more{margin-top:10px}
+      #modal-add-note .logrow-sum .hint{color:#5c6b82;font-style:italic}
+      #modal-add-note .logrow-sum .chg-lbl{font-weight:700;font-size:10px;text-transform:uppercase;letter-spacing:.4px}
+      #modal-add-note .logrow-edit{opacity:1;color:#5c6b82}
       #modal-add-note .log-preview .pv-type{display:inline-block;font-size:10px;font-weight:700;color:#1B2A4A;background:#eef1f7;text-transform:uppercase;letter-spacing:.5px;padding:4px 10px;border-radius:20px;margin:14px 16px 0}
       #modal-add-note .log-preview .pv-text{font-size:12.5px;white-space:pre-wrap;line-height:1.6;padding:8px 16px 4px}
       #modal-add-note .log-preview .pv-text .auto{color:#586a83;display:block}
@@ -853,6 +879,7 @@
                 <h2 id="modal-add-note-title">New Log</h2>
                 <button class="modal-close" aria-label="Close dialog" onclick="requestCloseModal('modal-add-note')">&times;</button>
             </div>
+            <p id="log-modal-sub" class="log-modal-sub">Update a sensor's status or community, and/or write down what happened. Everything here is saved as one note.</p>
             <form id="note-form" onsubmit="saveNote(event)">
                 <input type="hidden" id="note-context-id">
                 <input type="hidden" id="note-context-type">
@@ -864,16 +891,16 @@
                         <span class="log-step-n">1</span>
                         <div>
                             <div class="log-step-h">Which sensors are involved?</div>
-                            <div class="log-step-sub">Add every pod affected. Change each one's status, community, type, or location right in its row.</div>
+                            <div class="log-step-sub">Add each pod this is about, then change its status or community in its row. Skip this for a note that isn't about a sensor.</div>
                         </div>
                     </div>
                     <div class="log-addbar">
                         <div class="grow log-combo search">
                             <span class="ico"><svg width="15" height="15" viewBox="0 0 16 16" fill="none"><circle cx="7" cy="7" r="5" stroke="currentColor" stroke-width="1.6"/><path d="M11 11l3.5 3.5" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg></span>
-                            <input type="text" id="log-add-input" class="log-combo-input" placeholder="Add a sensor or community — type any part of the ID or name…" autocomplete="off" style="width:100%">
+                            <input type="text" id="log-add-input" class="log-combo-input" placeholder="Search a sensor ID or community name…" autocomplete="off" style="width:100%">
                             <div class="log-combo-list" id="log-add-list"></div>
                         </div>
-                        <button type="button" class="btn btn-sm" id="log-applyall-btn" style="display:none" onclick="logToggleApplyAll()">Apply to all</button>
+                        <button type="button" class="btn btn-sm" id="log-applyall-btn" style="display:none" onclick="logToggleApplyAll()">Same change for all pods</button>
                     </div>
                     <div class="log-applyall" id="log-applyall" style="display:none">
                         <div class="aa-grid">
@@ -901,10 +928,22 @@
                 <div id="log-step-details">
                     <div class="log-step">
                         <span class="log-step-n">2</span>
-                        <div><div class="log-step-h" id="log-step2-h">Add additional details</div></div>
+                        <div>
+                            <div class="log-step-h" id="log-step2-h">What happened, and why?</div>
+                            <div class="log-step-sub">A short note helps whoever looks at this sensor next.</div>
+                        </div>
+                    </div>
+                    <div class="form-group" style="position:relative">
+                        <label for="note-text-input">Note <span style="font-weight:400;color:var(--slate-400);font-size:12px;text-transform:none;letter-spacing:0">(type @ to tag a contact)</span></label>
+                        <textarea id="note-text-input" rows="3" class="mention-textarea" placeholder="Why? What happened? e.g. PM readings flatlined since Tuesday, so flagged it for repair. Type @ to tag a contact."></textarea>
+                        <div class="mention-dropdown" id="note-mention-dropdown"></div>
+                    </div>
+                    <div class="form-group">
+                        <label for="note-date-input">Date it happened</label>
+                        <input type="datetime-local" id="note-date-input">
                     </div>
                     <div class="form-group" id="log-comm-group">
-                        <label>Also a communication? <span style="font-weight:400;color:var(--slate-400)">(optional)</span></label>
+                        <label>Was this a call, email, or site visit? <span style="font-weight:400;color:var(--slate-400);text-transform:none;letter-spacing:0">(optional)</span></label>
                         <div class="log-type-chips" id="log-comm-chips">
                             <button type="button" class="log-type-chip" data-kind="comm" data-commtype="Phone Call" onclick="selectLogType(this)">Call</button>
                             <button type="button" class="log-type-chip" data-kind="comm" data-commtype="Email" onclick="selectLogType(this)">Email</button>
@@ -916,32 +955,24 @@
                         <div id="note-audit-link-options" style="margin-top:4px"></div>
                     </div>
                     <div class="form-group">
-                        <label>Date</label>
-                        <input type="datetime-local" id="note-date-input">
-                    </div>
-                    <div class="form-group" style="position:relative">
-                        <label>Note <span style="font-weight:400;color:var(--slate-400);font-size:12px">— type @ to tag any contacts involved</span></label>
-                        <textarea id="note-text-input" rows="3" class="mention-textarea" placeholder="Describe what happened (optional). Type @ to tag contacts."></textarea>
-                        <div class="mention-dropdown" id="note-mention-dropdown"></div>
-                    </div>
-                    <div class="form-group">
-                        <label>Tag Communities</label>
+                        <label id="log-comm-tag-label">Also tag other communities <span style="font-weight:400;color:var(--slate-400);text-transform:none;letter-spacing:0">(optional)</span></label>
                         <div class="tag-chip-container" id="tag-communities-container">
                             <div class="tag-chips">
                                 <input type="text" class="tag-chip-input" placeholder="Type to search communities...">
                             </div>
                             <div class="tag-chip-dropdown mention-dropdown"></div>
                         </div>
+                        <div class="log-field-hint" id="log-comm-tag-hint">The communities of the sensors above are tagged automatically.</div>
                     </div>
                 </div>
 
                 <!-- Live single-note preview (hidden in edit mode) -->
                 <div class="log-preview" id="log-preview">
-                    <div class="ph"><span class="pill">1 NOTE</span><span class="lbl">Live preview</span></div>
+                    <div class="ph"><span class="lbl">This will be saved as:</span></div>
                     <div class="pv-type" id="log-pv-type">General</div>
                     <div class="pv-text" id="log-pv-text"></div>
                     <div class="pv-tags" id="log-pv-tags"></div>
-                    <div class="pv-note">Everything above is written as <b>one note</b>, tagged to each sensor and/or community involved. The note is displayed under each sensor and/or community log history.</div>
+                    <div class="pv-note">One note, shown in the history of each sensor and community tagged above.</div>
                 </div>
 
                 <div class="modal-footer">
