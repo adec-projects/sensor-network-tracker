@@ -192,7 +192,7 @@
   <div class="subtitle">User Guide &amp; App Overview</div>
   <div>Alaska Department of Environmental Conservation</div>
   <div>Air Monitoring &amp; Quality Assurance</div>
-  <div class="version" style="margin-top: 16px">By Ayla Crosby | Last updated November 2026</div>
+  <div class="version" style="margin-top: 16px">By Ayla Crosby | Last updated <span data-guide-updated>November 12, 2026</span></div>
 </div>
 
 <div class="container">
@@ -627,7 +627,7 @@
   <li><strong>Change the role</strong> between User and Admin. Keep at least two administrators, so someone can always reset passwords or authenticators. The app warns you if there's only one.</li>
   <li><strong>Reset password</strong>: shows a temporary password once. Copy it before closing the box and give it to the person by phone or Teams, not email. They choose a new password at their next sign-in.</li>
   <li><strong>Reset MFA</strong>: removes their authenticator; they set it up again at their next sign-in. If someone lost both their password and their phone, use both buttons.</li>
-  <li><strong>Guide Editor</strong>: lets that person edit this User Guide (an <strong>Edit</strong> button appears on the User Guide page).</li>
+  <li><strong>Guide Editor</strong>: lets that person edit this User Guide (see <a href="#editing-guide">Editing This Guide</a> below).</li>
   <li><strong>Archive</strong>: see below.</li>
 </ul>
 
@@ -646,6 +646,25 @@
   <li><strong>Sensor Statuses</strong>: add or remove sensor statuses (see <a href="#sensors">Section 4</a>).</li>
   <li><strong>Trash Bin</strong>: see <a href="#trash">Section 15</a>.</li>
 </ul>
+
+<h3 id="editing-guide">Editing This Guide</h3>
+<p>Anyone an admin has given <strong>Guide Editor</strong> access (the checkbox on their row in User Management) can update this guide. When a feature changes, please update the guide so new staff learn the current way of doing things.</p>
+<ol>
+  <li>Open <strong>User Guide</strong> (bottom of the sidebar) and click <strong>Edit</strong> at the top. Guide Editors are the only ones who see this button.</li>
+  <li>The whole guide opens as text with formatting codes (HTML). Find the part you want to change (Ctrl+F helps) and edit the words between the codes. For example, in <code>&lt;p&gt;Click &lt;strong&gt;Save&lt;/strong&gt;.&lt;/p&gt;</code>, change only "Click" and "Save" and leave the <code>&lt;p&gt;</code> and <code>&lt;strong&gt;</code> parts alone. To add a paragraph, copy an existing <code>&lt;p&gt;…&lt;/p&gt;</code> line and change its words.</li>
+  <li>Click <strong>Preview</strong> to see the result in a new tab. If the layout looks broken, a code was probably deleted by accident.</li>
+  <li>Click <strong>Save &amp; Publish</strong>. The change is live for everyone right away, and the top of the guide shows who last edited it and when. <strong>Cancel</strong> throws your changes away.</li>
+</ol>
+<ul>
+  <li>The "Last updated" date on the cover and at the bottom is filled in automatically when you save, so you don't need to change it.</li>
+  <li>Your typing is auto-saved in your browser while you work. If the browser closes before you save, click Edit again and the app offers to restore your draft.</li>
+  <li>Before a big edit, click <strong>Export as HTML</strong> to keep a copy of the current guide, just in case.</li>
+</ul>
+
+<div class="callout">
+  <div class="callout-label">For whoever maintains the app</div>
+  The guide also exists as the file <code>user-guide.html</code> in the GitHub repository. Once someone saves an edit here, the app shows that saved copy instead of the file, so later changes to the file won't appear until the saved copy is cleared (in the database, rename or remove the <code>app_settings</code> row with key <code>user_guide_body</code>). To keep the two in step, use Export as HTML after editing here and save the result over <code>user-guide.html</code>.
+</div>
 
 <h2 id="admin-modes">14. Admin Modes (Setup &amp; Sandbox)</h2>
 
@@ -720,7 +739,7 @@
 
 <div class="callout">
   <div class="callout-label">Saving This Guide</div>
-  Use <strong>Export as HTML</strong> at the top of the User Guide page to save a copy you can open offline or share.
+  Use <strong>Export as HTML</strong> at the top of the User Guide page to save a copy you can open offline or share. To change the guide, see <a href="#editing-guide">Editing This Guide</a>.
 </div>
 
 <div class="callout tip">
@@ -732,7 +751,7 @@
 
 <div class="footer">
   ADEC Division of Air Quality • Air Monitoring &amp; Quality Assurance<br>
-  Sensor Network Tracker User Guide • November 2026
+  Sensor Network Tracker User Guide • Last updated <span data-guide-updated>November 12, 2026</span>
 </div>
 
 </body>

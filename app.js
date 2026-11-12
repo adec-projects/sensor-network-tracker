@@ -15326,10 +15326,19 @@ function _maybeOfferDraftRestore(ta, seededBody) {
     }
 }
 
+// Fill in today's date (Alaska time) wherever the guide has
+// <span data-guide-updated>…</span> (the cover and the footer), so the
+// "Last updated" date is always right without anyone editing it by hand.
+function stampUserGuideDate(html) {
+    const today = new Date().toLocaleDateString('en-US', { month: 'long', day: 'numeric', year: 'numeric', timeZone: AK_TZ });
+    return String(html).replace(/(<span\b[^>]*\bdata-guide-updated\b[^>]*>)[\s\S]*?(<\/span>)/g, `$1${today}$2`);
+}
+
 async function saveUserGuide() {
     if (!currentUserCanEditGuide) return;
     const ta = document.getElementById('user-guide-editor-textarea');
-    const body = ta ? ta.value : '';
+    const body = stampUserGuideDate(ta ? ta.value : '');
+    if (ta) ta.value = body;
     // Snapshot the last-known-good version to localStorage BEFORE the network
     // write so the client always keeps a copy of what it just tried to send.
     // This is the recovery path if Supabase (or I) ever eats the row.
