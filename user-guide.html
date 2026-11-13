@@ -307,7 +307,7 @@
 <p>To add a sensor, click <strong>+ Add Sensor</strong>. A toggle at the top of the form chooses Quant (MOD) or Other LCS; then fill in the details.</p>
 
 <h3>The sensor page</h3>
-<p>The top of a sensor's page shows its Type, Status, Community, Address/Coordinates, SOA Tag ID, Purchase Date, and a <strong>Notes / Details</strong> box (click ✎ Edit to change it). Type, status, and location are changed through <strong>+ New Log</strong> (see <a href="#notes">Section 6</a>). The tabs are:</p>
+<p>The top of a sensor's page shows its Type, Status, Community, Address/Coordinates, SOA Tag ID, Purchase Date, and a <strong>Notes / Details</strong> box (click ✎ Edit to change it). To change the type, status, community, or address, click <strong>Change</strong> next to it. That opens <strong>+ New Log</strong> for this pod with the right control ready, so the change is recorded in the history with your note (see <a href="#notes">Section 6</a>). The tabs are:</p>
 <ul>
   <li><strong>Log History</strong>: notes, status changes, moves, and communications for this pod, with a type filter and keyword search. Service, audit, and collocation activity is kept on their own tabs instead.</li>
   <li><strong>Collocations</strong>: every collocation this pod was part of, including its initial collocation from the Salesforce data.</li>
@@ -412,7 +412,7 @@
 <p>Open <strong>+ New Log</strong>, add the pod, and click the issue status (PM Sensor Issue, Gaseous Sensor Issue, SD Card Issue, Lost Connection, Needs Repair, or the firmware issue), or the <strong>Flag for repair</strong> shortcut. Describe what's wrong in the note. The pod then appears under "Sensors needing attention" on the dashboard.</p>
 
 <h3>Editing a log</h3>
-<p>Click ✎ on any entry in a history.</p>
+<p>Each entry in a history has ✎ (edit) and 🗑 (delete) buttons at its top right. Click ✎ to edit.</p>
 <ul>
   <li><strong>Within an hour</strong> of saving a sensor log (if nothing else has changed on those pods since), the full form reopens and you can fix anything, including the status change or move itself.</li>
   <li><strong>After that</strong>, the form opens at the pods' current state. You can fix the words, date, and tags, and any new sensor changes you make are added on; nothing earlier is undone.</li>
@@ -739,6 +739,11 @@
 <div class="callout tip">
   <div class="callout-label">Online &amp; Offline</div>
   These two statuses can't both be on. Choosing Online removes Offline, and vice versa.
+</div>
+
+<div class="callout tip">
+  <div class="callout-label">Closing Popups</div>
+  Popups that show a record (an audit, collocation, or service ticket) close when you click outside them, press Esc, or click ×. Forms you type into (like + New Log) only close with Cancel, ×, or Esc, so a stray click can't lose your work.
 </div>
 
 <div class="callout">

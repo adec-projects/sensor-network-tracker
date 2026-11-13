@@ -168,6 +168,29 @@ document.addEventListener('click', function(e) {
     if (modal && e.target === modal) dismissConfirmModal();
 });
 
+// Popups that SHOW a record (audit, collocation, ticket, reference sheets) also
+// close when you click outside them. Forms don't, so a stray click can't throw
+// away what you typed. Only counts if the click started on the backdrop (so
+// selecting text and releasing outside doesn't close it), and if a note box in
+// the popup has unsaved text, it asks first.
+const BACKDROP_CLOSE_MODALS = new Set(['modal-audit-detail', 'modal-collocation-detail', 'modal-service-ticket',
+    'modal-install-reference', 'modal-setup-explainer', 'modal-sandbox-explainer', 'modal-status-list']);
+let _backdropDown = null;
+document.addEventListener('mousedown', e => { _backdropDown = (e.target && e.target.classList && e.target.classList.contains('modal')) ? e.target : null; });
+document.addEventListener('click', function(e) {
+    const m = e.target;
+    if (!m || m !== _backdropDown || !BACKDROP_CLOSE_MODALS.has(m.id) || !m.classList.contains('open')) return;
+    const open = [...document.querySelectorAll('.modal.open')];
+    if (open[open.length - 1] !== m) return;           // only the popup on top
+    const unsent = [...m.querySelectorAll('textarea')].some(t => t.value.trim() && t.offsetParent !== null);
+    if (unsent) {
+        showConfirm('Close this popup?', 'You have a note typed here that hasn\'t been added yet. Close anyway and lose it?',
+            () => closeModal(m.id), { danger: true, confirmText: 'Close', cancelText: 'Keep editing' });
+        return;
+    }
+    closeModal(m.id);
+});
+
 function loadData(key, fallback) {
     try {
         const raw = localStorage.getItem('snt_' + key);
@@ -3001,12 +3024,15 @@ function showSensorView(sensorId) {
     } else {
         const lastEdited = formatLastUpdated(s);
         const d = s.details || '';
+        // "Change" links: open + New Log for this pod, scrolled to that control, so
+        // the change is still recorded in the history with a reason.
+        const chg = which => s.active === false ? '' : `<button type="button" class="info-change-link" onclick="changeSensorVia('${s.id}','${which}')" title="Opens + New Log so the change is recorded in the history">Change</button>`;
         document.getElementById('sensor-info-card').innerHTML = `
             ${(lastEdited || s.active === false) ? `<div class="info-item" style="grid-column:1/-1;text-align:right;font-size:11px;color:var(--slate-400);margin-bottom:-6px">${lastEdited || ''}${s.active === false ? `${lastEdited ? ' · ' : ''}<span style="color:var(--aurora-rose);font-weight:600">RETIRED</span>` : ''}</div>` : ''}
-            <div class="info-item"><label>Type</label><p title="Change type with + New Log">${escapeHtml(s.type)}</p></div>
-            <div class="info-item"><label>Status</label><p>${renderStatusBadges(s, true)}</p></div>
-            <div class="info-item"><label>Community</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : escapeHtml(getCommunityName(s.community))}</p></div>
-            <div class="info-item"><label>Address/Coordinates</label><p title="Change location with + New Log">${s.location ? escapeHtml(s.location) : '<span class="field-placeholder">Set with + New Log</span>'}</p></div>
+            <div class="info-item"><label>Type${chg('type')}</label><p>${escapeHtml(s.type)}</p></div>
+            <div class="info-item"><label>Status${chg('status')}</label><p>${renderStatusBadges(s, true)}</p></div>
+            <div class="info-item"><label>Community${chg('community')}</label><p>${s.community ? `<span class="clickable" onclick="showCommunity('${s.community}')">${escapeHtml(getCommunityName(s.community))}</span>` : escapeHtml(getCommunityName(s.community))}</p></div>
+            <div class="info-item"><label>Address/Coordinates${chg('location')}</label><p>${s.location ? escapeHtml(s.location) : '<span class="field-placeholder">Not set</span>'}</p></div>
 
             <div class="info-item soa-purchase-item">
                 <div class="soa-purchase-pair">
@@ -4955,6 +4981,27 @@ function logRowCardHTML(r) {
             </div>
         </div>
         ${more}</div></div>`;
+}
+
+// From a sensor page's "Change" links: open New Log for that pod and put the
+// cursor on the matching control.
+function changeSensorVia(sensorId, which) {
+    openNewLog('sensor', sensorId);
+    setTimeout(() => {
+        const r = logRows.find(x => x.sensorId === sensorId); if (!r) return;
+        r.open = true;
+        if (which === 'type' || which === 'location') r.more = true;
+        logRenderRows();
+        const row = document.querySelector('#log-rows .logrow.open');
+        if (!row) return;
+        const target = which === 'community' ? row.querySelector('.logrow-movewrap select')
+            : which === 'type' ? row.querySelector('.logrow-more select')
+            : which === 'location' ? row.querySelector('.logrow-more input[type=text]')
+            : row.querySelector('.logrow-toggles');
+        const ctrl = target && target.closest('.logrow-ctrl');
+        if (ctrl) { ctrl.classList.add('flash'); setTimeout(() => ctrl.classList.remove('flash'), 1600); }
+        if (target) { target.scrollIntoView({ block: 'center' }); if (target.focus) target.focus(); }
+    }, 60);
 }
 
 // row mutations

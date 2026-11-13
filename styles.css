@@ -1881,25 +1881,25 @@ tr:last-child td {
     align-items: flex-start;
 }
 
+/* Edit / delete on each history entry: always visible (they used to appear only
+   on hover, which was easy to miss and impossible on a touchscreen). */
 .timeline-actions {
     display: flex;
-    gap: 4px;
-    opacity: 0;
-    transition: opacity 0.15s ease;
-}
-
-.timeline-item:hover .timeline-actions {
+    gap: 6px;
     opacity: 1;
 }
 
 .timeline-action-btn {
     cursor: pointer;
-    font-size: 14px;
-    padding: 2px 4px;
-    border-radius: 4px;
-    transition: background 0.1s ease;
-    opacity: 0.4;
+    font-size: 15px;
+    padding: 3px 7px;
+    border-radius: 6px;
+    border: 1px solid var(--slate-200);
+    background: var(--surface);
+    transition: background 0.1s ease, opacity 0.1s ease;
+    opacity: 0.75;
 }
+.timeline-item:hover .timeline-action-btn { opacity: 1; }
 
 .timeline-action-btn:hover {
     opacity: 1;
@@ -5355,3 +5355,8 @@ th:hover .field-reorder-btns {
 .status-reassign-meta { font-size: 11.5px; color: var(--slate-400); }
 .badge-retired { background: rgba(71, 85, 105, 0.14); color: #334155; }
 .badge-retired::before { background: #64748b; }
+
+/* "Change" links on the sensor page (open + New Log at that control) */
+.info-change-link { background: none; border: 0; padding: 0 0 0 8px; font-size: 11px; font-weight: 600; color: var(--navy-600, #2563b0); cursor: pointer; text-transform: none; letter-spacing: 0; font-family: var(--font-sans); }
+.info-change-link:hover { text-decoration: underline; }
+#modal-add-note .logrow-ctrl.flash { box-shadow: inset 0 0 0 2px #C9A84C; transition: box-shadow .3s; }
