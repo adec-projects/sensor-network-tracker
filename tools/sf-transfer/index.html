@@ -140,7 +140,7 @@
     <h3><span class="num">6</span> New sensors and new contacts (top of the left list)</h3>
     <ul>
       <li><b>New sensors:</b> pods in Salesforce that aren't in the app yet. Check the type and community, then click <b>Create</b> (or <b>Create all</b>). Retired pods are added as archived.</li>
-      <li><b>New contacts:</b> people in Salesforce who aren't in the app. <b>Create</b> the ones you want to keep and <b>Skip</b> the rest (or <b>Skip all</b>).</li>
+      <li><b>New contacts:</b> people in Salesforce who aren't in the app. Each card has the same fields as the app's contact form (name, role, organization, email, phone, communities, status, primary contact, Mass Email List), so fix or fill in anything first. Then <b>Create</b> the ones you want to keep and <b>Skip</b> the rest (or <b>Skip all</b>).</li>
     </ul>
     <p class="dim">If you leave these alone, a sensor or contact a record needs is created when you approve that record. A <b>skipped</b> one is never created; records that mention it are saved without that tag. New communities are never created; if one is missing, add it in the app first.</p>
 
@@ -544,8 +544,10 @@ async function ensureContact(key){
   if(contactSkipped(key)) return null;
   if(state['C:'+key]?.rowId) return state['C:'+key].rowId;
   const n=result.newContacts.find(c=>c.key===key); if(!n) return null;
-  const {data,error}=await supa.from('contacts').insert({name:n.name, role:n.role, org:n.org, email:n.email, phone:n.phone,
-    community_id:n.community_id||null, communities:n.communities}).select('id');
+  if(!String(n.name||'').trim()) throw new Error('a contact needs a name');
+  const comms=(n.communities||[]).filter(Boolean);
+  const {data,error}=await supa.from('contacts').insert({name:n.name.trim(), role:n.role||'', org:n.org||'', email:n.email||'', phone:n.phone||'',
+    community_id:comms[0]||null, communities:comms, active:n.active!==false, primary_contact:!!n.primary_contact, email_list:!!n.email_list}).select('id');
   if(error) throw new Error('creating contact '+n.name+': '+error.message);
   const id=data[0].id; app.contacts.push({id,name:n.name,email:n.email}); state['C:'+key]={status:'ok',rowId:id}; return id;
 }
@@ -636,12 +638,32 @@ function renderNewContacts(root){
       ${todo.length?`<button class="btn btn-skip btn-sm" onclick="skipAllNew('C')">Skip all ${todo.length}</button><button class="btn btn-green btn-sm" onclick="createAllContacts()">Create all ${todo.length}</button>`:''}</span></div>
     <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Salesforce contacts not found in the app (matched by email, then name). Create the ones you want and skip the rest. A contact a record needs is also created when you approve that record, unless you skip it here (then the record is saved without that contact tag).${nSkipped&&!showSkipped()?` ${nSkipped} skipped (tick "show skipped" to see them).`:''}</div>`+
     (list.length?'':'<div class="empty">Nothing left here. ✓</div>')+
-    list.map(c=>{ const st=state['C:'+c.key], sk=contactSkipped(c.key); return `<div class="card ${st||sk?'done':''}"><div class="top"><span class="tag comm">CONTACT</span><b style="font-size:.9rem">${esc(c.name)}</b>
-      <span class="author">${esc([c.role,c.org].filter(Boolean).join(' · '))}</span></div>
-      <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:8px">${esc([c.email,c.phone].filter(Boolean).join(' · '))} · Community: ${esc(result.commName[c.community_id]||'none')}</div>
+    list.map(c=>{ const st=state['C:'+c.key], sk=contactSkipped(c.key), k=esc(c.key), ro=(st||sk)?'disabled':'';
+      const f=(field,label,val,cls,type)=>`<div class="field ${cls||''}"><label>${label}</label><input ${type?`type="${type}"`:''} value="${esc(val||'')}" ${ro} onchange="newContactField('${k}','${field}',this.value)"></div>`;
+      const commChips=(c.communities||[]).map((id,i)=>`<span class="chip">${esc(result.commName[id]||id)}${i===0&&c.communities.length>1?' <span style="opacity:.6;font-size:.7rem">(main)</span>':''}${ro?'':`<button title="Remove" onclick="newContactComm('${k}','${esc(id)}',false)">×</button>`}</span>`).join('');
+      return `<div class="card ${st||sk?'done':''}"><div class="top"><span class="tag comm">CONTACT</span><b style="font-size:.9rem">${esc(c.name)}</b>
+      <span class="author">from Salesforce${c.org?' · '+esc(c.org):''}</span></div>
+      <div class="grid">
+        ${f('name','Full name',c.name,'half')}${f('role','Role / Title',c.role,'half')}
+        ${f('org','Organization',c.org,'full')}
+        ${f('email','Email',c.email,'half','email')}${f('phone','Phone',c.phone,'half','tel')}
+        <div class="field full"><label>Communities (add one or more; none = Non-Community contact)</label><div class="chips">${commChips||'<span style="color:var(--text-dim);font-size:.8rem">none</span>'}
+          ${ro?'':`<select onchange="newContactComm('${k}',this.value,true)">${commOptions('').replace('— pick —','+ community')}</select>`}</div></div>
+        <div class="field"><label>Status</label><select ${ro} onchange="newContactField('${k}','active',this.value==='active')"><option value="active" ${c.active!==false?'selected':''}>Active</option><option value="inactive" ${c.active===false?'selected':''}>Inactive</option></select></div>
+        <div class="field half" style="display:flex;gap:16px;align-items:flex-end;padding-bottom:6px;font-size:.82rem">
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--text);display:flex;gap:6px;align-items:center"><input type="checkbox" ${c.primary_contact?'checked':''} ${ro} onchange="newContactField('${k}','primary_contact',this.checked)"> Primary contact</label>
+          <label style="text-transform:none;letter-spacing:0;font-size:.82rem;color:var(--text);display:flex;gap:6px;align-items:center"><input type="checkbox" ${c.email_list?'checked':''} ${ro} onchange="newContactField('${k}','email_list',this.checked)"> Mass Email List</label>
+        </div>
+      </div>
       <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>'
         : sk?`<span style="color:var(--orange)">Skipped</span> <button class="btn btn-ghost btn-sm" onclick="unskipItem('C:${esc(c.key)}')">Un-skip</button>`
         : `<button class="btn btn-green btn-sm" onclick="createContact('${esc(c.key)}')">Create</button><button class="btn btn-skip btn-sm" onclick="skipItem('C:${esc(c.key)}')">Skip</button>`}<span class="msg" id="msg-C-${esc(c.key)}"></span></div></div>`; }).join('');
+}
+function newContactField(key,field,val){ const n=result.newContacts.find(c=>c.key===key); if(!n) return; n[field]=typeof val==='string'?val.trim():val; if(field==='name') renderAll(); }
+function newContactComm(key,id,add){
+  const n=result.newContacts.find(c=>c.key===key); if(!n||!id) return;
+  const list=(n.communities||[]).filter(x=>x!==id); if(add) list.push(id);
+  n.communities=list; n.community_id=list[0]||''; renderRecords();
 }
 async function createContact(key){ try{ await ensureContact(key); renderAll(); }catch(e){ setMsg('C-'+key,'Error: '+e.message,'var(--red)'); } }
 async function createAllContacts(){ for(const c of result.newContacts) if(!state['C:'+c.key]&&!contactSkipped(c.key)) await createContact(c.key); }

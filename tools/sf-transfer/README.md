@@ -61,8 +61,10 @@ Down the left side:
 * **New sensors**: pods in Salesforce that aren't in the app. Check the type and
   community, then **Create** (or **Create all**). The app status is left blank for staff
   to set. Retired pods are added as archived.
-* **New contacts**: people in Salesforce who aren't in the app. **Create** the ones you
-  want and **Skip** (or **Skip all**) the rest. Sensors can be skipped the same way. A
+* **New contacts**: people in Salesforce who aren't in the app. Edit any field first (same
+  fields as the app's contact form: name, role, organization, email, phone, communities,
+  status, primary contact, Mass Email List), then **Create** the ones you want and **Skip**
+  (or **Skip all**) the rest. Sensors can be skipped the same way. A
   skipped sensor or contact is never created; records that mention it are saved without
   that tag.
 * **Each community**, with how many records are left. Click one to see its records.
