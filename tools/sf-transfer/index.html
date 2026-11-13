@@ -394,7 +394,13 @@ async function rebuild(first){
   $('dl-sensors').innerHTML=result.knownSensors.map(s=>`<option value="${esc(s)}">`).join('');
   renderAll();
 }
-function groupKey(c){ return c.communities[0] || (c.unmatchedAccounts.length?'__acct:'+c.unmatchedAccounts[0].id : '__none'); }
+// A card's place in the left list is decided once, when the export is read, and
+// then stays put. (Adding a community to a card used to move it to that
+// community's list mid-edit, which looked like it had been imported.)
+function groupKey(c){
+  if(!c._group) c._group = c.communities[0] || (c.unmatchedAccounts.length?'__acct:'+c.unmatchedAccounts[0].id : '__none');
+  return c._group;
+}
 function groups(){
   const g=new Map();
   for(const c of result.cards){ const k=groupKey(c); (g.get(k)||g.set(k,[]).get(k)).push(c); }
@@ -455,7 +461,7 @@ function renderRecords(){
     const acct=list[0]?.unmatchedAccounts[0];
     html+=`<div class="note-box">Salesforce account <b>${esc(acct?.name)}</b> didn't match a community in the app. Pick the community for all of its records:
       <select onchange="setAccountCommunity('${esc(acct?.id)}',this.value)" style="margin-left:6px">${commOptions('')}</select>
-      (or open each card below). If it's an organization with no community, records can still be approved with just a sensor, or skipped.</div>`;
+      (or add communities on each card below). The records stay here so you can check them, add more communities, and then Approve. If it's an organization with no community, records can still be approved with just a sensor, or skipped.</div>`;
   }
   html+= list.length ? list.map(cardHtml).join('') : '<div class="empty">All done here. ✓</div>';
   root.innerHTML=html;
@@ -514,7 +520,7 @@ function removeTag(id,kind,v){ const c=card(id); c[kind]=c[kind].filter(x=>x!==v
 function flip(id){ const c=card(id); if(c.kind==='comm'){ c.kind='note'; c.type='General'; } else { c.kind='comm'; c.type='Email'; } renderRecords(); }
 function setAccountCommunity(acctId,commId){ if(!commId) return;
   for(const c of result.cards) if(c.unmatchedAccounts.some(a=>a.id===acctId) && !c.communities.includes(commId)){ c.communities.unshift(commId); if(c.audit && !c.audit.community_id) c.audit.community_id=commId; }
-  current=commId; renderAll(); }
+  renderAll(); }
 function skip(id){ card(id).sfIds.forEach(s=>skipped.add(s)); saveSkips(); renderAll(); }
 function skipAll(){
   const list=(groups().get(current)||[]).filter(pending);
