@@ -5000,7 +5000,16 @@ function changeSensorVia(sensorId, which) {
             : row.querySelector('.logrow-toggles');
         const ctrl = target && target.closest('.logrow-ctrl');
         if (ctrl) { ctrl.classList.add('flash'); setTimeout(() => ctrl.classList.remove('flash'), 1600); }
-        if (target) { target.scrollIntoView({ block: 'center' }); if (target.focus) target.focus(); }
+        if (target) {
+            // Scroll only the popup itself, and only up/down. (scrollIntoView also
+            // scrolled the row sideways, cutting off its left side.)
+            const box = target.closest('.modal-content');
+            if (box) {
+                const tr = target.getBoundingClientRect(), br = box.getBoundingClientRect();
+                box.scrollTop += (tr.top - br.top) - (box.clientHeight / 2) + (tr.height / 2);
+            }
+            if (target.focus) target.focus({ preventScroll: true });
+        }
     }, 60);
 }
 

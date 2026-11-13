@@ -801,7 +801,8 @@
       #modal-add-note .logrow-qa{border:1px solid #e7ebf2;background:#fff;border-radius:8px;padding:6px 12px;font-size:12px;color:#1B2A4A;cursor:pointer;font-weight:600;transition:.12s}
       #modal-add-note .logrow-qa:hover{border-color:#C9A84C;background:#fbf3dc}
       #modal-add-note .logrow-ctrls{display:flex;flex-direction:column;border:1px solid #e7ebf2;border-radius:11px;overflow:hidden}
-      #modal-add-note .logrow-ctrl{display:grid;grid-template-columns:104px 1fr;gap:14px;align-items:center;padding:12px 14px;background:#fff}
+      #modal-add-note .logrow-ctrl{display:grid;grid-template-columns:104px minmax(0,1fr);gap:14px;align-items:center;padding:12px 14px;background:#fff}
+      #modal-add-note .logrow-ctrl > *{min-width:0}
       #modal-add-note .logrow-ctrl + .logrow-ctrl{border-top:1px solid #f2f5fa}
       #modal-add-note .logrow-ctrl.changed{background:#fefaf0}
       #modal-add-note .logrow-k{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.6px;color:#5c6b82;display:flex;align-items:center;gap:6px}
@@ -814,11 +815,22 @@
       #modal-add-note .logrow-schip .rm:hover{opacity:1}
       #modal-add-note .logrow-schip.none{background:#f2f5fa;color:#5c6b82;padding:3px 11px}
       #modal-add-note .logrow-addstatus{border:1px dashed #c9d2e2;border-radius:20px;font-size:11.5px;color:#5c6b82;padding:4px 10px;background:#fff;cursor:pointer;width:auto;max-width:150px;background-position:right 9px center;padding-right:26px}
-      #modal-add-note .logrow-movewrap{display:flex;align-items:center;gap:9px}
+      #modal-add-note .logrow-movewrap{display:flex;align-items:center;gap:6px 9px;flex-wrap:wrap;min-width:0}
       #modal-add-note .logrow-movewrap .from{font-size:12px;color:#5c6b82;white-space:nowrap;display:inline-flex;align-items:center;gap:5px}
       #modal-add-note .logrow-movewrap .from b{color:#1B2A4A;font-weight:600}
       #modal-add-note .logrow-movewrap .arr{color:#8a6d1e}
-      #modal-add-note .logrow-movewrap select{flex:1;max-width:280px}
+      #modal-add-note .logrow-movewrap select{flex:1 1 180px;min-width:0;width:100%;max-width:100%}
+      #modal-add-note .logrow-movewrap .from{white-space:normal;display:inline;max-width:100%}
+      /* New Log is roomier than the default 520px popup, and never wider than the screen */
+      #modal-add-note .modal-content{max-width:640px;width:94vw}
+      #modal-add-note select,#modal-add-note input[type=text]{max-width:100%}
+      @media (max-width:560px){
+        #modal-add-note .logrow-ctrl{grid-template-columns:1fr;gap:6px}
+        #modal-add-note #log-step-sensors,#modal-add-note #log-step-details .log-step{padding:0 16px}
+        #modal-add-note .form-group{padding:0 16px}
+        #modal-add-note .log-preview{margin:16px 16px 4px}
+        #modal-add-note .log-modal-sub{padding:10px 16px 4px}
+      }
       #modal-add-note .logrow-ctrl select,#modal-add-note .logrow-ctrl input[type=text]{max-width:360px}
       #modal-add-note .logrow-foot{margin-top:16px}
       #modal-add-note .logrow-replace{border:none;background:none;color:#1B2A4A;font-weight:600;cursor:pointer;font-size:12.5px;padding:0}

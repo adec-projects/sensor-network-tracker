@@ -5360,3 +5360,21 @@ th:hover .field-reorder-btns {
 .info-change-link { background: none; border: 0; padding: 0 0 0 8px; font-size: 11px; font-weight: 600; color: var(--navy-600, #2563b0); cursor: pointer; text-transform: none; letter-spacing: 0; font-family: var(--font-sans); }
 .info-change-link:hover { text-decoration: underline; }
 #modal-add-note .logrow-ctrl.flash { box-shadow: inset 0 0 0 2px #C9A84C; transition: box-shadow .3s; }
+
+/* ===== Popups fit any screen (big monitors down to phones) ===== */
+.modal-content { overflow-wrap: anywhere; }
+.modal-content select, .modal-content input, .modal-content textarea { max-width: 100%; }
+.ticket-detail-grid > *, .ticket-edit-input, .form-group { min-width: 0; }
+@media (max-width: 560px) {
+    .modal-content, .modal-content.modal-lg, .modal-content.modal-xl, .modal-content.modal-wide { width: 96vw; max-width: 96vw; }
+    .modal-header, .modal-footer, .form-group, .modal-confirm-body, .modal-body-pad,
+    .ticket-detail-grid, .ticket-detail-actions, .email-toolbar, .email-search-row, .email-recipients-list { padding-left: 16px; padding-right: 16px; }
+    .email-toolbar-right, .email-toolbar-right select { width: 100%; min-width: 0; }
+    /* Start Collocation: start/end dates stack */
+    #modal-global-collocation div[style*="display:flex"] { flex-direction: column; gap: 0 !important; }
+    /* "Choose new statuses": one sensor per block instead of a 3-column table */
+    .status-reassign-table thead { display: none; }
+    .status-reassign-table tr { display: block; padding: 8px 0; border-bottom: 1px solid var(--slate-100); }
+    .status-reassign-table td { display: block; border: 0; padding: 3px 0; }
+    .status-reassign-table select { max-width: 100%; width: 100%; }
+}
