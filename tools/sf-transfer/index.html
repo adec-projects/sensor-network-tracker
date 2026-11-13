@@ -140,9 +140,9 @@
     <h3><span class="num">6</span> New sensors and new contacts (top of the left list)</h3>
     <ul>
       <li><b>New sensors:</b> pods in Salesforce that aren't in the app yet. Check the type and community, then click <b>Create</b> (or <b>Create all</b>). Retired pods are added as archived.</li>
-      <li><b>New contacts:</b> people in Salesforce who aren't in the app. Create the ones you want to keep.</li>
+      <li><b>New contacts:</b> people in Salesforce who aren't in the app. <b>Create</b> the ones you want to keep and <b>Skip</b> the rest (or <b>Skip all</b>).</li>
     </ul>
-    <p class="dim">You can skip this step: if a record you approve needs a new sensor or contact, it's created then. New communities are never created; if one is missing, add it in the app first.</p>
+    <p class="dim">If you leave these alone, a sensor or contact a record needs is created when you approve that record. A <b>skipped</b> one is never created; records that mention it are saved without that tag. New communities are never created; if one is missing, add it in the app first.</p>
 
     <h3><span class="num">7</span> Review the records, one community at a time</h3>
     <p>Click a community on the left. Each record is a card that's ready to go: copies of the same event are already combined into one card, and sensors mentioned in the text (like "mod 665 audited by mod 471") are already tagged. For each card:</p>
@@ -151,6 +151,7 @@
       <tr><td>Skip</td><td>You don't want it (junk, test, not useful). It's hidden.</td></tr>
       <tr><td>⚠ Possibly already in the app</td><td>Someone may have typed this into the app by hand. The box shows the app's entry. Same thing? <b>Skip</b>. Different? <b>Approve anyway</b>.</td></tr>
       <tr><td>Approve all N here</td><td>Approves every remaining card in that community <i>except</i> ⚠ ones.</td></tr>
+      <tr><td>Skip all N here</td><td>Skips every remaining card in that community (asks first). Tick <b>show skipped</b> to see them again, then <b>Un-skip</b> one or <b>Un-skip all</b>.</td></tr>
       <tr><td>Undo</td><td>Removes an approved record from the app again (only until you close this page; after that, delete it in the app).</td></tr>
       <tr><td>Edit anything</td><td>Type, date, text, and tags can all be changed before approving. Use <b>→ Make it a note / communication</b> if it's the wrong kind.</td></tr>
       <tr><td>? Account name</td><td>Records from a Salesforce account that didn't match a community. Pick the community at the top of that list.</td></tr>
@@ -400,6 +401,12 @@ function groups(){
   return g;
 }
 const visible=c=>$('show-skipped').checked || !c.sfIds.some(s=>skipped.has(s));
+// New sensors / contacts can be skipped too (kept in the same remembered list,
+// as "S:<id>" and "C:<key>"). A skipped one is never created; if an approved
+// record mentions it, the record is saved without that tag.
+const sensorSkipped=id=>skipped.has('S:'+id);
+const contactSkipped=key=>skipped.has('C:'+key);
+const showSkipped=()=>$('show-skipped').checked;
 const pending=c=>!state[c.id] && !c.sfIds.some(s=>skipped.has(s));
 function groupName(k){
   if(k==='__none') return '— No community —';
@@ -414,7 +421,7 @@ function renderCounts(){
 }
 function renderSide(){
   const el=$('side'); el.innerHTML='';
-  const ns=result.newSensors.filter(s=>!state['S:'+s.id]).length, nc=result.newContacts.filter(c=>!state['C:'+c.key]).length;
+  const ns=result.newSensors.filter(s=>!state['S:'+s.id]&&!sensorSkipped(s.id)).length, nc=result.newContacts.filter(c=>!state['C:'+c.key]&&!contactSkipped(c.key)).length;
   const add=(k,label,n,cls)=>{ const d=document.createElement('div'); d.className='item '+(cls||'')+(k===current?' active':'')+(n===0?' done':'');
     const w=k.startsWith('__new')?0:(groups().get(k)||[]).filter(c=>pending(c)&&dupes[c.id]).length;
     d.innerHTML=`<span>${esc(label)}</span><span class="n">${w?'⚠'+w+' · ':''}${n?n+' left':'✓'}</span>`; d.onclick=()=>{current=k;renderAll();}; el.appendChild(d); };
@@ -428,7 +435,7 @@ function renderSide(){
 }
 
 function commOptions(sel){ return '<option value="">— pick —</option>'+app.communities.map(c=>`<option value="${esc(c.id)}" ${c.id===sel?'selected':''}>${esc(c.name)}</option>`).join(''); }
-function contactLabel(id){ if(String(id).startsWith('new:')){ const n=result.newContacts.find(c=>c.key===id); return (n?n.name:id)+' (new)'; }
+function contactLabel(id){ if(String(id).startsWith('new:')){ const n=result.newContacts.find(c=>c.key===id); return (n?n.name:id)+(contactSkipped(id)?' (skipped, won\'t be tagged)':' (new)'); }
   const c=app.contacts.find(x=>x.id===id); return c?c.name:id; }
 function renderRecords(){
   const root=$('records');
@@ -438,7 +445,11 @@ function renderRecords(){
   const list=(groups().get(current)||[]).filter(visible);
   const todo=list.filter(pending);
   const clean=todo.filter(c=>!dupes[c.id]), flagged=todo.length-clean.length;
-  let html=`<div class="head"><b>${esc(groupName(current))}</b>${clean.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="approveAll()">Approve all ${clean.length} here</button>`:''}</div>`;
+  const skippedHere=(groups().get(current)||[]).filter(c=>!state[c.id]&&c.sfIds.some(x=>skipped.has(x))).length;
+  let html=`<div class="head"><b>${esc(groupName(current))}</b><span style="margin-left:auto;display:flex;gap:8px">
+    ${todo.length?`<button class="btn btn-skip btn-sm" onclick="skipAll()">Skip all ${todo.length} here</button>`:''}
+    ${showSkipped()&&skippedHere?`<button class="btn btn-ghost btn-sm" onclick="unskipAll()">Un-skip all ${skippedHere}</button>`:''}
+    ${clean.length?`<button class="btn btn-green btn-sm" onclick="approveAll()">Approve all ${clean.length} here</button>`:''}</span></div>`;
   if(flagged) html+=`<div class="note-box">⚠ ${flagged} record${flagged>1?'s':''} here may already be in the app (someone may have typed ${flagged>1?'them':'it'} in by hand). ${clean.length?'"Approve all" leaves these out; ':''}check each ⚠ card and choose Skip or Approve anyway.</div>`;
   if(current.startsWith('__acct:')){
     const acct=list[0]?.unmatchedAccounts[0];
@@ -477,7 +488,7 @@ function cardHtml(c){
       <div class="field full"><label>Details</label><textarea onchange="setField('${esc(c.id)}','info',this.value)">${esc(c.info)}</textarea></div>
       ${auditFields}
       <div class="field full"><label>Communities</label><div class="chips">${chips(c.communities,'communities',v=>result.commName[v]||v)}${commAdd}</div></div>
-      ${c.kind==='comm'?'':`<div class="field full"><label>Sensors</label><div class="chips">${chips(c.sensors,'sensors',v=>v+(app.sensors.some(s=>s.id===v)?'':' (new)'))}${sensorAdd}</div></div>`}
+      ${c.kind==='comm'?'':`<div class="field full"><label>Sensors</label><div class="chips">${chips(c.sensors,'sensors',v=>v+(app.sensors.some(s=>s.id===v)?'':(sensorSkipped(v)?' (skipped, won\'t be tagged)':' (new)')))}${sensorAdd}</div></div>`}
       <div class="field full"><label>Contacts</label><div class="chips">${chips(c.contacts,'contacts',contactLabel)}${contactAdd}</div></div>
     </div>
     <div class="actions">
@@ -505,12 +516,23 @@ function setAccountCommunity(acctId,commId){ if(!commId) return;
   for(const c of result.cards) if(c.unmatchedAccounts.some(a=>a.id===acctId) && !c.communities.includes(commId)){ c.communities.unshift(commId); if(c.audit && !c.audit.community_id) c.audit.community_id=commId; }
   current=commId; renderAll(); }
 function skip(id){ card(id).sfIds.forEach(s=>skipped.add(s)); saveSkips(); renderAll(); }
+function skipAll(){
+  const list=(groups().get(current)||[]).filter(pending);
+  if(!list.length || !confirm(`Skip all ${list.length} remaining record${list.length>1?'s':''} in ${groupName(current)}? Nothing is saved for them. You can bring them back with "show skipped".`)) return;
+  list.forEach(c=>c.sfIds.forEach(x=>skipped.add(x))); saveSkips(); renderAll();
+}
+function unskipAll(){
+  (groups().get(current)||[]).filter(c=>!state[c.id]).forEach(c=>c.sfIds.forEach(x=>skipped.delete(x))); saveSkips(); renderAll();
+}
+function skipItem(k){ skipped.add(k); saveSkips(); renderAll(); }
+function unskipItem(k){ skipped.delete(k); saveSkips(); renderAll(); }
 function unskip(id){ card(id).sfIds.forEach(s=>skipped.delete(s)); saveSkips(); renderAll(); }
 function setMsg(id,t,color){ const m=$('msg-'+id); if(m){ m.textContent=t; m.style.color=color||''; } }
 
 // ---------------------------------------------------------------- saving
 async function ensureSensor(sid){
   if(app.sensors.some(s=>s.id===sid)) return true;
+  if(sensorSkipped(sid)) return false;
   const n=result.newSensors.find(s=>s.id===sid); if(!n) return false;
   const {error}=await supa.from('sensors').insert({id:n.id, soa_tag_id:n.soa_tag_id, type:n.type, community_id:n.community_id||null,
     date_purchased:n.date_purchased, date_installed:n.date_installed, active:n.active, details:n.details});
@@ -519,6 +541,7 @@ async function ensureSensor(sid){
 }
 async function ensureContact(key){
   if(!String(key).startsWith('new:')) return key;
+  if(contactSkipped(key)) return null;
   if(state['C:'+key]?.rowId) return state['C:'+key].rowId;
   const n=result.newContacts.find(c=>c.key===key); if(!n) return null;
   const {data,error}=await supa.from('contacts').insert({name:n.name, role:n.role, org:n.org, email:n.email, phone:n.phone,
@@ -579,32 +602,49 @@ async function undo(id){
 
 // ---------------------------------------------------------------- new sensors / contacts
 function renderNewSensors(root){
-  const list=result.newSensors;
-  const todo=list.filter(s=>!state['S:'+s.id]);
-  root.innerHTML=`<div class="head"><b>New sensors</b>${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="createAllSensors()">Create all ${todo.length}</button>`:''}</div>
-    <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Pods in Salesforce that aren't in the app. The app status is left blank for staff to set. (Any sensor a record needs is also created automatically when you approve that record.)</div>`+
-    list.map(s=>{ const st=state['S:'+s.id]; return `<div class="card ${st?'done':''}"><div class="top"><span class="tag note">SENSOR</span><b style="font-size:.9rem">${esc(s.id)}</b>
+  const list=result.newSensors.filter(s=>showSkipped()||!sensorSkipped(s.id)||state['S:'+s.id]);
+  const todo=list.filter(s=>!state['S:'+s.id]&&!sensorSkipped(s.id));
+  const nSkipped=result.newSensors.filter(s=>sensorSkipped(s.id)).length;
+  root.innerHTML=`<div class="head"><b>New sensors</b><span style="margin-left:auto;display:flex;gap:8px">
+      ${todo.length?`<button class="btn btn-skip btn-sm" onclick="skipAllNew('S')">Skip all ${todo.length}</button><button class="btn btn-green btn-sm" onclick="createAllSensors()">Create all ${todo.length}</button>`:''}</span></div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Pods in Salesforce that aren't in the app. The app status is left blank for staff to set. A sensor a record needs is also created when you approve that record, unless you skip it here (then the record is saved without that sensor tag).${nSkipped&&!showSkipped()?` ${nSkipped} skipped (tick "show skipped" to see them).`:''}</div>`+
+    (list.length?'':'<div class="empty">Nothing left here. ✓</div>')+
+    list.map(s=>{ const st=state['S:'+s.id], sk=sensorSkipped(s.id); return `<div class="card ${st||sk?'done':''}"><div class="top"><span class="tag note">SENSOR</span><b style="font-size:.9rem">${esc(s.id)}</b>
       <span class="author">Salesforce: ${esc(s.sf_name)} · status "${esc(s.sf_status||'none')}"</span></div>
       <div class="grid"><div class="field"><label>Type</label><input value="${esc(s.type)}" onchange="newSensorField('${esc(s.id)}','type',this.value)"></div>
       <div class="field"><label>Community</label><select onchange="newSensorField('${esc(s.id)}','community_id',this.value)">${commOptions(s.community_id)}</select></div>
       <div class="field"><label>SOA tag</label><input value="${esc(s.soa_tag_id)}" onchange="newSensorField('${esc(s.id)}','soa_tag_id',this.value)"></div>
       <div class="field"><label>Added as</label><input value="${s.active?'active':'archived (retired/donated)'}" readonly></div></div>
-      <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>':`<button class="btn btn-green btn-sm" onclick="createSensor('${esc(s.id)}')">Create</button>`}<span class="msg" id="msg-S-${esc(s.id)}"></span></div></div>`; }).join('');
+      <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>'
+        : sk?`<span style="color:var(--orange)">Skipped</span> <button class="btn btn-ghost btn-sm" onclick="unskipItem('S:${esc(s.id)}')">Un-skip</button>`
+        : `<button class="btn btn-green btn-sm" onclick="createSensor('${esc(s.id)}')">Create</button><button class="btn btn-skip btn-sm" onclick="skipItem('S:${esc(s.id)}')">Skip</button>`}<span class="msg" id="msg-S-${esc(s.id)}"></span></div></div>`; }).join('');
 }
 function newSensorField(id,k,v){ const s=result.newSensors.find(x=>x.id===id); if(s) s[k]=v; }
 async function createSensor(id){ try{ await ensureSensor(id); renderAll(); }catch(e){ setMsg('S-'+id,'Error: '+e.message,'var(--red)'); } }
-async function createAllSensors(){ for(const s of result.newSensors) if(!state['S:'+s.id]) await createSensor(s.id); }
+async function createAllSensors(){ for(const s of result.newSensors) if(!state['S:'+s.id]&&!sensorSkipped(s.id)) await createSensor(s.id); }
+function skipAllNew(kind){
+  const items=kind==='S' ? result.newSensors.filter(s=>!state['S:'+s.id]&&!sensorSkipped(s.id)).map(s=>'S:'+s.id)
+                         : result.newContacts.filter(c=>!state['C:'+c.key]&&!contactSkipped(c.key)).map(c=>'C:'+c.key);
+  if(!items.length || !confirm(`Skip all ${items.length} new ${kind==='S'?'sensor':'contact'}${items.length>1?'s':''}? None of them will be created, and records that mention them are saved without those tags. You can bring them back with "show skipped".`)) return;
+  items.forEach(k=>skipped.add(k)); saveSkips(); renderAll();
+}
 function renderNewContacts(root){
-  const list=result.newContacts, todo=list.filter(c=>!state['C:'+c.key]);
-  root.innerHTML=`<div class="head"><b>New contacts</b>${todo.length?`<button class="btn btn-green btn-sm" style="margin-left:auto" onclick="createAllContacts()">Create all ${todo.length}</button>`:''}</div>
-    <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Salesforce contacts not found in the app (matched by email, then name). Only create the ones you want; a contact a record needs is also created when you approve that record.</div>`+
-    list.map(c=>{ const st=state['C:'+c.key]; return `<div class="card ${st?'done':''}"><div class="top"><span class="tag comm">CONTACT</span><b style="font-size:.9rem">${esc(c.name)}</b>
+  const list=result.newContacts.filter(c=>showSkipped()||!contactSkipped(c.key)||state['C:'+c.key]);
+  const todo=list.filter(c=>!state['C:'+c.key]&&!contactSkipped(c.key));
+  const nSkipped=result.newContacts.filter(c=>contactSkipped(c.key)).length;
+  root.innerHTML=`<div class="head"><b>New contacts</b><span style="margin-left:auto;display:flex;gap:8px">
+      ${todo.length?`<button class="btn btn-skip btn-sm" onclick="skipAllNew('C')">Skip all ${todo.length}</button><button class="btn btn-green btn-sm" onclick="createAllContacts()">Create all ${todo.length}</button>`:''}</span></div>
+    <div style="font-size:.8rem;color:var(--text-dim);margin:0 2px 10px">Salesforce contacts not found in the app (matched by email, then name). Create the ones you want and skip the rest. A contact a record needs is also created when you approve that record, unless you skip it here (then the record is saved without that contact tag).${nSkipped&&!showSkipped()?` ${nSkipped} skipped (tick "show skipped" to see them).`:''}</div>`+
+    (list.length?'':'<div class="empty">Nothing left here. ✓</div>')+
+    list.map(c=>{ const st=state['C:'+c.key], sk=contactSkipped(c.key); return `<div class="card ${st||sk?'done':''}"><div class="top"><span class="tag comm">CONTACT</span><b style="font-size:.9rem">${esc(c.name)}</b>
       <span class="author">${esc([c.role,c.org].filter(Boolean).join(' · '))}</span></div>
       <div style="font-size:.82rem;color:var(--text-dim);margin-bottom:8px">${esc([c.email,c.phone].filter(Boolean).join(' · '))} · Community: ${esc(result.commName[c.community_id]||'none')}</div>
-      <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>':`<button class="btn btn-green btn-sm" onclick="createContact('${esc(c.key)}')">Create</button>`}<span class="msg" id="msg-C-${esc(c.key)}"></span></div></div>`; }).join('');
+      <div class="actions">${st?'<span style="color:var(--green);font-weight:600">✓ Created</span>'
+        : sk?`<span style="color:var(--orange)">Skipped</span> <button class="btn btn-ghost btn-sm" onclick="unskipItem('C:${esc(c.key)}')">Un-skip</button>`
+        : `<button class="btn btn-green btn-sm" onclick="createContact('${esc(c.key)}')">Create</button><button class="btn btn-skip btn-sm" onclick="skipItem('C:${esc(c.key)}')">Skip</button>`}<span class="msg" id="msg-C-${esc(c.key)}"></span></div></div>`; }).join('');
 }
 async function createContact(key){ try{ await ensureContact(key); renderAll(); }catch(e){ setMsg('C-'+key,'Error: '+e.message,'var(--red)'); } }
-async function createAllContacts(){ for(const c of result.newContacts) if(!state['C:'+c.key]) await createContact(c.key); }
+async function createAllContacts(){ for(const c of result.newContacts) if(!state['C:'+c.key]&&!contactSkipped(c.key)) await createContact(c.key); }
 
 </script>
 </body>

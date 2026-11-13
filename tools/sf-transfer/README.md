@@ -62,7 +62,9 @@ Down the left side:
   community, then **Create** (or **Create all**). The app status is left blank for staff
   to set. Retired pods are added as archived.
 * **New contacts**: people in Salesforce who aren't in the app. **Create** the ones you
-  want.
+  want and **Skip** (or **Skip all**) the rest. Sensors can be skipped the same way. A
+  skipped sensor or contact is never created; records that mention it are saved without
+  that tag.
 * **Each community**, with how many records are left. Click one to see its records.
 * **`? Account name`**: records from a Salesforce account the page couldn't match to a
   community. Pick the community at the top of that list, and it applies to all of them.
@@ -75,8 +77,9 @@ already tagged. For each card:
 * Fix anything that's wrong (type, date, text, tags). Use **→ Make it a note /
   communication** if it's the wrong kind.
 * **Approve** saves it to the app right away. **Approve all N here** does a whole community.
-* **Skip** hides it for good (remembered in this browser). Tick **show skipped** to see
-  skipped ones again and **Un-skip**.
+* **Skip** hides it for good (remembered in this browser). **Skip all N here** does a whole
+  community. Tick **show skipped** to see skipped ones again and **Un-skip** (or **Un-skip
+  all**).
 * **Undo** (on an approved card) removes it from the app again.
 
 **⚠ Possibly already in the app.** People may have typed the same thing straight into
