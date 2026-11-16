@@ -5749,15 +5749,15 @@ function renderTimeline(containerId, items) {
                 ${attribution}
                 ${tags ? `<div class="timeline-tags">${tags}</div>` : ''}
                 ${isNote && !isProgressNote ? `<div class="timeline-add-note">
-                    <div id="timeline-note-panel-${item.id}" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100);position:relative">
-                        <textarea id="timeline-note-input-${item.id}" rows="2" class="mention-textarea" placeholder="Add a follow-up note... (type @ to tag a contact)" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
-                        <div class="mention-dropdown" id="timeline-note-mention-${item.id}" style="left:0;width:100%"></div>
+                    <div id="timeline-note-panel-${item.id}" class="tl-fu-panel" style="display:none;margin-top:8px;padding-top:8px;border-top:1px solid var(--slate-100);position:relative">
+                        <textarea id="timeline-note-input-${item.id}" rows="2" class="mention-textarea tl-fu-input" placeholder="Add a follow-up note... (type @ to tag a contact)" style="width:100%;font-size:13px;font-family:var(--font-sans);padding:8px 10px;border:1px solid var(--slate-200);border-radius:6px;resize:vertical"></textarea>
+                        <div class="mention-dropdown tl-fu-mention" id="timeline-note-mention-${item.id}" style="left:0;width:100%"></div>
                         <div style="display:flex;gap:8px;margin-top:6px">
-                            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveTimelineFollowUp('${item.id}')">Save Note</button>
-                            <button class="btn btn-sm" onclick="event.stopPropagation(); document.getElementById('timeline-note-panel-${item.id}').style.display='none'">Cancel</button>
+                            <button class="btn btn-sm btn-primary" onclick="event.stopPropagation(); saveTimelineFollowUp('${item.id}', this)">Save Note</button>
+                            <button class="btn btn-sm" onclick="event.stopPropagation(); this.closest('.timeline-add-note').querySelector('.tl-fu-panel').style.display='none'">Cancel</button>
                         </div>
                     </div>
-                    <button class="btn btn-sm" onclick="event.stopPropagation(); toggleTimelineNotePanel('${item.id}')" style="margin-top:8px;font-size:11px">Add Note</button>
+                    <button class="btn btn-sm" onclick="event.stopPropagation(); toggleTimelineNotePanel('${item.id}', this)" style="margin-top:8px;font-size:11px">Add Note</button>
                 </div>` : ''}
             </div>
         `;
@@ -5932,20 +5932,33 @@ function deleteFollowUp(noteId, followUpIdx) {
     }, { danger: true });
 }
 
-function toggleTimelineNotePanel(noteId) {
-    const panel = document.getElementById('timeline-note-panel-' + noteId);
+// The same entry can be on the page more than once (sensor, community, and
+// contact pages stay loaded in the background), so these buttons work on the
+// copy that was clicked, not "the first element with that id" (which could be a
+// hidden copy on another page; that was why Add Note sometimes did nothing
+// until a refresh).
+function _followUpBox(noteId, btn) {
+    const box = btn && btn.closest ? btn.closest('.timeline-add-note') : null;
+    if (box) return box;
+    const all = [...document.querySelectorAll(`[id="timeline-note-panel-${noteId}"]`)].map(p => p.closest('.timeline-add-note'));
+    return all.find(b => b && b.offsetParent) || all[0] || null;
+}
+function toggleTimelineNotePanel(noteId, btn) {
+    const box = _followUpBox(noteId, btn);
+    const panel = box && box.querySelector('.tl-fu-panel');
     if (!panel) return;
     panel.style.display = panel.style.display === 'none' ? '' : 'none';
     if (panel.style.display !== 'none') {
-        const input = document.getElementById('timeline-note-input-' + noteId);
-        const dd = document.getElementById('timeline-note-mention-' + noteId);
+        const input = box.querySelector('.tl-fu-input');
+        const dd = box.querySelector('.tl-fu-mention');
         if (input && dd && !input._mentionInit) { setupMentionAutocomplete(input, dd); input._mentionInit = true; }
         if (input) { input.value = ''; input.focus(); }
     }
 }
 
-async function saveTimelineFollowUp(noteId) {
-    const input = document.getElementById('timeline-note-input-' + noteId);
+async function saveTimelineFollowUp(noteId, btn) {
+    const box = _followUpBox(noteId, btn);
+    const input = box && box.querySelector('.tl-fu-input');
     if (!input) return;
     const text = input.value.trim();
     if (!text) return;
@@ -5982,7 +5995,7 @@ async function saveTimelineFollowUp(noteId) {
     }
 
     input.value = '';
-    document.getElementById('timeline-note-panel-' + noteId).style.display = 'none';
+    const panel = box.querySelector('.tl-fu-panel'); if (panel) panel.style.display = 'none';
     refreshCurrentView();
 }
 
